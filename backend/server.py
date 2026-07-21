@@ -7366,6 +7366,147 @@ async def update_contact(contact: ContactUpdate, user: User = Depends(get_curren
 
 # ===================== Jobs / Swipe =====================
 
+class _FeedV2Job(BaseModel):
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    canonical_group_id: str = Field(alias="canonicalGroupId")
+    preferred_job_id: str = Field(alias="preferredJobId")
+    job_version: str = Field(alias="jobVersion")
+    relevance_score: float = Field(alias="relevanceScore")
+    fulfillment_route: Literal["auto", "assisted", "manual", "blocked"] = Field(alias="fulfillmentRoute")
+
+
+class _FeedV2MatchContext(BaseModel):
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    snapshot_version: str = Field(alias="snapshotVersion")
+    profile_version: str = Field(alias="profileVersion")
+    action_watermark: str = Field(alias="actionWatermark")
+
+
+class _FeedV2VisibleByRoute(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    auto: int = Field(ge=0)
+    assisted: int = Field(ge=0)
+    manual: int = Field(ge=0)
+    blocked: int = Field(ge=0)
+
+
+class _FeedV2Summary(BaseModel):
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    evaluated: int = Field(ge=0)
+    eligible: int = Field(ge=0)
+    hidden_actioned: int = Field(alias="hiddenActioned", ge=0)
+    hidden_policy: int = Field(alias="hiddenPolicy", ge=0)
+    hidden_blocked: int = Field(alias="hiddenBlocked", ge=0)
+    visible_by_route: _FeedV2VisibleByRoute = Field(alias="visibleByRoute")
+
+
+class _FeedV2Response(BaseModel):
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    contract_version: Literal["hirly.feed.v2"] = Field(alias="contractVersion")
+    jobs: List[_FeedV2Job]
+    next_cursor: Optional[str] = Field(alias="nextCursor")
+    inventory_state: Literal["ready", "matching_pending", "inventory_gap", "degraded"] = Field(alias="inventoryState")
+    empty_reason: Optional[Literal[
+        "NO_MATCHING_INVENTORY",
+        "ALL_MATCHES_ACTIONED",
+        "ALL_MATCHES_POLICY_HIDDEN",
+        "ALL_MATCHES_BLOCKED",
+        "PROFILE_NOT_READY",
+    ]] = Field(alias="emptyReason")
+    match_context: _FeedV2MatchContext = Field(alias="matchContext")
+    summary: _FeedV2Summary
+
+
+def _feed_v2_base64url(value: bytes) -> str:
+    return base64.urlsafe_b64encode(value).decode("ascii").rstrip("=")
+
+
+def _feed_v2_enabled_for(user_id: str) -> bool:
+    if not _env_bool("FEED_V2_DELEGATION_ENABLED"):
+        return False
+    cohort = {
+        value.strip()
+        for value in os.environ.get("FEED_V2_COHORT_USER_IDS", "").split(",")
+        if value.strip()
+    }
+    return not cohort or user_id in cohort
+
+
+def _feed_v2_request_is_profile_equivalent(filters: Dict[str, Any]) -> bool:
+    """Only delegate requests whose explicit query inputs do not alter the saved profile."""
+    return (
+        filters["minSalary"] == 0
+        and filters["postedWithin"] in (None, "any")
+        and not any(filters[name] for name in (
+            "workLocation", "jobType", "experience", "location", "onlyCompany",
+            "hideCompany", "onlyIndustry", "hideIndustry",
+        ))
+        and filters["includeUnknownLocation"] is True
+        and filters["includeUnknownSalary"] is True
+        and filters["includeNonAutoApply"] is False
+        and filters["searchRadius"] == "50km"
+        and filters["locationsJson"] is None
+        and filters["onlyMyCountry"] is False
+        and not any(filters[name] is not None for name in (
+            "locationLabel", "placeId", "country", "countryCode", "lat", "lng", "searchRole",
+        ))
+        and filters["forceProviderRefresh"] is False
+        and filters["prefetch"] is False
+        and filters["score"] is False
+        and filters["auditMode"] is False
+    )
+
+
+async def _try_feed_v2(
+    *,
+    user_id: str,
+    limit: int,
+    filters: Dict[str, Any],
+) -> Optional[Dict[str, Any]]:
+    if not _feed_v2_enabled_for(user_id) or not _feed_v2_request_is_profile_equivalent(filters):
+        return None
+    endpoint = os.environ.get("FEED_V2_INTERNAL_URL", "").strip()
+    secret = os.environ.get("FEED_V2_ASSERTION_SECRET", "").strip()
+    if not endpoint or len(secret) < 32 or limit < 1 or limit > 100:
+        logger.warning("jobs/feed v2_fallback reason=invalid_configuration_or_limit")
+        return None
+
+    now = datetime.now(timezone.utc)
+    request_id = str(uuid.uuid4())
+    assertion = {
+        "subject": user_id,
+        "candidateId": user_id,
+        "scopes": ["feed:read"],
+        "issuedAt": now.isoformat().replace("+00:00", "Z"),
+        "expiresAt": (now + timedelta(seconds=30)).isoformat().replace("+00:00", "Z"),
+    }
+    unsigned = json.dumps(
+        assertion, sort_keys=True, separators=(",", ":"), ensure_ascii=True,
+    ).encode("utf-8")
+    encoded_assertion = _feed_v2_base64url(unsigned)
+    signature = hmac.new(
+        secret.encode("utf-8"), encoded_assertion.encode("ascii"), hashlib.sha256,
+    ).hexdigest()
+    timeout_ms = max(50, min(_env_int("FEED_V2_TIMEOUT_MS", 250), 750))
+    timeout = httpx.Timeout(timeout_ms / 1000.0)
+    headers = {
+        "X-Hirly-Feed-Assertion": encoded_assertion,
+        "X-Hirly-Feed-Signature": signature,
+        "X-Hirly-Request-Id": request_id,
+    }
+    try:
+        async with httpx.AsyncClient(timeout=timeout, follow_redirects=False) as client:
+            response = await client.get(endpoint, params={"limit": limit}, headers=headers)
+        if response.status_code != 200:
+            logger.warning("jobs/feed v2_fallback reason=upstream_status status=%s", response.status_code)
+            return None
+        validated = _FeedV2Response.model_validate(response.json())
+    except (httpx.HTTPError, ValueError, TypeError) as exc:
+        logger.warning("jobs/feed v2_fallback reason=%s", type(exc).__name__)
+        return None
+    logger.info("jobs/feed v2_success user_id=%s request_id=%s", user_id, request_id)
+    return validated.model_dump(by_alias=True, mode="json")
+
 @api_router.get("/jobs/{job_id}/rome-profile")
 async def get_job_rome_profile(job_id: str, user: User = Depends(get_current_user)):
     """Official France Travail ROME 4.0 occupation profile for a job card."""
@@ -7457,6 +7598,43 @@ async def get_feed(
         feed_target_role = search_role.strip()
     else:
         feed_target_role = resolve_profile_target_role(profile)
+
+    feed_v2_filters = {
+        "minSalary": min_salary,
+        "postedWithin": posted_within,
+        "workLocation": work_location,
+        "jobType": job_type,
+        "experience": experience,
+        "location": location,
+        "onlyCompany": only_company,
+        "hideCompany": hide_company,
+        "onlyIndustry": only_industry,
+        "hideIndustry": hide_industry,
+        "includeUnknownLocation": include_unknown_location,
+        "includeUnknownSalary": include_unknown_salary,
+        "includeNonAutoApply": include_non_auto_apply,
+        "searchRadius": search_radius,
+        "locationsJson": locations_json,
+        "onlyMyCountry": only_my_country,
+        "locationLabel": location_label,
+        "placeId": place_id,
+        "country": country,
+        "countryCode": country_code,
+        "lat": lat,
+        "lng": lng,
+        "forceProviderRefresh": force_provider_refresh,
+        "prefetch": prefetch,
+        "score": score,
+        "searchRole": search_role,
+        "auditMode": audit_mode,
+    }
+    feed_v2_response = await _try_feed_v2(
+        user_id=user.user_id,
+        limit=limit,
+        filters=feed_v2_filters,
+    )
+    if feed_v2_response is not None:
+        return feed_v2_response
 
     async def _legacy_jsearch_only_feed() -> Dict[str, Any]:
         legacy_started = time.perf_counter()
