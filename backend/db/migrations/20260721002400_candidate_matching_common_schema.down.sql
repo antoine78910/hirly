@@ -2,6 +2,9 @@
 -- jobs. This removes only additive common matching projections.
 BEGIN;
 
+DROP FUNCTION IF EXISTS public.read_candidate_action_aliases(text);
+DROP FUNCTION IF EXISTS public.read_candidate_actions(text);
+DROP FUNCTION IF EXISTS public.read_candidate_search_profile(text);
 DROP FUNCTION IF EXISTS public.candidate_group_is_excluded(text, uuid);
 DROP FUNCTION IF EXISTS public.apply_candidate_projection_tombstone(text, bigint, uuid, timestamptz);
 DROP TRIGGER IF EXISTS candidate_projection_tombstone_guard

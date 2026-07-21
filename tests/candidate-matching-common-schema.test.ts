@@ -75,20 +75,31 @@ describe("candidate matching common migration contracts", () => {
     expect(proof).toContain("ROLLBACK;");
   });
 
-  test("independently verifies candidate isolation and executable alias semantics", () => {
+  test("independently verifies fail-closed candidate reads and executable alias semantics", () => {
     for (const policy of [
       "candidate_projection_tombstones_reader",
       "candidate_search_profiles_reader",
       "candidate_action_projection_reader",
+      "candidate_action_group_aliases_reader",
     ]) {
       const definition = inventoryUp.match(
         new RegExp(`CREATE POLICY ${policy}[^;]+;`, "s"),
       )?.[0];
-      expect(definition).toContain(
-        "current_setting('hirly.matching_candidate_id', true)",
-      );
-      expect(definition).not.toContain("USING (true)");
+      expect(definition).toContain("USING (false)");
     }
+    expect(inventoryUp).not.toMatch(
+      /GRANT SELECT ON public\.candidate_projection_tombstones/,
+    );
+    for (const functionName of [
+      "read_candidate_search_profile",
+      "read_candidate_actions",
+      "read_candidate_action_aliases",
+    ]) {
+      expect(inventoryUp).toContain(
+        `CREATE OR REPLACE FUNCTION public.${functionName}(p_candidate_id text)`,
+      );
+    }
+    expect(inventoryUp).not.toContain("hirly.matching_candidate_id");
     expect(inventoryUp).toContain(
       "PRIMARY KEY (alias_group_id, canonical_group_id)",
     );
@@ -216,10 +227,11 @@ describePostgres("candidate matching migrations on disposable PostgreSQL", () =>
           INSERT INTO public.candidate_search_profiles (
             candidate_id, version, status, location_policy, freshness_window_days,
             exposure_policy_version, feature_schema_version,
-            source_profile_updated_at, source_event_id
+            source_profile_updated_at, projected_at, source_event_id
           ) VALUES (
-            'candidate-b', 4, 'active', 'country', 30, 'policy-v1', 1,
-            clock_timestamp(), '11111111-1111-4111-8111-111111111111'
+            'candidate-b', 4, 'active', 'country', 30, 'policy-v1',
+            'matching-features.v1', clock_timestamp(), clock_timestamp(),
+            '11111111-1111-4111-8111-111111111111'
           )
         `;
         const [applied] = await sql<{ applied: boolean }[]>`
@@ -238,10 +250,11 @@ describePostgres("candidate matching migrations on disposable PostgreSQL", () =>
             INSERT INTO public.candidate_search_profiles (
               candidate_id, version, status, location_policy, freshness_window_days,
               exposure_policy_version, feature_schema_version,
-              source_profile_updated_at, source_event_id
+              source_profile_updated_at, projected_at, source_event_id
             ) VALUES (
-              'candidate-b', 4, 'active', 'country', 30, 'policy-v1', 1,
-              clock_timestamp(), '33333333-3333-4333-8333-333333333333'
+              'candidate-b', 4, 'active', 'country', 30, 'policy-v1',
+              'matching-features.v1', clock_timestamp(), clock_timestamp(),
+              '33333333-3333-4333-8333-333333333333'
             )
           `;
           throw new Error("expected deleted candidate projection recreation to fail");
@@ -253,29 +266,33 @@ describePostgres("candidate matching migrations on disposable PostgreSQL", () =>
   );
 
   test.serial(
-    "reader RLS denies cross-candidate rows and aliases conservatively propagate exclusions",
+    "reader direct access fails closed while scoped RPCs and aliases preserve isolation",
     async () =>
       withDisposableDatabase(async (sql) => {
         await sql.unsafe(`
           INSERT INTO public.candidate_search_profiles (
             candidate_id, version, status, location_policy, freshness_window_days,
             exposure_policy_version, feature_schema_version,
-            source_profile_updated_at, source_event_id
+            source_profile_updated_at, projected_at, source_event_id
           ) VALUES
-            ('candidate-a', 1, 'active', 'country', 30, 'policy-v1', 1,
-             clock_timestamp(), '40000000-0000-4000-8000-000000000001'),
-            ('candidate-b', 1, 'active', 'country', 30, 'policy-v1', 1,
-             clock_timestamp(), '40000000-0000-4000-8000-000000000002');
+            ('candidate-a', 1, 'active', 'country', 30, 'policy-v1',
+             'matching-features.v1', clock_timestamp(), clock_timestamp(),
+             '40000000-0000-4000-8000-000000000001'),
+            ('candidate-b', 1, 'active', 'country', 30, 'policy-v1',
+             'matching-features.v1', clock_timestamp(), clock_timestamp(),
+             '40000000-0000-4000-8000-000000000002');
 
           INSERT INTO public.candidate_action_projection (
             candidate_id, action_id, candidate_version, source_job_id,
-            canonical_group_id, action_kind, action_at, source_event_id
+            canonical_group_id, canonical_group_aliases,
+            action_kind, action_at, source_event_id
           ) VALUES
             ('candidate-a', 'action-a', 1, 'job-parent',
-             'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'dismissed',
+             'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+             ARRAY['99999999-9999-4999-8999-999999999999']::uuid[], 'dismissed',
              clock_timestamp(), '40000000-0000-4000-8000-000000000003'),
             ('candidate-b', 'action-b', 1, 'job-other',
-             'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'dismissed',
+             'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', ARRAY[]::uuid[], 'dismissed',
              clock_timestamp(), '40000000-0000-4000-8000-000000000004');
 
           INSERT INTO public.candidate_action_group_aliases (
@@ -289,26 +306,56 @@ describePostgres("candidate matching migrations on disposable PostgreSQL", () =>
              '40000000-0000-4000-8000-000000000005'),
             ('cccccccc-cccc-4ccc-8ccc-cccccccccccc',
              'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', 'merge', 2,
-             '40000000-0000-4000-8000-000000000006');
+             '40000000-0000-4000-8000-000000000006'),
+            ('99999999-9999-4999-8999-999999999999',
+             '11111111-1111-4111-8111-111111111111', 'merge', 2,
+             '40000000-0000-4000-8000-000000000008');
         `);
+
+        try {
+          await sql.begin(async (tx) => {
+            await tx.unsafe("SET LOCAL ROLE hirly_matching_reader");
+            await tx`SELECT candidate_id FROM public.candidate_search_profiles`;
+          });
+          throw new Error("expected direct candidate profile access to fail");
+        } catch (error) {
+          expect(String(error)).toContain("permission denied");
+        }
 
         await sql.begin(async (tx) => {
           await tx.unsafe("SET LOCAL ROLE hirly_matching_reader");
-          await tx`SELECT set_config('hirly.matching_candidate_id', 'candidate-a', true)`;
           const profiles = await tx<{ candidate_id: string }[]>`
-            SELECT candidate_id FROM public.candidate_search_profiles ORDER BY candidate_id
+            SELECT candidate_id FROM public.read_candidate_search_profile('candidate-a')
           `;
           expect(profiles).toEqual([{ candidate_id: "candidate-a" }]);
-
+          const actions = await tx<{ candidate_id: string }[]>`
+            SELECT candidate_id FROM public.read_candidate_actions('candidate-a')
+          `;
+          expect(actions).toEqual([{ candidate_id: "candidate-a" }]);
+          const aliases = await tx<{ alias_group_id: string }[]>`
+            SELECT alias_group_id::text
+            FROM public.read_candidate_action_aliases('candidate-a')
+            ORDER BY alias_group_id
+          `;
+          expect(aliases.map(({ alias_group_id }) => alias_group_id)).toEqual([
+            "99999999-9999-4999-8999-999999999999",
+            "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          ]);
           const [exclusions] = await tx<
             {
+              action_row_alias_descendant: boolean;
               merge_descendant: boolean;
               split_descendant: boolean;
               unrelated: boolean;
-              cross_candidate: boolean;
+              other_candidate_group: boolean;
             }[]
           >`
             SELECT
+              public.candidate_group_is_excluded(
+                'candidate-a', '11111111-1111-4111-8111-111111111111'
+              ) AS action_row_alias_descendant,
               public.candidate_group_is_excluded(
                 'candidate-a', 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'
               ) AS merge_descendant,
@@ -319,14 +366,15 @@ describePostgres("candidate matching migrations on disposable PostgreSQL", () =>
                 'candidate-a', 'ffffffff-ffff-4fff-8fff-ffffffffffff'
               ) AS unrelated,
               public.candidate_group_is_excluded(
-                'candidate-b', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
-              ) AS cross_candidate
+                'candidate-a', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+              ) AS other_candidate_group
           `;
           expect(exclusions).toEqual({
+            action_row_alias_descendant: true,
             merge_descendant: true,
             split_descendant: true,
             unrelated: false,
-            cross_candidate: false,
+            other_candidate_group: false,
           });
         });
 

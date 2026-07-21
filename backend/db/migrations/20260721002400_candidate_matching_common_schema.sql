@@ -376,28 +376,111 @@ CREATE OR REPLACE FUNCTION public.candidate_group_is_excluded(
   p_canonical_group_id uuid
 )
 RETURNS boolean
-LANGUAGE sql
+LANGUAGE plpgsql
 STABLE
-SECURITY INVOKER
+SECURITY DEFINER
 SET search_path = pg_catalog, public
 AS $$
-  WITH RECURSIVE excluded_groups(group_id) AS (
-    SELECT action.canonical_group_id
-    FROM public.candidate_action_projection AS action
-    WHERE action.candidate_id = p_candidate_id
-      AND action.retention_state = 'active'
-      AND action.canonical_group_id IS NOT NULL
-    UNION
-    SELECT alias.canonical_group_id
-    FROM public.candidate_action_group_aliases AS alias
-    JOIN excluded_groups
-      ON alias.alias_group_id = excluded_groups.group_id
-  )
-  SELECT EXISTS (
+BEGIN
+  IF length(btrim(coalesce(p_candidate_id, ''))) = 0
+    OR length(p_candidate_id) > 256
+    OR p_canonical_group_id IS NULL
+  THEN
+    RAISE EXCEPTION 'invalid candidate exclusion scope' USING ERRCODE = '22023';
+  END IF;
+  RETURN EXISTS (
+    WITH RECURSIVE excluded_groups(group_id) AS (
+      SELECT action.canonical_group_id
+      FROM public.candidate_action_projection AS action
+      WHERE action.candidate_id = p_candidate_id
+        AND action.retention_state = 'active'
+      UNION
+      SELECT unnest(action.canonical_group_aliases)
+      FROM public.candidate_action_projection AS action
+      WHERE action.candidate_id = p_candidate_id
+        AND action.retention_state = 'active'
+      UNION
+      SELECT alias.canonical_group_id
+      FROM public.candidate_action_group_aliases AS alias
+      JOIN excluded_groups
+        ON alias.alias_group_id = excluded_groups.group_id
+    )
     SELECT 1
     FROM excluded_groups
     WHERE group_id = p_canonical_group_id
-  )
+  );
+END
+$$;
+
+CREATE OR REPLACE FUNCTION public.read_candidate_search_profile(p_candidate_id text)
+RETURNS SETOF public.candidate_search_profiles
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+BEGIN
+  IF length(btrim(coalesce(p_candidate_id, ''))) = 0 OR length(p_candidate_id) > 256 THEN
+    RAISE EXCEPTION 'invalid candidate profile scope' USING ERRCODE = '22023';
+  END IF;
+  RETURN QUERY
+    SELECT profile.*
+    FROM public.candidate_search_profiles AS profile
+    WHERE profile.candidate_id = p_candidate_id;
+END
+$$;
+
+CREATE OR REPLACE FUNCTION public.read_candidate_actions(p_candidate_id text)
+RETURNS SETOF public.candidate_action_projection
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+BEGIN
+  IF length(btrim(coalesce(p_candidate_id, ''))) = 0 OR length(p_candidate_id) > 256 THEN
+    RAISE EXCEPTION 'invalid candidate action scope' USING ERRCODE = '22023';
+  END IF;
+  RETURN QUERY
+    SELECT action.*
+    FROM public.candidate_action_projection AS action
+    WHERE action.candidate_id = p_candidate_id;
+END
+$$;
+
+CREATE OR REPLACE FUNCTION public.read_candidate_action_aliases(p_candidate_id text)
+RETURNS SETOF public.candidate_action_group_aliases
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+BEGIN
+  IF length(btrim(coalesce(p_candidate_id, ''))) = 0 OR length(p_candidate_id) > 256 THEN
+    RAISE EXCEPTION 'invalid candidate alias scope' USING ERRCODE = '22023';
+  END IF;
+  RETURN QUERY
+    WITH RECURSIVE candidate_groups(group_id) AS (
+      SELECT action.canonical_group_id
+      FROM public.candidate_action_projection AS action
+      WHERE action.candidate_id = p_candidate_id
+        AND action.retention_state = 'active'
+      UNION
+      SELECT unnest(action.canonical_group_aliases)
+      FROM public.candidate_action_projection AS action
+      WHERE action.candidate_id = p_candidate_id
+        AND action.retention_state = 'active'
+      UNION
+      SELECT alias.canonical_group_id
+      FROM public.candidate_action_group_aliases AS alias
+      JOIN candidate_groups
+        ON alias.alias_group_id = candidate_groups.group_id
+    )
+    SELECT alias.*
+    FROM public.candidate_action_group_aliases AS alias
+    JOIN candidate_groups
+      ON candidate_groups.group_id = alias.alias_group_id;
+END
 $$;
 
 CREATE OR REPLACE FUNCTION public.candidate_projection_tombstone_guard()
@@ -491,6 +574,9 @@ REVOKE ALL ON public.matching_runtime_controls,
 REVOKE ALL ON FUNCTION public.candidate_projection_version_guard() FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.candidate_action_group_alias_guard() FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.candidate_group_is_excluded(text, uuid) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.read_candidate_search_profile(text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.read_candidate_actions(text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.read_candidate_action_aliases(text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.candidate_projection_tombstone_guard() FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.apply_candidate_projection_tombstone(text, bigint, uuid, timestamptz)
   FROM PUBLIC;
@@ -515,22 +601,16 @@ CREATE POLICY projection_reconciliation_tasks_projector
   USING (true) WITH CHECK (true);
 CREATE POLICY candidate_projection_tombstones_reader
   ON public.candidate_projection_tombstones FOR SELECT TO hirly_matching_reader
-  USING (
-    candidate_id = nullif(current_setting('hirly.matching_candidate_id', true), '')
-  );
+  USING (false);
 CREATE POLICY candidate_search_profiles_reader
   ON public.candidate_search_profiles FOR SELECT TO hirly_matching_reader
-  USING (
-    candidate_id = nullif(current_setting('hirly.matching_candidate_id', true), '')
-  );
+  USING (false);
 CREATE POLICY candidate_action_projection_reader
   ON public.candidate_action_projection FOR SELECT TO hirly_matching_reader
-  USING (
-    candidate_id = nullif(current_setting('hirly.matching_candidate_id', true), '')
-  );
+  USING (false);
 CREATE POLICY candidate_action_group_aliases_reader
   ON public.candidate_action_group_aliases FOR SELECT TO hirly_matching_reader
-  USING (true);
+  USING (false);
 CREATE POLICY job_search_documents_reader
   ON public.job_search_documents FOR SELECT TO hirly_matching_reader
   USING (true);
@@ -541,14 +621,13 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON public.candidate_projection_tombstones,
   public.candidate_action_group_aliases,
   public.job_search_documents,
   public.projection_reconciliation_tasks TO hirly_matching_projector;
-GRANT SELECT ON public.candidate_projection_tombstones,
-  public.candidate_search_profiles,
-  public.candidate_action_projection,
-  public.candidate_action_group_aliases,
-  public.job_search_documents TO hirly_matching_reader;
+GRANT SELECT ON public.job_search_documents TO hirly_matching_reader;
 GRANT EXECUTE ON FUNCTION public.apply_candidate_projection_tombstone(text, bigint, uuid, timestamptz)
   TO hirly_matching_projector;
 GRANT EXECUTE ON FUNCTION public.candidate_group_is_excluded(text, uuid)
   TO hirly_matching_reader, hirly_matching_projector;
+GRANT EXECUTE ON FUNCTION public.read_candidate_search_profile(text),
+  public.read_candidate_actions(text),
+  public.read_candidate_action_aliases(text) TO hirly_matching_reader;
 
 COMMIT;
