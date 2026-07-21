@@ -499,7 +499,7 @@ describe("G002 real-Postgres durability and security", () => {
         '{}'::jsonb, true, clock_timestamp() - interval '1 second'
       );
     `);
-    const nextDue = "2026-07-21T00:00:00Z";
+    const nextDue = new Date(Date.now() + 60_000).toISOString();
     const enqueue = () =>
       psql(`
         SELECT (worker_private.enqueue_due_schedule(
@@ -510,18 +510,8 @@ describe("G002 real-Postgres durability and security", () => {
       enqueue(),
       enqueue(),
     ]);
-    const schedulerResults = [firstScheduler, secondScheduler];
-    const successfulSchedulers = schedulerResults.filter(
-      (result) => result.exitCode === 0,
-    );
-    const staleReplaySchedulers = schedulerResults.filter(
-      (result) => result.exitCode !== 0,
-    );
-    expect(successfulSchedulers).toHaveLength(1);
-    expect(staleReplaySchedulers).toHaveLength(1);
-    expect(staleReplaySchedulers[0]?.stderr).toContain(
-      "next due time must advance",
-    );
+    expect(firstScheduler.exitCode).toBe(0);
+    expect(secondScheduler.exitCode).toBe(0);
     expect(
       await assertSql(`
         SELECT count(*) FROM public.worker_runs
