@@ -97,6 +97,30 @@ describe("G008 frozen shadow-canary exercise", () => {
     });
   }
 
+  test("automatically rolls back when frozen online-v2 domain records drift from matching results", () => {
+    const exposed = [] as unknown[];
+    const evidence = executeFrozenShadowCanary({
+      ...input,
+      onlineV2Domain: input.onlineV2Domain.slice(0, 1),
+    }, {
+      exposeLegacy(response) {
+        exposed.push(response);
+      },
+    }, { execute: true });
+
+    expect(evidence.stages.find((stage) => stage.stage === "parity")).toMatchObject({
+      passed: false,
+      observed: 0.5,
+      required: 0.95,
+    });
+    expect(evidence.decision).toMatchObject({
+      canaryAuthorized: false,
+      automaticRollback: true,
+      rollbackReason: "PARITY_THRESHOLD_BREACH",
+    });
+    expect(exposed).toEqual([input.legacy]);
+  });
+
   test("emits byte-stable evidence for the same frozen execution", () => {
     const first = run(true, "latency").evidence;
     const second = run(true, "latency").evidence;
