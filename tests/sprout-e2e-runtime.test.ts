@@ -39,7 +39,14 @@ describe("Sprout authenticated transport", () => {
       endpoint: "https://api.sprout.invalid/jobs",
       allowedOrigins: ["https://api.sprout.invalid"],
       maxResponseBytes: 1_000_000,
-      secrets: { async resolve() { return "fixture-token"; } },
+      secrets: {
+        async resolve() {
+          return {
+            accessToken: "fixture-access-token",
+            refreshToken: "fixture-refresh-token",
+          };
+        },
+      },
       fetch: (async (input, init) => {
         calls.push({ url: new URL(String(input)), init: init ?? {} });
         return Response.json(fixture);
@@ -57,7 +64,39 @@ describe("Sprout authenticated transport", () => {
     expect(calls[0]?.url.origin).toBe("https://api.sprout.invalid");
     expect(calls[0]?.url.searchParams.get("location[countryCode]")).toBe("FR");
     expect(calls[0]?.init).toMatchObject({ redirect: "manual", credentials: "omit" });
-    expect(new Headers(calls[0]?.init.headers).get("authorization")).toBe("Bearer fixture-token");
+    const headers = new Headers(calls[0]?.init.headers);
+    expect(headers.get("authorization")).toBe("Bearer fixture-access-token");
+    expect(headers.get("x-refresh-token")).toBe("fixture-refresh-token");
+  });
+
+  test("fails closed before fetch when either runtime credential is unavailable", async () => {
+    let fetches = 0;
+    const transport = new SproutHttpTransport({
+      endpoint: "https://api.sprout.invalid/jobs",
+      allowedOrigins: ["https://api.sprout.invalid"],
+      maxResponseBytes: 1_000_000,
+      secrets: {
+        async resolve() {
+          return { accessToken: "private-access-token", refreshToken: "   " };
+        },
+      },
+      fetch: (async () => {
+        fetches += 1;
+        return Response.json(fixture);
+      }) as typeof fetch,
+    });
+
+    const failure = transport.fetchPage(
+      { countryCode: "FR", offset: 0, pageSize: 1, credentialRef: "secret://sprout/france-api" },
+      new AbortController().signal,
+    );
+    await expect(failure).rejects.toThrow("sprout_credential_unavailable");
+    await failure.catch((error) => {
+      const serialized = JSON.stringify(error, Object.getOwnPropertyNames(error));
+      expect(serialized).not.toContain("private-access-token");
+      expect(serialized).not.toContain("fixture-refresh-token");
+    });
+    expect(fetches).toBe(0);
   });
 
   test("fails closed on origins, redirects, auth failures, and response budgets", async () => {
@@ -65,7 +104,11 @@ describe("Sprout authenticated transport", () => {
       endpoint: "http://api.sprout.invalid/jobs",
       allowedOrigins: ["https://api.sprout.invalid"],
       maxResponseBytes: 10,
-      secrets: { async resolve() { return "token"; } },
+      secrets: {
+        async resolve() {
+          return { accessToken: "token", refreshToken: "refresh-token" };
+        },
+      },
     })).toThrow("sprout_transport_origin_not_allowed");
 
     for (const response of [
@@ -78,13 +121,26 @@ describe("Sprout authenticated transport", () => {
         allowedOrigins: ["https://api.sprout.invalid"],
         maxResponseBytes: 10,
         maxAttempts: 1,
-        secrets: { async resolve() { return "never-log-this-token"; } },
+        secrets: {
+          async resolve() {
+            return {
+              accessToken: "never-log-this-access-token",
+              refreshToken: "never-log-this-refresh-token",
+            };
+          },
+        },
         fetch: (async () => response) as typeof fetch,
       });
-      await expect(transport.fetchPage(
+      const failure = transport.fetchPage(
         { countryCode: "FR", offset: 0, pageSize: 1, credentialRef: "secret://sprout/france-api" },
         new AbortController().signal,
-      )).rejects.toThrow();
+      );
+      await expect(failure).rejects.toThrow();
+      await failure.catch((error) => {
+        const serialized = JSON.stringify(error, Object.getOwnPropertyNames(error));
+        expect(serialized).not.toContain("never-log-this-access-token");
+        expect(serialized).not.toContain("never-log-this-refresh-token");
+      });
     }
   });
 });
@@ -221,7 +277,14 @@ describe("Sprout source commit pipeline", () => {
     } as unknown as RuntimeStore;
     const handler = createTaskHandlers(store, undefined, undefined, {
       sproutAllowedOrigins: ["https://api.sprout.invalid"],
-      sproutSecretResolver: { async resolve() { return "fixture-token"; } },
+      sproutSecretResolver: {
+        async resolve() {
+          return {
+            accessToken: "fixture-access-token",
+            refreshToken: "fixture-refresh-token",
+          };
+        },
+      },
       sproutFetch: (async () => Response.json(fixture)) as typeof fetch,
       providerClaimHeartbeatMs: 10_000,
     })["provider.fetch_page"]!;
@@ -232,6 +295,8 @@ describe("Sprout source commit pipeline", () => {
     expect(commit.mode).toBe("canary");
     expect(commit.entries).toHaveLength(2);
     expect(commit.checkpointOut).toMatchObject({ offset: 2, pageSize: 2, observedTotal: 3 });
+    expect(JSON.stringify(commits)).not.toContain("fixture-access-token");
+    expect(JSON.stringify(commits)).not.toContain("fixture-refresh-token");
     expect(released).toBe(0);
   });
 });

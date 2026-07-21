@@ -34,11 +34,12 @@ function environmentSproutSecretResolver(): SproutSecretResolver {
       if (reference !== "secret://sprout/france-api") {
         throw new IngestionError("authorization_blocked", "sprout_credential_reference_rejected");
       }
-      const value = process.env.SPROUT_FRANCE_API_TOKEN?.trim();
-      if (!value) {
+      const accessToken = process.env.SPROUT_FRANCE_API_TOKEN?.trim();
+      const refreshToken = process.env.SPROUT_FRANCE_REFRESH_TOKEN?.trim();
+      if (!accessToken || !refreshToken) {
         throw new IngestionError("authorization_blocked", "sprout_credential_unavailable");
       }
-      return value;
+      return { accessToken, refreshToken };
     },
   };
 }
