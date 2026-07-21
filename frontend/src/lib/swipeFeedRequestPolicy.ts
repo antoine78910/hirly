@@ -134,6 +134,26 @@ export function resolveSwipeFeedSuggestions(input: {
   return suggestions;
 }
 
+/**
+ * The server cursor is authoritative. Once its final page has been consumed,
+ * local swipe-history filtering can leave no renderable cards even though that
+ * last response contained jobs. In that narrow case, the only safe terminal
+ * interpretation is that the user has already actioned those remaining cards.
+ *
+ * Do not infer this for a location/policy filter or for an upstream empty
+ * response: those states need their own server-provided reason.
+ */
+export function deriveFinalCursorActionedReason(input: {
+  nextCursor?: string | null;
+  upstreamEmptyReason?: unknown;
+  jobsBeforeActionFilter: number;
+  jobsAfterActionFilter: number;
+}): "ALL_MATCHES_ACTIONED" | null {
+  if (input.nextCursor || input.upstreamEmptyReason) return null;
+  if (input.jobsBeforeActionFilter <= 0 || input.jobsAfterActionFilter !== 0) return null;
+  return "ALL_MATCHES_ACTIONED";
+}
+
 export function sanitizeSwipeFeedParams(params: URLSearchParams): URLSearchParams {
   const safe = new URLSearchParams(params);
   for (const key of [

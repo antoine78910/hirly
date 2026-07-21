@@ -444,7 +444,7 @@ export default function DesktopSwipeFeed({
               <div className={`mt-4 h-4 w-1/3 rounded ${theme.skeletonBar}`} />
               <div className={`mt-8 h-32 rounded-xl ${theme.skeletonBar}`} />
             </div>
-          ) : !displayJob && ["exhausted", "policy_hidden", "blocked", "no_inventory", "legacy_empty"].includes(feedView.kind) ? (
+          ) : !displayJob && ["exhausted", "policy_hidden", "blocked", "no_inventory", "profile_not_ready", "legacy_empty"].includes(feedView.kind) ? (
             <SwipeFeedTerminalState
               state={feedView.kind}
               targetLocationData={targetLocationData}

@@ -14,6 +14,7 @@ const copyFor = (state) => {
     case "policy_hidden": return ["swipe.feedPolicyHiddenTitle", "swipe.feedPolicyHiddenBody"];
     case "blocked": return ["swipe.feedBlockedTitle", "swipe.feedBlockedBody"];
     case "no_inventory": return ["swipe.feedNoInventoryTitle", "swipe.feedNoInventoryBody"];
+    case "profile_not_ready": return ["swipe.feedProfileNotReadyTitle", "swipe.feedProfileNotReadyBody"];
     default: return ["swipe.noJobs", "swipe.tryWidenSearch"];
   }
 };

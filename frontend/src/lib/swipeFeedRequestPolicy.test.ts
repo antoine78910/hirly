@@ -1,6 +1,7 @@
 import {
   createInitialSwipeFeedRequestGate,
   createSwipeFeedRequestFence,
+  deriveFinalCursorActionedReason,
   resolveSwipeFeedSuggestions,
   resolveSwipeFeedViewState,
   sanitizeSwipeFeedParams,
@@ -67,6 +68,14 @@ describe("Swipe Feed v2 request policy", () => {
       },
       "error",
     ],
+    [
+      {
+        loading: false,
+        jobCount: 0,
+        feedMeta: { emptyReason: "PROFILE_NOT_READY" },
+      },
+      "profile_not_ready",
+    ],
   ] as const)("resolves typed Feed v2 view state %#", (input, expected) => {
     expect(resolveSwipeFeedViewState(input)).toMatchObject({ kind: expected });
   });
@@ -122,5 +131,29 @@ describe("Swipe Feed v2 request policy", () => {
     expect(resolveSwipeFeedSuggestions({
       filters: { jobTypes: ["full_time"] },
     }).map(({ id }) => id)).toEqual(["preferences", "filters"]);
+  });
+
+  it("derives exhausted only after the final cursor was locally consumed by swipe history", () => {
+    expect(deriveFinalCursorActionedReason({
+      nextCursor: null,
+      jobsBeforeActionFilter: 4,
+      jobsAfterActionFilter: 0,
+    })).toBe("ALL_MATCHES_ACTIONED");
+    expect(deriveFinalCursorActionedReason({
+      nextCursor: "more",
+      jobsBeforeActionFilter: 4,
+      jobsAfterActionFilter: 0,
+    })).toBeNull();
+    expect(deriveFinalCursorActionedReason({
+      nextCursor: null,
+      upstreamEmptyReason: "NO_MATCHING_INVENTORY",
+      jobsBeforeActionFilter: 4,
+      jobsAfterActionFilter: 0,
+    })).toBeNull();
+    expect(deriveFinalCursorActionedReason({
+      nextCursor: null,
+      jobsBeforeActionFilter: 4,
+      jobsAfterActionFilter: 1,
+    })).toBeNull();
   });
 });

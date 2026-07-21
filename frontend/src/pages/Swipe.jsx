@@ -79,6 +79,7 @@ import {
 import {
   createInitialSwipeFeedRequestGate,
   createSwipeFeedRequestFence,
+  deriveFinalCursorActionedReason,
   resolveSwipeFeedViewState,
   sanitizeSwipeFeedParams,
 } from "../lib/swipeFeedRequestPolicy";
@@ -1125,9 +1126,9 @@ export default function Swipe() {
       setNextCursor(receivedNextCursor);
       let localFeedGuard = financeFeed ? null : buildLocalFeedGuard({ params, response: data });
       let responseJobs = Array.isArray(data?.jobs) ? data.jobs : [];
-      let safeJobs = localFeedGuard ? responseJobs.filter(localFeedGuard) : responseJobs;
-      if (!financeFeed) safeJobs = filterOutSwipedJobs(safeJobs);
-      safeJobs = filterPersonalSwipeFeedJobs(user?.email, safeJobs);
+      const jobsAfterLocalGuard = localFeedGuard ? responseJobs.filter(localFeedGuard) : responseJobs;
+      const jobsAfterActionFilter = financeFeed ? jobsAfterLocalGuard : filterOutSwipedJobs(jobsAfterLocalGuard);
+      let safeJobs = filterPersonalSwipeFeedJobs(user?.email, jobsAfterActionFilter);
       let outsideLocationHiddenCount = responseJobs.length - safeJobs.length;
       if (outsideLocationHiddenCount > 0) {
         data = {
@@ -1139,6 +1140,20 @@ export default function Swipe() {
             frontend_outside_location_hidden_count:
               Number(data?.feed_summary?.frontend_outside_location_hidden_count || 0) + outsideLocationHiddenCount,
           },
+        };
+      }
+      const upstreamEmptyReason = data?.emptyReason ?? data?.empty_reason?.code ?? data?.empty_reason;
+      const derivedEmptyReason = deriveFinalCursorActionedReason({
+        nextCursor: receivedNextCursor,
+        upstreamEmptyReason,
+        jobsBeforeActionFilter: jobsAfterLocalGuard.length,
+        jobsAfterActionFilter: jobsAfterActionFilter.length,
+      });
+      if (derivedEmptyReason) {
+        data = {
+          ...(data || {}),
+          emptyReason: derivedEmptyReason,
+          empty_reason: derivedEmptyReason,
         };
       }
       console.group("[FeedDebug] response");
@@ -1569,20 +1584,14 @@ export default function Swipe() {
   }, []);
 
   useEffect(() => {
-    if (!["exhausted", "policy_hidden", "blocked", "no_inventory", "legacy_empty"].includes(feedView.kind)) return;
-    const queryIdentity = buildSwipeFeedCacheKey({
-      userId: user?.user_id,
-      target: targetRef.current,
-      targetLocationData: targetLocationDataRef.current,
-      filters: filtersRef.current,
-    });
-    const impressionKey = `${queryIdentity}:${feedView.kind}`;
+    if (!["exhausted", "policy_hidden", "blocked", "no_inventory", "profile_not_ready", "legacy_empty"].includes(feedView.kind)) return;
+    // Cache keys encode candidate search criteria and are never analytics data.
+    const impressionKey = feedView.kind;
     if (terminalImpressionsRef.current.has(impressionKey)) return;
     terminalImpressionsRef.current.add(impressionKey);
     trackEvent("swipe_feed_terminal_state_viewed", {
       presentation_state: feedView.kind,
       empty_reason: feedView.emptyReason,
-      query_identity: queryIdentity,
       surface: typeof window !== "undefined" && window.matchMedia("(min-width: 768px)").matches ? "desktop" : "mobile",
     });
   }, [feedView, user?.user_id]);
@@ -1952,7 +1961,7 @@ export default function Swipe() {
             </motion.div>
           )}
 
-          {["exhausted", "policy_hidden", "blocked", "no_inventory", "legacy_empty"].includes(feedView.kind) && (
+          {["exhausted", "policy_hidden", "blocked", "no_inventory", "profile_not_ready", "legacy_empty"].includes(feedView.kind) && (
             <div className="absolute inset-0 flex items-center justify-center px-6">
               <SwipeFeedTerminalState
                 state={feedView.kind}

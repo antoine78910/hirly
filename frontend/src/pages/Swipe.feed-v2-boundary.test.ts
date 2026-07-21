@@ -53,6 +53,14 @@ describe("Swipe Feed v2 adoption boundary", () => {
     expect(swipeSource).toContain('feedView.kind === "projection_lag"');
     expect(desktopSource).toContain("resolveSwipeFeedViewState({");
     expect(swipeSource).toContain("jobsRef.current.length === 0");
+    expect(swipeSource).toContain('"profile_not_ready"');
+    expect(desktopSource).toContain('"profile_not_ready"');
+  });
+
+  it("does not send cache/query identity to terminal-state analytics", () => {
+    expect(swipeSource).toContain('trackEvent("swipe_feed_terminal_state_viewed"');
+    expect(swipeSource).not.toContain("query_identity:");
+    expect(swipeSource).toContain("deriveFinalCursorActionedReason");
   });
 
   it("lets Swipe edit all matching preferences, not only a single role", () => {
