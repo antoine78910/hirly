@@ -48,4 +48,10 @@ describe("Swipe Feed v2 adoption boundary", () => {
     expect(swipeSource).toContain('feedView.kind === "projection_lag"');
     expect(desktopSource).toContain("resolveSwipeFeedViewState({");
   });
+
+  it("uses the rollout flag only as a frontend observation", () => {
+    expect(swipeSource).toContain("useFeedV2RolloutObservation(user?.analytics_user_id)");
+    expect(swipeSource).toContain('data-feed-v2-rollout={feedV2RolloutObserved ? "on" : "off"}');
+    expect(swipeSource).toContain('let requestUrl = `/jobs/feed?${params.toString()}`');
+  });
 });

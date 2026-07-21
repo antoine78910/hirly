@@ -60,6 +60,7 @@ import JobRomeProfile from "../components/swipe/JobRomeProfile";
 import JobOfferDetails from "../components/swipe/JobOfferDetails";
 import JobCardHighlights, { JobCardMatchBadge } from "../components/swipe/JobCardHighlights";
 import { translateLocationLabel, translateRoleLabel } from "../lib/localizedDisplay";
+import { useFeedV2RolloutObservation } from "../components/swipe/FeedV2RolloutObservation";
 
 import { preloadCompanyLogos } from "../lib/companyLogos";
 import {
@@ -800,6 +801,7 @@ export default function Swipe() {
   const location = useLocation();
   const { t, lang } = useAppLocale();
   const { loading: authLoading, user, isAdmin } = useAuth();
+  const feedV2RolloutObserved = useFeedV2RolloutObservation(user?.analytics_user_id);
   const showAdminAtsBadge = shouldShowSwipeAdminAtsBadge(isAdmin, user?.email);
   const isDemoAccount = Boolean(user?.demo_account);
   const isFinanceDemo = isDemoAccount && isFinanceDemoEnabled();
@@ -1721,7 +1723,10 @@ export default function Swipe() {
 
   return (
     <>
-      <div className="hidden md:block">
+      <div
+        className="hidden md:block"
+        data-feed-v2-rollout={feedV2RolloutObserved ? "on" : "off"}
+      >
         <DesktopSwipeFeed
           job={topJob}
           loading={loading}
@@ -1748,11 +1753,14 @@ export default function Swipe() {
         />
       </div>
 
-      <div className="sprout flex h-dvh max-h-dvh flex-col overflow-hidden bg-sprout-bg pb-[calc(3.75rem+env(safe-area-inset-bottom,0px))] text-sprout-text md:hidden">
-      <header
-        className="mx-auto flex w-full max-w-md shrink-0 items-center gap-1 px-safe pb-2 pt-safe sm:gap-2 sm:px-4"
-        data-testid="swipe-header"
+      <div
+        className="sprout flex h-dvh max-h-dvh flex-col overflow-hidden bg-sprout-bg pb-[calc(3.75rem+env(safe-area-inset-bottom,0px))] text-sprout-text md:hidden"
+        data-feed-v2-rollout={feedV2RolloutObserved ? "on" : "off"}
       >
+        <header
+          className="mx-auto flex w-full max-w-md shrink-0 items-center gap-1 px-safe pb-2 pt-safe sm:gap-2 sm:px-4"
+          data-testid="swipe-header"
+        >
         <div className="flex shrink-0 items-center">
           <DesktopCreditsPill compact forceOpenUpgrade />
           <button
@@ -1817,7 +1825,7 @@ export default function Swipe() {
             )}
           </button>
         </div>
-      </header>
+        </header>
 
       <NotificationsPanel
         variant="sheet"
