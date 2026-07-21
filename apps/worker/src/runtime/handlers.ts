@@ -264,6 +264,12 @@ export function createTaskHandlers(
                     canonicalUpserts: result.canonicalUpserts,
                     occurrencesUpserted: result.occurrencesUpserted,
                     groupsCreated: result.groupsCreated,
+                    listingCounts: {
+                      fetched: commit.entries.length,
+                      added: result.canonicalUpserts,
+                      ignored: Math.max(0, commit.entries.length - result.canonicalUpserts),
+                      errors: 0,
+                    },
                   },
                 });
                 return result;
@@ -321,6 +327,12 @@ export function createTaskHandlers(
                 checkpointOffset: result.checkpoint.offset,
                 pageSize: result.checkpoint.pageSize,
                 observedTotal: result.checkpoint.observedTotal,
+                listingCounts: {
+                  fetched: result.fetched,
+                  added: result.fetched,
+                  ignored: 0,
+                  errors: 0,
+                },
               },
             });
             return { taskCompleted: true };
@@ -434,7 +446,10 @@ export function createTaskHandlers(
             outcome: "failed",
             reasonCode:
               error instanceof IngestionError ? error.code : "unexpected_error",
-            details: { message: safeErrorMessage(error) },
+            details: {
+              message: safeErrorMessage(error),
+              listingCounts: { fetched: 0, added: 0, ignored: 0, errors: 1 },
+            },
           });
         }
         if (
