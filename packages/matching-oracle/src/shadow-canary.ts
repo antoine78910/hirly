@@ -114,6 +114,13 @@ function normalizedDomainRecord(record: OnlineV2DomainRecord) {
   };
 }
 
+function sha256(value: string): string {
+  const hash = createHash("sha256");
+  hash.write(value);
+  hash.end();
+  return hash.digest("hex");
+}
+
 export function digestOnlineV2Domain(records: readonly OnlineV2DomainRecord[]): OnlineV2ParityDigest {
   const payload = [...records]
     .map(normalizedDomainRecord)
@@ -121,7 +128,7 @@ export function digestOnlineV2Domain(records: readonly OnlineV2DomainRecord[]): 
   return {
     version: ONLINE_V2_PARITY_DIGEST_VERSION,
     algorithm: "sha256",
-    digest: createHash("sha256").update(JSON.stringify(payload)).digest("hex"),
+    digest: sha256(JSON.stringify(payload)),
     recordCount: payload.length,
   };
 }
@@ -139,7 +146,7 @@ function validateControls(controls: ShadowCanaryControls): void {
 
 function sampled(candidateId: string, basisPoints: number): boolean {
   if (basisPoints === 0) return false;
-  const bucket = Number.parseInt(createHash("sha256").update(candidateId).digest("hex").slice(0, 8), 16) % 10_000;
+  const bucket = Number.parseInt(sha256(candidateId).slice(0, 8), 16) % 10_000;
   return bucket < basisPoints;
 }
 
