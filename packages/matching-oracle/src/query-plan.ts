@@ -7,30 +7,27 @@ SELECT
   jsd.fulfillment_route
 FROM job_search_documents AS jsd
 WHERE jsd.lifecycle_status = 'active'
-  AND jsd.validation_status <> 'invalid'
+  AND jsd.validation_status = 'valid'
+  AND jsd.source_eligible
+  AND jsd.policy_eligible
+  AND jsd.applyability_tier <> 'blocked'
+  AND jsd.fulfillment_route <> 'blocked'
   AND (jsd.expires_at IS NULL OR jsd.expires_at > $1)
-  AND jsd.published_at >= $2
-  AND jsd.role_family_ids && $3::text[]
-  AND jsd.country_code = ANY($4::text[])
-  AND jsd.contract_type = ANY($5::text[])
-  AND jsd.work_mode = ANY($6::text[])
-  AND ST_DWithin(jsd.location_geography, $8::geography, $9 * 1000)
-  AND NOT EXISTS (
-    SELECT 1
-    FROM candidate_action_projection AS cap
-    WHERE cap.candidate_id = $7
-      AND cap.canonical_group_id = jsd.canonical_group_id
-      AND cap.retention_state = 'active'
-  )
-ORDER BY jsd.published_at DESC, jsd.canonical_group_id ASC
+  AND jsd.posted_at >= $2
+  AND jsd.role_family_codes && $3::text[]
+  AND jsd.country_codes && $4::text[]
+  AND jsd.contract_families && $5::text[]
+  AND jsd.work_modes && $6::text[]
+  AND NOT public.candidate_group_is_excluded($7, jsd.canonical_group_id)
+ORDER BY jsd.posted_at DESC, jsd.canonical_group_id ASC
 LIMIT 1000;
 `.trim();
 
 export const REQUIRED_INDEXES = [
-  "job_search_documents_active_role_family_gin",
-  "job_search_documents_active_country_contract_mode_published",
-  "job_search_documents_active_location_gist",
-  "candidate_action_projection_candidate_group_active",
+  "job_search_documents_retrieval_idx",
+  "job_search_documents_features_idx",
+  "candidate_action_projection_exclusion_idx",
+  "candidate_action_group_aliases_alias_idx",
 ] as const;
 
 export interface QueryPlanEvidence {

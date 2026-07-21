@@ -12,12 +12,23 @@ describe("PR0 matching oracle production and supply boundaries", () => {
     };
     const implementation = [
       read("src/oracle.ts"),
+      read("src/online-matcher.ts"),
       read("src/query-plan.ts"),
     ].join("\n");
 
     expect(packageJson.dependencies?.["@hirly/db"]).toBeUndefined();
     expect(implementation).not.toMatch(/\b(?:INSERT|UPDATE|DELETE|TRUNCATE)\b/i);
     expect(implementation).not.toMatch(/\bfetch\s*\(|https?:\/\//i);
+  });
+
+  test("contains no hybrid generation, match-row, or fanout surface", () => {
+    const implementation = [
+      read("src/online-matcher.ts"),
+      read("src/query-plan.ts"),
+    ].join("\n");
+
+    expect(implementation).not.toMatch(/candidate_match_generations|candidate_job_matches|generation[_ -]fanout|CAS activation/i);
+    expect(implementation).not.toMatch(/\b(?:INSERT|UPDATE|DELETE|TRUNCATE)\b/i);
   });
 
   test("keeps Paris supply readiness and staged peakx2 evidence as separate gates", () => {

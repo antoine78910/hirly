@@ -85,9 +85,11 @@ describe("PR0 deterministic online matching oracle", () => {
   test("publishes a bounded, action-aware SQL EXPLAIN contract without a cartesian join", () => {
     expect(ONLINE_MATCH_EXPLAIN_SQL).toContain("EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)");
     expect(ONLINE_MATCH_EXPLAIN_SQL).toContain("LIMIT 1000");
-    expect(ONLINE_MATCH_EXPLAIN_SQL).toContain("NOT EXISTS");
+    expect(ONLINE_MATCH_EXPLAIN_SQL).toContain("NOT public.candidate_group_is_excluded");
     expect(ONLINE_MATCH_EXPLAIN_SQL).toContain("expires_at IS NULL OR jsd.expires_at > $1");
-    expect(ONLINE_MATCH_EXPLAIN_SQL).toContain("ST_DWithin");
+    expect(ONLINE_MATCH_EXPLAIN_SQL).toContain("jsd.posted_at >= $2");
+    expect(ONLINE_MATCH_EXPLAIN_SQL).toContain("candidate_group_is_excluded");
+    expect(ONLINE_MATCH_EXPLAIN_SQL).toContain("jsd.source_eligible");
     expect(ONLINE_MATCH_EXPLAIN_SQL).not.toMatch(/CROSS\s+JOIN/i);
     expect(queryPlanEvidence().databaseEvidence).toBe("not_collected");
   });
