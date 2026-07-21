@@ -1,5 +1,6 @@
 import ast
 import asyncio
+import copy
 import json
 from pathlib import Path
 import sys
@@ -15,13 +16,16 @@ from application_blueprint import (
 )
 from run_no_submit_route_inspection import (
     DnsResolutionError,
+    CORPUS_MINIMUM_PER_PROVIDER,
     MAX_JOBS,
     UnsafeRouteError,
     _canonical_digest,
+    _validate_provider_route,
     _validate_url,
     inspect_route_batch,
     main,
 )
+from job_providers.ats_detection import APPLICATION_CAPABILITIES
 
 
 async def public_resolver(_hostname: str):
@@ -76,6 +80,28 @@ def job(provider: str, url: str):
         "ats_provider": provider,
         "selected_apply_url": url,
     }
+
+
+def manual_job(provider: str, *, form_fixture=None):
+    if provider == "recruitee":
+        item = {
+            "job_id": "must-not-leak",
+            "ats_provider": provider,
+            "tenantId": "acme",
+            "slug": "role-123",
+            "selected_apply_url": "https://acme.recruitee.com/o/role-123",
+        }
+    else:
+        item = {
+            "job_id": "must-not-leak",
+            "ats_provider": provider,
+            "tenantId": "acme",
+            "postingUid": "posting-123",
+            "selected_apply_url": "https://acme.nicoka.com/public/jobs/posting-123/apply",
+        }
+    if form_fixture is not None:
+        item["formFixture"] = form_fixture
+    return item
 
 
 def test_inspects_only_and_emits_aggregate_non_identifying_outcomes():
@@ -210,6 +236,132 @@ def test_url_guard_requires_allowlisted_https_host():
         _validate_url("greenhouse", "https://boards.greenhouse.io:8443/acme/jobs/1")
 
 
+def test_manual_routes_require_exact_tenant_and_posting_binding():
+    assert _validate_provider_route(
+        "recruitee",
+        "https://acme.recruitee.com/o/role-123",
+        manual_job("recruitee"),
+    ) == "acme.recruitee.com"
+    assert _validate_provider_route(
+        "nicoka",
+        "https://trial.nicoka.com/acme/public/jobs/posting-123/apply",
+        manual_job("nicoka"),
+    ) == "trial.nicoka.com"
+
+    invalid = (
+        ("recruitee", "https://other.recruitee.com/o/role-123", manual_job("recruitee")),
+        ("recruitee", "https://acme.recruitee.com/o/wrong", manual_job("recruitee")),
+        ("nicoka", "https://other.nicoka.com/public/jobs/posting-123/apply", manual_job("nicoka")),
+        ("nicoka", "https://acme.nicoka.com/public/jobs/wrong/apply", manual_job("nicoka")),
+        ("nicoka", "https://acme.nicoka.com/public/jobs/posting-123/apply?token=no", manual_job("nicoka")),
+        ("recruitee", "https://acme.recruitee.com/o/role%ZZ", manual_job("recruitee")),
+    )
+    for provider, url, item in invalid:
+        with pytest.raises(UnsafeRouteError):
+            _validate_provider_route(provider, url, item)
+
+
+def test_fixture_forms_are_classified_without_authorizing_manual_providers():
+    fixtures = [
+        {"fields": [{"type": "email", "required": True, "supported": True, "sensitive": False}], "blockers": []},
+        {"fields": [{"type": "text", "required": True, "supported": True, "sensitive": False}], "blockers": []},
+        {"fields": [{"type": "consent", "required": True, "supported": True, "sensitive": False}], "blockers": []},
+        {"fields": [{"type": "unknown-widget", "required": True, "supported": True, "sensitive": False}], "blockers": []},
+        {"fields": [], "blockers": ["captcha"]},
+        {"fields": [], "blockers": ["login_required"]},
+        {"fields": [], "blockers": ["otp_required"]},
+        {"fields": [], "blockers": ["assessment_required"]},
+        {"fields": [], "blockers": ["external_redirect"]},
+    ]
+    jobs = [manual_job("recruitee", form_fixture=fixture) for fixture in fixtures]
+    before = copy.deepcopy(APPLICATION_CAPABILITIES)
+    report = asyncio.run(inspect_route_batch(
+        jobs,
+        resolver=public_resolver,
+        registry=FakeRegistry({}),
+        generated_at="2026-07-20T21:30:00Z",
+        evidence_mode="fixture_contract",
+    ))
+
+    assert report["routeStates"] == {
+        "application_gated": 0,
+        "inventory_manual": len(fixtures),
+        "blocked": 0,
+    }
+    assert report["formClasses"] == {
+        "assessment_required": 1,
+        "candidate_review": 1,
+        "captcha": 1,
+        "consent_review": 1,
+        "contact_only": 1,
+        "external_redirect": 1,
+        "login_required": 1,
+        "otp_required": 1,
+        "unsupported_widget": 1,
+    }
+    assert report["safeguards"]["capabilityFlagsChanged"] is False
+    assert report["safeguards"]["fixtureEvidenceCannotAuthorizeSubmission"] is True
+    assert APPLICATION_CAPABILITIES == before
+
+
+def test_live_driverless_route_ignores_fixture_and_stays_manual_uncharacterized():
+    item = manual_job("nicoka", form_fixture={
+        "fields": [{"type": "email", "required": True, "supported": True, "sensitive": False}],
+        "blockers": [],
+    })
+    report = asyncio.run(inspect_route_batch(
+        [item],
+        resolver=public_resolver,
+        registry=FakeRegistry({}),
+        generated_at="2026-07-20T21:30:00Z",
+        evidence_mode="bounded_live_no_submit",
+    ))
+    assert report["routeStates"]["inventory_manual"] == 1
+    assert report["formClasses"] == {"uncharacterized": 1}
+    assert report["outcomes"]["unsupported"] == 1
+
+
+def test_corpus_minimum_counts_characterized_forms_not_application_eligibility():
+    fixture = {
+        "fields": [{"type": "email", "required": True, "supported": True, "sensitive": False}],
+        "blockers": [],
+    }
+    for count, expected in ((CORPUS_MINIMUM_PER_PROVIDER - 1, False), (CORPUS_MINIMUM_PER_PROVIDER, True)):
+        report = asyncio.run(inspect_route_batch(
+            [manual_job("recruitee", form_fixture=fixture) for _ in range(count)],
+            resolver=public_resolver,
+            registry=FakeRegistry({}),
+            generated_at="2026-07-20T21:30:00Z",
+            evidence_mode="fixture_contract",
+        ))
+        assert report["corpusCoverage"]["recruitee"]["formsCharacterized"] == count
+        assert report["corpusCoverage"]["recruitee"]["meetsMinimum"] is expected
+
+
+def test_fixture_rejects_identifying_shape_and_never_serializes_canaries():
+    item = manual_job("recruitee", form_fixture={
+        "fields": [{
+            "type": "email",
+            "required": True,
+            "supported": True,
+            "sensitive": False,
+            "label": "PII-CANARY",
+        }],
+        "blockers": [],
+    })
+    report = asyncio.run(inspect_route_batch(
+        [item],
+        resolver=public_resolver,
+        registry=FakeRegistry({}),
+        generated_at="2026-07-20T21:30:00Z",
+        evidence_mode="fixture_contract",
+    ))
+    assert report["failureBuckets"]["inspection_error"] == 1
+    serialized = json.dumps(report)
+    assert "PII-CANARY" not in serialized
+    assert "must-not-leak" not in serialized
+
+
 def test_module_has_no_attempt_writer_executor_queue_or_submit_call():
     source = Path(__file__).with_name("run_no_submit_route_inspection.py").read_text()
     tree = ast.parse(source)
@@ -246,6 +398,19 @@ def test_committed_contract_artifact_is_aggregate_only_and_digest_bound():
     assert digest == _canonical_digest(report)
     assert report["evidenceMode"] == "fixture_contract"
     assert report["jobsReceived"] == report["jobsInspected"] == 1
+    assert report["formClasses"] == {"candidate_review": 1}
+    assert report["routeStates"] == {
+        "application_gated": 1,
+        "inventory_manual": 0,
+        "blocked": 0,
+    }
+    assert report["corpusCoverage"]["jobaffinity"] == {
+        "formsCharacterized": 1,
+        "minimumRequired": 50,
+        "meetsMinimum": False,
+        "manualDeepLinksVerified": 0,
+        "formClasses": {"candidate_review": 1},
+    }
     assert report["safeguards"] == {
         "aggregateOnly": True,
         "applicationSubmissions": False,
@@ -253,12 +418,17 @@ def test_committed_contract_artifact_is_aggregate_only_and_digest_bound():
         "canonicalWrites": False,
         "sourceActivationChanges": False,
         "writerTransfer": False,
+        "capabilityFlagsChanged": False,
+        "fixtureEvidenceCannotAuthorizeSubmission": True,
+        "corpusMinimumPerProvider": 50,
         "maxJobs": 100,
         "maxConcurrency": 4,
         "timeoutSeconds": 20.0,
         "allowlistedProviders": [
             "greenhouse",
             "jobaffinity",
+            "nicoka",
+            "recruitee",
             "smartrecruiters",
             "taleez",
             "teamtailor",

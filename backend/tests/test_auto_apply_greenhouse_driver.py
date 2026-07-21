@@ -3,7 +3,11 @@ import json
 import pathlib
 
 from application_blueprint import FieldType
-from auto_apply.drivers.greenhouse import GreenhouseApplyDriver, _blueprint_from_questions
+from auto_apply.drivers.greenhouse import (
+    GreenhouseApplyDriver,
+    _blueprint_from_questions,
+    _trusted_greenhouse_url,
+)
 
 
 def _payload():
@@ -78,6 +82,27 @@ def test_application_url_falls_back_to_source_url_and_data():
         "https://job-boards.greenhouse.io/acme/jobs/9"
     assert d.application_url({"data": {"absolute_url": "https://boards.greenhouse.io/acme/jobs/2"}}) == \
         "https://boards.greenhouse.io/acme/jobs/2"
+
+
+def test_trusted_greenhouse_url_accepts_only_canonical_https_hosts():
+    assert _trusted_greenhouse_url("https://boards.greenhouse.io/acme/jobs/1")
+    assert _trusted_greenhouse_url("https://job-boards.greenhouse.com/acme/jobs/1")
+    for value in (
+        "http://boards.greenhouse.io/acme/jobs/1",
+        "https://greenhouse.io.evil.example/acme/jobs/1",
+        "https://user@boards.greenhouse.io/acme/jobs/1",
+        "https://boards.greenhouse.io:8443/acme/jobs/1",
+        "https://boards.greenhouse.io:not-a-port/acme/jobs/1",
+    ):
+        assert _trusted_greenhouse_url(value) is False
+
+
+def test_application_url_skips_unsafe_preferred_url_for_safe_nested_fallback():
+    driver = GreenhouseApplyDriver()
+    assert driver.application_url({
+        "external_url": "https://evil.example/jobs/1",
+        "data": {"selected_apply_url": "https://boards.greenhouse.io/acme/jobs/1"},
+    }) == "https://boards.greenhouse.io/acme/jobs/1"
 
 
 def test_can_handle_and_exposes_version():

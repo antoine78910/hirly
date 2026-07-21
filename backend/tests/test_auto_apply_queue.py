@@ -118,8 +118,44 @@ def test_provider_for_job_smartrecruiters_and_greenhouse():
 
 
 def test_environment_provider_filter_cannot_widen_reviewed_capabilities(monkeypatch):
-    monkeypatch.setenv("AUTO_APPLY_QUEUE_PROVIDERS", "greenhouse,lever,recruitee,unknown")
+    monkeypatch.setenv("AUTO_APPLY_QUEUE_PROVIDERS", "greenhouse,lever,recruitee,nicoka,unknown")
     assert q.queue_providers() == {"greenhouse"}
+
+
+def test_greenhouse_policy_accepts_only_reviewed_hosted_form_transport():
+    app = _authorized({
+        "application_id": "app_greenhouse",
+        "user_id": "u1",
+        "job_id": "j1",
+        "ats_provider": "greenhouse",
+    }, provider="greenhouse")
+    job = {"job_id": "j1", "ats_provider": "greenhouse"}
+
+    assert q.submission_policy_failure(app, job, user_id="u1") is None
+    for transport in ("public_candidate_api", "credentialed_employer_api"):
+        app["submission_route"]["transport"] = transport
+        app["submission_policy"]["transport"] = transport
+        assert (
+            q.submission_policy_failure(app, job, user_id="u1")
+            == "submission_route_transport_denied"
+        )
+
+
+def test_driverless_provider_policy_cannot_authorize_or_enqueue():
+    db = _FakeDB()
+    for provider in ("recruitee", "nicoka"):
+        app = _authorized({
+            "application_id": f"app_{provider}",
+            "user_id": "u1",
+            "job_id": f"job_{provider}",
+            "package_status": "generated",
+            "submission_status": "not_submitted",
+            "ats_provider": provider,
+        }, provider=provider)
+        job_doc = {"job_id": app["job_id"], "ats_provider": provider}
+        assert q.submission_policy_failure(app, job_doc, user_id="u1") == "static_capability_denied"
+        assert asyncio.run(q.enqueue_application(db, app, job_doc)) is None
+    assert db.applications.rows == []
 
 
 def test_submission_policy_requires_exact_unexpired_route_and_mandate():

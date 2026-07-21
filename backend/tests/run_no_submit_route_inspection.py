@@ -17,10 +17,11 @@ import hashlib
 import ipaddress
 import json
 from pathlib import Path
+import re
 import socket
 import sys
 from typing import Any, Awaitable, Callable, Mapping, Sequence
-from urllib.parse import urlparse
+from urllib.parse import unquote_to_bytes, urlparse
 
 
 BACKEND_ROOT = Path(__file__).resolve().parent.parent
@@ -30,12 +31,23 @@ if str(BACKEND_ROOT) not in sys.path:
 import auto_apply.drivers  # noqa: E402,F401 - registers the inspected drivers
 from auto_apply.classifier import classify  # noqa: E402
 from auto_apply.driver import DRIVER_REGISTRY  # noqa: E402
+from auto_apply.models import compute_blueprint_signature  # noqa: E402
+from application_blueprint import (  # noqa: E402
+    ApplicationBlueprint,
+    FieldType,
+    FieldValidation,
+    NormalizedField,
+    derive_complexity,
+    estimate_compatibility_score,
+)
+from job_providers.ats_detection import APPLICATION_CAPABILITIES  # noqa: E402
 
 
 SCHEMA_VERSION = "hirly.no-submit-route-inspection.v1"
 MAX_JOBS = 100
 MAX_CONCURRENCY = 4
 INSPECTION_TIMEOUT_SECONDS = 20.0
+CORPUS_MINIMUM_PER_PROVIDER = 50
 
 ALLOWED_HOST_SUFFIXES: Mapping[str, tuple[str, ...]] = {
     "greenhouse": ("greenhouse.io", "greenhouse.com"),
@@ -43,6 +55,41 @@ ALLOWED_HOST_SUFFIXES: Mapping[str, tuple[str, ...]] = {
     "smartrecruiters": ("smartrecruiters.com",),
     "taleez": ("taleez.com",),
     "teamtailor": ("teamtailor.com",),
+    "recruitee": ("recruitee.com",),
+    "nicoka": ("nicoka.com",),
+}
+
+_IDENTIFIER = re.compile(r"^[a-z0-9][a-z0-9_-]*$", re.IGNORECASE)
+_FIXTURE_BLOCKERS = {
+    "captcha",
+    "login_required",
+    "otp_required",
+    "assessment_required",
+    "external_redirect",
+    "malformed_form",
+}
+_CANDIDATE_REVIEW_TYPES = {
+    FieldType.CONSENT,
+    FieldType.CUSTOM_QUESTION,
+    FieldType.DEMOGRAPHIC,
+    FieldType.EEOC,
+    FieldType.VISA_STATUS,
+    FieldType.WORK_AUTHORIZATION,
+    FieldType.SALARY_EXPECTATION,
+    FieldType.TEXT,
+    FieldType.TEXTAREA,
+}
+_CONTACT_TYPES = {
+    FieldType.FIRST_NAME,
+    FieldType.LAST_NAME,
+    FieldType.FULL_NAME,
+    FieldType.EMAIL,
+    FieldType.PHONE,
+    FieldType.LOCATION,
+    FieldType.LINKEDIN,
+    FieldType.WEBSITE,
+    FieldType.RESUME,
+    FieldType.COVER_LETTER,
 }
 
 FAILURE_BUCKETS = (
@@ -108,12 +155,16 @@ def _validate_url(provider: str, raw_url: str) -> str:
         raise UnsafeRouteError("provider is not allowlisted")
     parsed = urlparse(raw_url)
     hostname = (parsed.hostname or "").lower().rstrip(".")
+    try:
+        port = parsed.port
+    except ValueError as exc:
+        raise UnsafeRouteError("URL has a malformed port") from exc
     if (
         parsed.scheme != "https"
         or not hostname
         or parsed.username is not None
         or parsed.password is not None
-        or parsed.port not in (None, 443)
+        or port not in (None, 443)
         or not _host_allowed(provider, hostname)
     ):
         raise UnsafeRouteError("URL is outside the allowlisted HTTPS ATS host")
@@ -124,6 +175,167 @@ def _validate_url(provider: str, raw_url: str) -> str:
     if not address.is_global:
         raise UnsafeRouteError("IP literals must be globally routable")
     return hostname
+
+
+def _identity(job: Mapping[str, Any], *keys: str) -> str:
+    nested = job.get("data")
+    for source in (job, nested if isinstance(nested, Mapping) else {}):
+        for key in keys:
+            value = source.get(key)
+            if value is not None and str(value).strip():
+                return str(value).strip().lower()
+    return ""
+
+
+def _decoded_path(parsed: Any) -> list[str]:
+    try:
+        parts = []
+        for part in parsed.path.split("/"):
+            if not part:
+                continue
+            if re.search(r"%(?![0-9a-fA-F]{2})", part):
+                raise ValueError("malformed percent escape")
+            parts.append(unquote_to_bytes(part).decode("utf-8").lower())
+        return parts
+    except (UnicodeDecodeError, ValueError) as exc:
+        raise UnsafeRouteError("URL contains an invalid encoded path") from exc
+
+
+def _validate_provider_route(
+    provider: str,
+    raw_url: str,
+    job: Mapping[str, Any],
+) -> str:
+    hostname = _validate_url(provider, raw_url)
+    parsed = urlparse(raw_url)
+    if parsed.fragment:
+        raise UnsafeRouteError("route fragments are not allowed")
+    parts = _decoded_path(parsed)
+
+    if provider == "greenhouse":
+        if "jobs" not in parts:
+            raise UnsafeRouteError("Greenhouse route is not a job route")
+        return hostname
+
+    if provider in {"recruitee", "nicoka"}:
+        tenant = _identity(
+            job,
+            "tenant_id",
+            "tenantId",
+            "tenant_key",
+            "tenantKey",
+            "approvedTenantId",
+        )
+        if not tenant or len(tenant) > 128 or not _IDENTIFIER.fullmatch(tenant):
+            raise UnsafeRouteError("route tenant identity is missing or malformed")
+
+    if provider == "recruitee":
+        slug = _identity(job, "slug", "posting_slug", "postingSlug", "provider_job_id")
+        if not slug:
+            external_id = _identity(job, "external_id", "externalId")
+            slug = external_id.rsplit(":", 1)[-1] if external_id else ""
+        if (
+            hostname != f"{tenant}.recruitee.com"
+            or parsed.query
+            or len(parts) != 2
+            or parts[0] != "o"
+            or not slug
+            or parts[1] != slug
+        ):
+            raise UnsafeRouteError("Recruitee route is not tenant/posting bound")
+        return hostname
+
+    if provider == "nicoka":
+        posting_uid = _identity(job, "posting_uid", "postingUid", "uid")
+        if not posting_uid:
+            raise UnsafeRouteError("Nicoka posting identity is missing")
+        expected = (
+            [tenant, "public", "jobs", posting_uid, "apply"]
+            if hostname == "trial.nicoka.com"
+            else ["public", "jobs", posting_uid, "apply"]
+        )
+        if (
+            hostname not in {f"{tenant}.nicoka.com", "trial.nicoka.com"}
+            or parsed.query
+            or parts != expected
+        ):
+            raise UnsafeRouteError("Nicoka route is not tenant/posting bound")
+        return hostname
+
+    return hostname
+
+
+def _fixture_blueprint(
+    job: Mapping[str, Any],
+    provider: str,
+) -> ApplicationBlueprint:
+    fixture = job.get("formFixture")
+    if not isinstance(fixture, Mapping) or set(fixture) - {"fields", "blockers"}:
+        raise ValueError("malformed form fixture")
+    raw_fields = fixture.get("fields", [])
+    raw_blockers = fixture.get("blockers", [])
+    if not isinstance(raw_fields, list) or not isinstance(raw_blockers, list):
+        raise ValueError("malformed form fixture")
+    blockers = [str(value) for value in raw_blockers]
+    if any(value not in _FIXTURE_BLOCKERS for value in blockers):
+        raise ValueError("malformed form fixture blocker")
+
+    fields: list[NormalizedField] = []
+    for index, raw_field in enumerate(raw_fields):
+        if not isinstance(raw_field, Mapping) or set(raw_field) != {
+            "type", "required", "supported", "sensitive",
+        }:
+            raise ValueError("malformed form fixture field")
+        if not all(isinstance(raw_field[key], bool) for key in ("required", "supported", "sensitive")):
+            raise ValueError("malformed form fixture field flags")
+        try:
+            field_type = FieldType(str(raw_field["type"]))
+        except ValueError:
+            field_type = FieldType.UNKNOWN
+        required = raw_field["required"]
+        sensitive = raw_field["sensitive"] or (
+            required and field_type in _CANDIDATE_REVIEW_TYPES
+        )
+        supported = raw_field["supported"] and field_type != FieldType.UNKNOWN
+        fields.append(NormalizedField(
+            key=f"fixture_field_{index}",
+            type=field_type,
+            required=required,
+            supported=supported,
+            validation=FieldValidation(sensitive=sensitive),
+        ))
+    return ApplicationBlueprint(
+        provider=provider,
+        fields=fields,
+        complexity=derive_complexity(fields),
+        estimated_compatibility_score=estimate_compatibility_score(fields, blockers),
+        blockers=blockers,
+        signature=compute_blueprint_signature(fields),
+    )
+
+
+def _form_class(blueprint: ApplicationBlueprint) -> str:
+    if blueprint.blockers:
+        return blueprint.blockers[0]
+    required = [field for field in blueprint.fields if field.required]
+    if any(not field.supported or field.type == FieldType.UNKNOWN for field in required):
+        return "unsupported_widget"
+    if any(field.type == FieldType.CONSENT for field in required):
+        return "consent_review"
+    if any(field.validation.sensitive or field.type not in _CONTACT_TYPES for field in required):
+        return "candidate_review"
+    return "contact_only"
+
+
+def _route_state(provider: str, registry: Any) -> str:
+    capability = APPLICATION_CAPABILITIES.get(provider) or {}
+    driver = registry.for_job({"ats_provider": provider})
+    if driver is not None and all(
+        capability.get(flag)
+        for flag in ("driverRegistered", "queuePermitted", "noSubmitVerified")
+    ):
+        return "application_gated"
+    return "inventory_manual"
 
 
 async def resolve_public_addresses(hostname: str) -> Sequence[str]:
@@ -190,28 +402,34 @@ async def inspect_route_batch(
 
     semaphore = asyncio.Semaphore(concurrency)
 
-    async def inspect_one(job: Mapping[str, Any]) -> tuple[str, str, str]:
+    async def inspect_one(job: Mapping[str, Any]) -> tuple[str, str, str, str, str]:
         provider = _provider(job)
         if provider not in ALLOWED_HOST_SUFFIXES:
-            return "unsupported", "failed", "unsupported_provider"
+            return "unsupported", "failed", "unsupported_provider", "blocked", "uncharacterized"
         try:
-            hostname = _validate_url(provider, _application_url(job))
+            hostname = _validate_provider_route(provider, _application_url(job), job)
             await resolver(hostname)
             driver = registry.for_job(dict(job))
-            if driver is None or getattr(driver, "provider", "") != provider:
-                return provider, "failed", "unsupported_provider"
-            async with semaphore:
-                blueprint = await asyncio.wait_for(
-                    driver.inspect_application(dict(job)),
-                    timeout=timeout_seconds,
-                )
+            route_state = _route_state(provider, registry)
+            if evidence_mode == "fixture_contract" and "formFixture" in job:
+                blueprint = _fixture_blueprint(job, provider)
+            elif driver is None or getattr(driver, "provider", "") != provider:
+                return provider, "unsupported", "", route_state, "uncharacterized"
+            else:
+                async with semaphore:
+                    blueprint = await asyncio.wait_for(
+                        driver.inspect_application(dict(job)),
+                        timeout=timeout_seconds,
+                    )
             decision = classify(blueprint)
-            return provider, decision.category, ""
+            return provider, decision.category, "", route_state, _form_class(blueprint)
         except Exception as exc:  # aggregate typed failures; never emit details
-            return provider, "failed", _failure_bucket(exc)
+            return provider, "failed", _failure_bucket(exc), "blocked", "uncharacterized"
 
     results = await asyncio.gather(*(inspect_one(job) for job in jobs))
     provider_counts: dict[str, Counter[str]] = defaultdict(Counter)
+    provider_form_counts: dict[str, Counter[str]] = defaultdict(Counter)
+    provider_route_counts: dict[str, Counter[str]] = defaultdict(Counter)
     failure_counts = Counter({bucket: 0 for bucket in FAILURE_BUCKETS})
     category_counts = Counter({
         "eligible": 0,
@@ -219,9 +437,19 @@ async def inspect_route_batch(
         "unsupported": 0,
         "failed": 0,
     })
-    for provider, category, failure in results:
+    form_counts: Counter[str] = Counter()
+    route_counts = Counter({
+        "application_gated": 0,
+        "inventory_manual": 0,
+        "blocked": 0,
+    })
+    for provider, category, failure, route_state, form_class in results:
         category_counts[category] += 1
         provider_counts[provider][category] += 1
+        route_counts[route_state] += 1
+        provider_route_counts[provider][route_state] += 1
+        form_counts[form_class] += 1
+        provider_form_counts[provider][form_class] += 1
         if failure:
             failure_counts[failure] += 1
 
@@ -245,6 +473,22 @@ async def inspect_route_batch(
             }
             for provider, counts in sorted(provider_counts.items())
         },
+        "formClasses": dict(sorted(form_counts.items())),
+        "routeStates": dict(route_counts),
+        "corpusCoverage": {
+            provider: {
+                "formsCharacterized": sum(provider_form_counts[provider].values())
+                - provider_form_counts[provider]["uncharacterized"],
+                "minimumRequired": CORPUS_MINIMUM_PER_PROVIDER,
+                "meetsMinimum": (
+                    sum(provider_form_counts[provider].values())
+                    - provider_form_counts[provider]["uncharacterized"]
+                ) >= CORPUS_MINIMUM_PER_PROVIDER,
+                "manualDeepLinksVerified": provider_route_counts[provider]["inventory_manual"],
+                "formClasses": dict(sorted(provider_form_counts[provider].items())),
+            }
+            for provider in sorted(provider_counts)
+        },
         "failureBuckets": dict(failure_counts),
         "safeguards": {
             "aggregateOnly": True,
@@ -253,6 +497,9 @@ async def inspect_route_batch(
             "canonicalWrites": False,
             "sourceActivationChanges": False,
             "writerTransfer": False,
+            "capabilityFlagsChanged": False,
+            "fixtureEvidenceCannotAuthorizeSubmission": True,
+            "corpusMinimumPerProvider": CORPUS_MINIMUM_PER_PROVIDER,
             "maxJobs": MAX_JOBS,
             "maxConcurrency": MAX_CONCURRENCY,
             "timeoutSeconds": INSPECTION_TIMEOUT_SECONDS,
