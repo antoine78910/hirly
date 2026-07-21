@@ -146,9 +146,18 @@ command arguments, or logs.
 | `WORKER_HEARTBEAT_SECONDS` | Must be shorter than the lease duration. |
 | `WORKER_SHUTDOWN_MS` | Must be shorter than Railway's configured drain window. |
 | `WORKER_INSTANCE_ID` | Use a non-sensitive, per-replica identifier. |
+| `JOB_PROJECTION_ENABLED` | Keep `false`; a later staged activation also requires the database `job_projection` control. |
+| `PROJECTION_RECONCILIATION_ENABLED` | Keep `false`; a later staged activation also requires the database `projection_reconciliation` control. |
+| `JOB_PROJECTION_BATCH_SIZE` | Bounded projection claim size; default `10`, maximum `100`. |
+| `JOB_PROJECTION_RECONCILIATION_BATCH_SIZE` | Bounded drift scan size; default `100`, maximum `1000`. |
 
 Do not print parsed configuration or validation input. Configuration errors may
 name invalid variables but must not include their values.
+
+The PR2 projection worker ships disabled. See
+[`docs/operations/job-projection-runtime.md`](../../docs/operations/job-projection-runtime.md)
+for its two-layer control model, verification queries, drain order, and rollback
+boundary. Neither environment flag authorizes online serving.
 
 ## Health semantics
 
