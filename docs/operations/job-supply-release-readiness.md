@@ -101,7 +101,21 @@ digest used by a trial scorecard.
 
 ## Ordered migration application
 
-Apply in this order with `psql -v ON_ERROR_STOP=1`:
+Before any downstream digest-dependent migration, first apply the shared pgcrypto
+compatibility migration to every database that will participate in that chain:
+
+1. `20260721001950_pgcrypto_schema_compatibility.sql`
+
+This additive migration is topology-aware:
+
+- on a split deployment, apply it to both the inventory database and the primary
+  application database before any later digest-dependent migration;
+- on an unsplit deployment, apply it once to the single database.
+
+Its down migration removes only marker-owned `public.digest` wrappers; do not
+roll it back until later digest-dependent migrations have been fully rolled back.
+
+Apply the remaining migrations in this order with `psql -v ON_ERROR_STOP=1`:
 
 1. `20260720000100_typescript_worker_foundation.sql`
 2. `20260720000200_bun_worker_runtime.sql`
@@ -159,7 +173,7 @@ Apply the list to the primary database containing `public.jobs`.
 Bootstrap `backend/db/jobs_inventory_schema.sql` on the inventory database,
 then apply the ordered list there using `JOBS_DATABASE_URL`. Keep auth, billing,
 profiles and user application state on the primary application database. In
-this topology, “the ordered list” means the thirteen inventory migrations above,
+this topology, “the ordered list” means the fourteen inventory migrations above,
 not the separately listed application-database migrations.
 
 ## Deployment configuration validation
