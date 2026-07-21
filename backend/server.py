@@ -7727,8 +7727,39 @@ async def _try_feed_v2(
     except (httpx.HTTPError, ValueError, TypeError) as exc:
         logger.warning("jobs/feed v2_fallback reason=%s", type(exc).__name__)
         return None
-    logger.info("jobs/feed v2_success user_id=%s request_id=%s", user_id, request_id)
-    return validated.model_dump(by_alias=True, mode="json")
+    payload = validated.model_dump(by_alias=True, mode="json")
+    # The swipe UI consumes full, canonical job cards.  Feed V2 deliberately
+    # returns ranked references, so hydrate those references here at the
+    # compatibility boundary instead of making the client discard them as
+    # incomplete legacy jobs.
+    preferred_ids = [job.preferred_job_id for job in validated.jobs]
+    if preferred_ids:
+        try:
+            source_rows = await db.jobs.find(
+                {"job_id": {"$in": preferred_ids}}, {"_id": 0},
+            ).to_list(len(preferred_ids))
+        except (AttributeError, RuntimeError) as exc:
+            logger.warning("jobs/feed v2_card_hydration_skipped reason=%s", type(exc).__name__)
+            source_rows = []
+        source_by_id = {
+            str(row.get("job_id")): row for row in source_rows
+            if isinstance(row, dict) and row.get("job_id")
+        }
+        if source_by_id:
+            hydrated_jobs = []
+            for match in payload["jobs"]:
+                source = source_by_id.get(match["preferredJobId"])
+                if source is None:
+                    continue
+                card = dict(source)
+                card.update(match)
+                card["match_score"] = round(float(match["relevanceScore"]) * 100)
+                card["application_mode"] = match["fulfillmentRoute"]
+                hydrated_jobs.append(card)
+            payload["jobs"] = hydrated_jobs
+            payload["total"] = len(hydrated_jobs)
+    logger.info("jobs/feed v2_success user_id=%s request_id=%s jobs=%s", user_id, request_id, len(payload["jobs"]))
+    return payload
 
 @api_router.get("/jobs/{job_id}/rome-profile")
 async def get_job_rome_profile(job_id: str, user: User = Depends(get_current_user)):
