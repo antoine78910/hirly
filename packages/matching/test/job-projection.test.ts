@@ -6,6 +6,7 @@ import {
 } from "../src";
 
 const source = (overrides: Partial<JobProjectionSource> = {}): JobProjectionSource => ({
+  authoritativeVersion: "7",
   canonicalGroupId: "11111111-1111-4111-8111-111111111111",
   preferredJobId: "job_0123456789abcdef",
   groupStatus: "active",
@@ -110,6 +111,7 @@ describe("job search-document projection", () => {
     expect(await projectJobSearchDocument(source({ groupStatus: "superseded" }), now)).toEqual({
       action: "remove",
       canonicalGroupId: "11111111-1111-4111-8111-111111111111",
+      authoritativeVersion: "7",
     });
     expect(
       affectedCanonicalGroupIds({

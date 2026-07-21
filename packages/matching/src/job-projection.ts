@@ -7,6 +7,7 @@ import {
 export const JOB_FEATURE_SCHEMA_VERSION = "matching-job-features.v1";
 
 export interface JobProjectionSource {
+  authoritativeVersion: string;
   canonicalGroupId: string;
   preferredJobId: string;
   groupStatus: "active" | "split" | "superseded" | "archived";
@@ -35,7 +36,11 @@ export interface JobProjectionSource {
 }
 
 export type JobProjectionResult =
-  | { action: "remove"; canonicalGroupId: string }
+  | {
+      action: "remove";
+      canonicalGroupId: string;
+      authoritativeVersion: string;
+    }
   | {
       action: "upsert";
       canonicalGroupId: string;
@@ -175,8 +180,15 @@ export async function projectJobSearchDocument(
   source: JobProjectionSource,
   projectedAt: Date,
 ): Promise<JobProjectionResult> {
+  if (!/^[1-9]\d*$/.test(source.authoritativeVersion)) {
+    throw new Error("job projection authoritative version must be a positive decimal string");
+  }
   if (source.groupStatus !== "active") {
-    return { action: "remove", canonicalGroupId: source.canonicalGroupId };
+    return {
+      action: "remove",
+      canonicalGroupId: source.canonicalGroupId,
+      authoritativeVersion: source.authoritativeVersion,
+    };
   }
   const normalizedTitle = token(source.normalizedTitle ?? source.title);
   if (!normalizedTitle) throw new Error("job projection title normalizes to empty");
@@ -193,8 +205,18 @@ export async function projectJobSearchDocument(
   const publishedAt = iso(source.publishedAt, source.firstSeenAt, source.importedAt, source.lastSeenAt);
   const lastSeenAt = iso(source.lastSeenAt, source.importedAt, source.firstSeenAt, source.publishedAt);
   const lifecycleStatus = lifecycle(source, projectedAt);
-  const validationStatus = source.validationStatus === "valid" ? "valid" : source.validationStatus === "invalid" ? "invalid" : "review";
-  const applyabilityTier = source.applyabilityTier === "E" ? "blocked" : ["A", "B", "C", "D"].includes(source.applyabilityTier) ? source.applyabilityTier as "A" | "B" | "C" | "D" : "blocked";
+  const validationStatus: JobSearchDocumentPersistenceRow["validation_status"] =
+    source.validationStatus === "valid"
+      ? "valid"
+      : source.validationStatus === "invalid"
+        ? "invalid"
+        : "review";
+  const applyabilityTier: JobSearchDocumentPersistenceRow["applyability_tier"] =
+    source.applyabilityTier === "E"
+      ? "blocked"
+      : ["A", "B", "C", "D"].includes(source.applyabilityTier)
+        ? (source.applyabilityTier as "A" | "B" | "C" | "D")
+        : "blocked";
   const content = {
     canonicalGroupId: source.canonicalGroupId,
     preferredJobId: source.preferredJobId,
