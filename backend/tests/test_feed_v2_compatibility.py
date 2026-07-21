@@ -45,6 +45,19 @@ def _seeded_first_navigation_response():
     return json.loads(fixture.read_text(encoding="utf-8"))
 
 
+ANALYTICS_USER_ID = "123e4567-e89b-12d3-a456-426614174000"
+
+
+def _rollout_context():
+    return {
+        server.FEED_V2_ROLLOUT_COUNTRY_PROPERTY: "FR",
+        server.FEED_V2_ROLLOUT_COHORT_PROPERTY: (
+            int(hashlib.sha256(ANALYTICS_USER_ID.encode("utf-8")).hexdigest()[:8], 16)
+            % server.FEED_V2_ROLLOUT_COHORT_COUNT
+        ),
+    }
+
+
 def _default_filters():
     return {
         "minSalary": 0,
@@ -84,8 +97,11 @@ def _enable(monkeypatch):
     monkeypatch.setattr(server, "_feed_v2_rollout_enabled_for", _enabled_feed_v2_rollout)
 
 
-async def _enabled_feed_v2_rollout(_distinct_id):
+async def _enabled_feed_v2_rollout(_distinct_id, *, rollout_context):
+    assert rollout_context == _rollout_context()
     return True
+
+
 
 
 class _ProfilesOnlyDB:
@@ -95,6 +111,7 @@ class _ProfilesOnlyDB:
                 "user_id": "user-1",
                 "cv_text": "Experienced engineer",
                 "target_role": "Engineer",
+                "target_location_data": {"country_code": "fr"},
                 "contact": {"phone": "+33 6 12 34 56 78"},
             }
 
@@ -103,7 +120,7 @@ class _ProfilesOnlyDB:
 
 def _feed_args():
     return {
-        "user": server.User(user_id="user-1", email="user@example.com", name="User"),
+        "user": server.User(user_id="user-1", analytics_user_id=ANALYTICS_USER_ID, email="user@example.com", name="User"),
         "limit": 5,
         "min_salary": 0,
         "posted_within": None,
@@ -136,13 +153,13 @@ def _feed_args():
 
 
 def test_feed_v2_delegation_fails_closed_when_posthog_disables_the_flag(monkeypatch):
-    async def disabled_rollout(_distinct_id):
+    async def disabled_rollout(_distinct_id, **_kwargs):
         return False
 
     monkeypatch.setattr(server, "_feed_v2_rollout_enabled_for", disabled_rollout)
     monkeypatch.setattr(server.httpx, "AsyncClient", lambda **_kwargs: (_ for _ in ()).throw(AssertionError("HTTP called")))
 
-    result = asyncio.run(server._try_feed_v2(user_id="user-1", limit=5, filters=_default_filters()))
+    result = asyncio.run(server._try_feed_v2(user_id="user-1", analytics_user_id=ANALYTICS_USER_ID, rollout_context=_rollout_context(), limit=5, filters=_default_filters()))
 
     assert result is None
 
@@ -151,6 +168,23 @@ def test_feed_v2_rollout_fails_closed_when_posthog_is_unavailable(monkeypatch):
     monkeypatch.setattr(server, "_posthog_client", None)
 
     assert asyncio.run(server._feed_v2_rollout_enabled_for("user-1")) is False
+
+
+def test_feed_v2_rollout_context_uses_saved_country_and_stable_cohort():
+    profile = {"target_location_data": {"country_code": " fr "}}
+
+    first = server._feed_v2_rollout_context(ANALYTICS_USER_ID, profile)
+    second = server._feed_v2_rollout_context(ANALYTICS_USER_ID, profile)
+
+    assert first == second
+    assert first[server.FEED_V2_ROLLOUT_COUNTRY_PROPERTY] == "FR"
+    assert 0 <= first[server.FEED_V2_ROLLOUT_COHORT_PROPERTY] < server.FEED_V2_ROLLOUT_COHORT_COUNT
+
+
+def test_feed_v2_rollout_context_fails_closed_without_trusted_country_or_identity():
+    assert server._feed_v2_rollout_context(ANALYTICS_USER_ID, {}) is None
+    assert server._feed_v2_rollout_context("not-a-uuid", {"target_location_data": {"country_code": "fr"}}) is None
+    assert asyncio.run(server._feed_v2_rollout_enabled_for(ANALYTICS_USER_ID)) is False
 
 
 def test_feed_v2_rollout_uses_only_the_server_posthog_decision(monkeypatch):
@@ -162,17 +196,23 @@ def test_feed_v2_rollout_uses_only_the_server_posthog_decision(monkeypatch):
             return True
 
     class PostHog:
-        def evaluate_flags(self, distinct_id, *, flag_keys):
+        def evaluate_flags(self, distinct_id, *, flag_keys, person_properties):
             observed["distinct_id"] = distinct_id
             observed["flag_keys"] = flag_keys
+            observed["person_properties"] = person_properties
             return Flags()
 
     monkeypatch.setattr(server, "_posthog_client", PostHog())
 
-    assert asyncio.run(server._feed_v2_rollout_enabled_for("analytics-user")) is True
+    assert asyncio.run(
+        server._feed_v2_rollout_enabled_for(
+            "analytics-user", rollout_context=_rollout_context(),
+        )
+    ) is True
     assert observed == {
         "distinct_id": "analytics-user",
         "flag_keys": [server.FEED_V2_ROLLOUT_FLAG],
+        "person_properties": _rollout_context(),
         "key": server.FEED_V2_ROLLOUT_FLAG,
     }
 
@@ -184,7 +224,11 @@ def test_feed_v2_rollout_fails_closed_when_posthog_evaluation_errors(monkeypatch
 
     monkeypatch.setattr(server, "_posthog_client", PostHog())
 
-    assert asyncio.run(server._feed_v2_rollout_enabled_for("analytics-user")) is False
+    assert asyncio.run(
+        server._feed_v2_rollout_enabled_for(
+            "analytics-user", rollout_context=_rollout_context(),
+        )
+    ) is False
 
 
 def test_feed_v2_delegation_requires_the_server_rollout_flag(monkeypatch):
@@ -195,7 +239,7 @@ def test_feed_v2_delegation_requires_the_server_rollout_flag(monkeypatch):
         lambda **_kwargs: (_ for _ in ()).throw(AssertionError("HTTP called")),
     )
 
-    result = asyncio.run(server._try_feed_v2(user_id="user-1", limit=5, filters=_default_filters()))
+    result = asyncio.run(server._try_feed_v2(user_id="user-1", analytics_user_id=ANALYTICS_USER_ID, rollout_context=_rollout_context(), limit=5, filters=_default_filters()))
 
     assert result is None
 
@@ -219,7 +263,7 @@ def test_feed_v2_delegation_signs_candidate_identity_with_runtime_convention(mon
             return httpx.Response(200, json=_v2_response())
 
     monkeypatch.setattr(server.httpx, "AsyncClient", Client)
-    result = asyncio.run(server._try_feed_v2(user_id="user-1", limit=5, filters=_default_filters()))
+    result = asyncio.run(server._try_feed_v2(user_id="user-1", analytics_user_id=ANALYTICS_USER_ID, rollout_context=_rollout_context(), limit=5, filters=_default_filters()))
 
     encoded = observed["headers"]["X-Hirly-Feed-Assertion"]
     unsigned = base64.urlsafe_b64decode(encoded + "=" * (-len(encoded) % 4))
@@ -259,7 +303,7 @@ def test_feed_v2_timeout_rolls_back_to_legacy_selection(monkeypatch):
 
     monkeypatch.setattr(server.httpx, "AsyncClient", Client)
 
-    assert asyncio.run(server._try_feed_v2(user_id="user-1", limit=5, filters=_default_filters())) is None
+    assert asyncio.run(server._try_feed_v2(user_id="user-1", analytics_user_id=ANALYTICS_USER_ID, rollout_context=_rollout_context(), limit=5, filters=_default_filters())) is None
     assert calls == 1
 
 
@@ -374,7 +418,7 @@ def test_exact_paris_fullstack_query_is_normalized_signed_and_forwarded_once(mon
             return httpx.Response(200, json=_v2_response())
 
     monkeypatch.setattr(server.httpx, "AsyncClient", Client)
-    assert asyncio.run(server._try_feed_v2(user_id="user-1", limit=5, filters=filters)) == _v2_response()
+    assert asyncio.run(server._try_feed_v2(user_id="user-1", analytics_user_id=ANALYTICS_USER_ID, rollout_context=_rollout_context(), limit=5, filters=filters)) == _v2_response()
     assert observed["calls"] == 1
     assert observed["params"] == {"limit": 5}
 
@@ -408,7 +452,7 @@ def test_provider_and_background_controls_remain_non_delegable(monkeypatch):
     for control in ("forceProviderRefresh", "prefetch", "score", "auditMode"):
         filters = _default_filters()
         filters[control] = True
-        assert asyncio.run(server._try_feed_v2(user_id="user-1", limit=5, filters=filters)) is None
+        assert asyncio.run(server._try_feed_v2(user_id="user-1", analytics_user_id=ANALYTICS_USER_ID, rollout_context=_rollout_context(), limit=5, filters=filters)) is None
 
 
 def test_invalid_or_oversized_locations_json_falls_back_before_any_v2_http(monkeypatch):
@@ -436,10 +480,10 @@ def test_invalid_or_oversized_locations_json_falls_back_before_any_v2_http(monke
     for locations_json in ("{not-json", json.dumps(too_many_locations), oversized_locations):
         filters = _default_filters()
         filters.update({"searchRole": "Fullstack Engineer", "searchRadius": "103km", "locationsJson": locations_json})
-        assert asyncio.run(server._try_feed_v2(user_id="user-1", limit=5, filters=filters)) is None
+        assert asyncio.run(server._try_feed_v2(user_id="user-1", analytics_user_id=ANALYTICS_USER_ID, rollout_context=_rollout_context(), limit=5, filters=filters)) is None
     assert attempts == 0
 
-    assert asyncio.run(server._try_feed_v2(user_id="user-1", limit=5, filters=filters)) is None
+    assert asyncio.run(server._try_feed_v2(user_id="user-1", analytics_user_id=ANALYTICS_USER_ID, rollout_context=_rollout_context(), limit=5, filters=filters)) is None
 
 
 def test_first_navigation_returns_seeded_v2_once_with_zero_side_effects(monkeypatch):
@@ -504,7 +548,7 @@ def _explicit_paris_fullstack_args():
 
 
 def test_explicit_paris_52km_fullstack_falls_back_truthfully_when_v2_disabled(monkeypatch):
-    async def disabled_rollout(_distinct_id):
+    async def disabled_rollout(_distinct_id, **_kwargs):
         return False
 
     monkeypatch.setattr(server, "_feed_v2_rollout_enabled_for", disabled_rollout)

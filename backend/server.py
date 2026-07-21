@@ -7443,17 +7443,42 @@ def _feed_v2_base64url(value: bytes) -> str:
 
 
 FEED_V2_ROLLOUT_FLAG = "feed_v2_rollout"
+FEED_V2_ROLLOUT_COUNTRY_PROPERTY = "feed_v2_country"
+FEED_V2_ROLLOUT_COHORT_PROPERTY = "feed_v2_cohort"
+FEED_V2_ROLLOUT_COHORT_COUNT = 100
 
 
-async def _feed_v2_rollout_enabled_for(distinct_id: Optional[str]) -> bool:
+def _feed_v2_rollout_context(
+    analytics_user_id: Optional[str], profile: Optional[Dict[str, Any]],
+) -> Optional[Dict[str, Any]]:
+    """Build trusted PostHog targeting properties for the Feed v2 rollout."""
+    canonical_user_id = _canonical_analytics_user_id(analytics_user_id)
+    location_data = resolve_profile_target_location_data(profile)
+    country_code = location_data.get("country_code")
+    if not isinstance(country_code, str):
+        return None
+    country_code = country_code.strip().upper()
+    if canonical_user_id is None or not re.fullmatch(r"[A-Z]{2}", country_code):
+        return None
+    cohort = int(hashlib.sha256(canonical_user_id.encode("utf-8")).hexdigest()[:8], 16)
+    return {
+        FEED_V2_ROLLOUT_COUNTRY_PROPERTY: country_code,
+        FEED_V2_ROLLOUT_COHORT_PROPERTY: cohort % FEED_V2_ROLLOUT_COHORT_COUNT,
+    }
+
+
+async def _feed_v2_rollout_enabled_for(
+    distinct_id: Optional[str], *, rollout_context: Optional[Dict[str, Any]] = None,
+) -> bool:
     """Return the PostHog rollout decision without ever opening the v2 path on error."""
-    if not distinct_id or _posthog_client is None:
+    if not distinct_id or not rollout_context or _posthog_client is None:
         return False
     try:
         flags = await asyncio.to_thread(
             _posthog_client.evaluate_flags,
             distinct_id,
             flag_keys=[FEED_V2_ROLLOUT_FLAG],
+            person_properties=rollout_context,
         )
         return flags.is_enabled(FEED_V2_ROLLOUT_FLAG) is True
     except Exception as exc:
@@ -7464,9 +7489,13 @@ async def _feed_v2_rollout_enabled_for(distinct_id: Optional[str]) -> bool:
         return False
 
 
-async def _feed_v2_enabled_for(analytics_user_id: Optional[str]) -> bool:
+async def _feed_v2_enabled_for(
+    analytics_user_id: Optional[str], *, rollout_context: Optional[Dict[str, Any]] = None,
+) -> bool:
     """Authorize Feed v2 solely through the server-side PostHog flag."""
-    return await _feed_v2_rollout_enabled_for(analytics_user_id)
+    return await _feed_v2_rollout_enabled_for(
+        analytics_user_id, rollout_context=rollout_context,
+    )
 
 
 def _feed_v2_request_is_profile_equivalent(filters: Dict[str, Any]) -> bool:
@@ -7639,10 +7668,13 @@ async def _try_feed_v2(
     *,
     user_id: str,
     analytics_user_id: Optional[str] = None,
+    rollout_context: Optional[Dict[str, Any]] = None,
     limit: int,
     filters: Dict[str, Any],
 ) -> Optional[Dict[str, Any]]:
-    if not await _feed_v2_enabled_for(analytics_user_id):
+    if not await _feed_v2_enabled_for(
+        analytics_user_id, rollout_context=rollout_context,
+    ):
         return None
     try:
         effective_query = _feed_v2_effective_query(filters)
@@ -7817,6 +7849,7 @@ async def get_feed(
     feed_v2_response = await _try_feed_v2(
         user_id=user.user_id,
         analytics_user_id=user.analytics_user_id,
+        rollout_context=_feed_v2_rollout_context(user.analytics_user_id, profile),
         limit=limit,
         filters=feed_v2_filters,
     )
