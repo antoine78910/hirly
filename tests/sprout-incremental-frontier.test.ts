@@ -18,6 +18,14 @@ const activationMigration = readFileSync(
   "utf8",
 );
 
+const scheduledRunMigration = readFileSync(
+  new URL(
+    "../backend/db/migrations/20260721003700_bind_sprout_scheduled_runs_to_source.sql",
+    import.meta.url,
+  ),
+  "utf8",
+);
+
 const sourceId = "11111111-1111-4111-8111-111111111111";
 
 describe("Sprout incremental frontier cycles", () => {
@@ -60,5 +68,13 @@ describe("Sprout incremental frontier cycles", () => {
     expect(activationMigration).toContain("SET incremental_enabled = true");
     expect(activationMigration).toContain("source.discovery_state = 'approved'");
     expect(activationMigration).toContain("source.canary_evidence->>'status' = 'passed'");
+  });
+
+  test("binds a scheduled source-less run under the fenced source claim", () => {
+    expect(scheduledRunMigration).toContain(
+      "(run.career_source_id IS NULL OR run.career_source_id = p_source_id)",
+    );
+    expect(scheduledRunMigration).toContain("SET career_source_id = p_source_id");
+    expect(scheduledRunMigration).toContain("AND career_source_id IS NULL");
   });
 });
