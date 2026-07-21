@@ -1,4 +1,5 @@
 import { createJsonLogger } from "@hirly/observability";
+import { CandidateProjector } from "@hirly/matching";
 import {
   createDatabase,
   JobProjectionRepository,
@@ -15,11 +16,19 @@ import { Scheduler } from "./runtime/scheduler";
 import { startHttpServer } from "./http/server";
 import { createWorkerRuntime } from "./runtime/lifecycle";
 import { JobProjectionConsumer } from "./runtime/job-projection-consumer";
+import { parseCandidateProjectionRuntimeConfig } from "./candidate-projection/config";
+import {
+  InventoryCandidateProjectionStore,
+  PrimaryCandidateProjectionSource,
+} from "./candidate-projection/repositories";
+import { CandidateProjectionRelay } from "./candidate-projection/relay";
 
 export async function startApplication(
   environment: Record<string, string | undefined> = process.env,
 ) {
   const config = parseRuntimeConfig(environment);
+  const candidateProjectionConfig =
+    parseCandidateProjectionRuntimeConfig(environment);
   const sql = createDatabase(config.JOBS_DATABASE_URL, {
     max: Math.max(4, config.WORKER_CONCURRENCY + 2),
   });
@@ -79,15 +88,51 @@ export async function startApplication(
     repository,
     shutdownMs: config.WORKER_SHUTDOWN_MS,
   });
+  const primarySql = candidateProjectionConfig.enabled
+    ? createDatabase(candidateProjectionConfig.primaryDatabaseUrl!, { max: 2 })
+    : null;
+  const candidateProjectionRelay = primarySql
+    ? new CandidateProjectionRelay(
+        new CandidateProjector(
+          new PrimaryCandidateProjectionSource(
+            primarySql,
+            config.WORKER_INSTANCE_ID,
+          ),
+          new InventoryCandidateProjectionStore(sql),
+        ),
+        logger,
+        {
+          pollMs: candidateProjectionConfig.pollMs,
+          batchSize: candidateProjectionConfig.batchSize,
+          leaseSeconds: candidateProjectionConfig.leaseSeconds,
+          serviceVersion: "0.1.0",
+          environment: config.NODE_ENV,
+        },
+      )
+    : null;
+  if (primarySql) await primarySql`SELECT 1`;
   runtime.start();
+  candidateProjectionRelay?.start();
+
+  let stopping: Promise<void> | undefined;
+  const stop = () =>
+    (stopping ??= (async () => {
+      await candidateProjectionRelay?.stop();
+      try {
+        await runtime.stop();
+      } finally {
+        await primarySql?.end({ timeout: 5 });
+      }
+    })());
 
   return {
     config,
     server,
     consumer,
     projectionConsumer,
+    candidateProjectionRelay,
     scheduler,
     health,
-    stop: runtime.stop,
+    stop,
   };
 }

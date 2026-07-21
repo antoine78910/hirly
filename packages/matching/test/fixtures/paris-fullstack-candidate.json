@@ -1,0 +1,40 @@
+{
+  "event": {
+    "schemaVersion": "hirly.matching.v1",
+    "eventId": "11111111-1111-4111-8111-111111111111",
+    "candidateId": "candidate-paris",
+    "eventFamily": "profiles",
+    "entityId": "candidate-paris",
+    "operation": "update",
+    "entityVersion": "42",
+    "idempotencyKey": "profiles:candidate-paris:42:update",
+    "occurredAt": "2026-07-21T08:00:00.000Z"
+  },
+  "profile": {
+    "user_id": "candidate-paris",
+    "updated_at": "2026-07-21T07:59:00.000Z",
+    "data": {
+      "target_role": "Développeur Full Stack",
+      "rome_codes": ["m1805"],
+      "skills": ["TypeScript", "React", "TypeScript", "Node.js"],
+      "skill_ids": ["typescript", "react", "node"],
+      "contract_type": "CDI",
+      "work_modes": ["remote", "hybrid"],
+      "target_location_data": {
+        "latitude": 48.8566,
+        "longitude": 2.3522,
+        "country_code": "fr",
+        "radius_km": 52
+      },
+      "salary_floor": 50000,
+      "currency": "eur",
+      "freshness_window_days": 30,
+      "cv_text": "must never leave the primary database",
+      "email": "private@example.com"
+    }
+  },
+  "user": {
+    "user_id": "candidate-paris",
+    "data": { "candidate_matching_consent": true }
+  }
+}
