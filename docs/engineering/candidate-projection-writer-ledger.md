@@ -9,6 +9,32 @@ serving eligibility. It is a PR0 characterization artifact only: no trigger,
 outbox, relay, canonical writer, or production routing behavior is activated by
 this change.
 
+## PR1 local schema update (2026-07-21)
+
+The additive PR1 migrations now define the previously planned primary-database
+triggers, opaque outbox, deletion RPC, common projection tables, and runtime
+controls. This changes the **local implementation state**, not production
+ownership or rollout state:
+
+- `profiles`, `swipes`, `applications`, and candidate-affecting `users` writes
+  remain authoritative in their existing Python owners.
+- The primary triggers and deletion RPC are additive capture mechanisms; they
+  do not make the matching projection an authoritative primary writer.
+- Every producer-family flag, relay control, projection capability, and online
+  serving control remains disabled by default.
+- No relay, projection consumer, reconciliation worker, or online serving route
+  is enabled by these migrations.
+- The common schema remains `ONLINE_FIRST` only. It contains no persisted
+  generation, candidate-job match, fanout, or hybrid hot-cohort tables.
+- Production activation remains blocked on staged rollout/rollback evidence,
+  privacy approval, and the PR0-S supply and peak×2 gates listed in the PR0
+  checkpoint.
+
+The independent PR1 review and exact verification evidence live in
+`artifacts/candidate-matching/pr1-contracts-and-schema-review.md`. That review
+is the authoritative verdict for the four audited repair blockers; this ledger
+continues to be authoritative for writer ownership.
+
 ## Atomic source contract and activation gate
 
 | Table/family | Required atomic primitive | Event version / idempotency source | Authoritative owner | Characterization test | Rollout flag |
