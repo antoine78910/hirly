@@ -1,0 +1,128 @@
+{
+  "schemaVersion": "hirly.matching-shadow-canary.v1",
+  "exerciseId": "g008-paris-52km-fullstack-shadow",
+  "observedAt": "2026-07-21T08:00:00Z",
+  "context": {
+    "candidateId": "candidate-paris-fullstack",
+    "cohort": "paid",
+    "countryCode": "FR",
+    "roleFamilyId": "fullstack"
+  },
+  "controls": {
+    "shadowEnabled": true,
+    "canaryEnabled": true,
+    "rollbackRequested": false,
+    "sampleRateBasisPoints": 10000,
+    "selectors": [
+      { "cohort": "paid", "countryCode": "FR", "roleFamilyId": "fullstack" }
+    ],
+    "requiredSupplyGates": ["paris-52km-fullstack"]
+  },
+  "thresholds": {
+    "minimumEligibleSetParity": 0.95,
+    "maximumLatencyDeltaMs": 15,
+    "minimumFreshVisibleCanonicalGroups": 12,
+    "maximumErrorRate": 0.01
+  },
+  "legacy": {
+    "schemaVersion": "candidate-matching.v2",
+    "candidateId": "candidate-paris-fullstack",
+    "profileVersion": "12",
+    "actionWatermark": "44",
+    "matcherVersion": "legacy-frozen",
+    "coarseCandidateCount": 2,
+    "eligibleCount": 2,
+    "hiddenCount": 0,
+    "emptyReason": null,
+    "results": [
+      {
+        "canonicalGroupId": "00000000-0000-4000-8000-000000000001",
+        "preferredJobId": "job-paris-1",
+        "jobVersion": "8",
+        "relevanceScore": 0.92,
+        "fulfillmentRoute": "manual",
+        "explanationCodes": ["role_match", "within_radius"]
+      },
+      {
+        "canonicalGroupId": "00000000-0000-4000-8000-000000000002",
+        "preferredJobId": "job-paris-2",
+        "jobVersion": "3",
+        "relevanceScore": 0.84,
+        "fulfillmentRoute": "assisted",
+        "explanationCodes": ["role_match", "within_radius"]
+      }
+    ]
+  },
+  "onlineV2": {
+    "schemaVersion": "candidate-matching.v2",
+    "candidateId": "candidate-paris-fullstack",
+    "profileVersion": "12",
+    "actionWatermark": "44",
+    "matcherVersion": "online-v2-frozen",
+    "coarseCandidateCount": 2,
+    "eligibleCount": 2,
+    "hiddenCount": 0,
+    "emptyReason": null,
+    "results": [
+      {
+        "canonicalGroupId": "00000000-0000-4000-8000-000000000001",
+        "preferredJobId": "job-paris-1",
+        "jobVersion": "8",
+        "relevanceScore": 0.92,
+        "fulfillmentRoute": "manual",
+        "explanationCodes": ["role_match", "within_radius"]
+      },
+      {
+        "canonicalGroupId": "00000000-0000-4000-8000-000000000002",
+        "preferredJobId": "job-paris-2",
+        "jobVersion": "3",
+        "relevanceScore": 0.84,
+        "fulfillmentRoute": "assisted",
+        "explanationCodes": ["role_match", "within_radius"]
+      }
+    ]
+  },
+  "onlineV2Domain": [
+    {
+      "canonicalGroupId": "00000000-0000-4000-8000-000000000001",
+      "eligible": true,
+      "statusReasons": ["active", "fresh"],
+      "componentScores": { "role": 1, "geography": 0.9 },
+      "relevanceScore": 0.92,
+      "fulfillmentRoute": "manual",
+      "explanationCodes": ["role_match", "within_radius"]
+    },
+    {
+      "canonicalGroupId": "00000000-0000-4000-8000-000000000002",
+      "eligible": true,
+      "statusReasons": ["active", "fresh"],
+      "componentScores": { "role": 1, "geography": 0.8 },
+      "relevanceScore": 0.84,
+      "fulfillmentRoute": "assisted",
+      "explanationCodes": ["role_match", "within_radius"]
+    }
+  ],
+  "legacyLatencyMs": 28,
+  "onlineV2LatencyMs": 32,
+  "requestCount": 1000,
+  "legacyErrorCount": 1,
+  "onlineV2ErrorCount": 2,
+  "queryPlan": {
+    "requiredIndexes": ["job_search_documents_retrieval_idx", "job_search_documents_features_idx"],
+    "usedIndexes": ["job_search_documents_features_idx", "job_search_documents_retrieval_idx"],
+    "sequentialScan": false
+  },
+  "supplyGates": [
+    {
+      "gateId": "paris-52km-fullstack",
+      "city": "Paris",
+      "radiusKm": 52,
+      "countryCode": "FR",
+      "roleFamilyId": "fullstack",
+      "freshVisibleCanonicalGroups": 16,
+      "minimumRequired": 12,
+      "recordedAt": "2026-07-21T07:55:00Z",
+      "expiresAt": "2026-07-21T09:00:00Z"
+    }
+  ]
+}
