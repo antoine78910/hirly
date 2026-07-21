@@ -153,4 +153,66 @@ describe("job projection consumer", () => {
     expect(completed[0]?.[0]).toBe(lease);
     expect(completed[0]?.[1]).toEqual(document);
   });
+
+  test("persists only a sanitized failure class", async () => {
+    let claimed = false;
+    const finished: Array<Record<string, unknown> | undefined> = [];
+    const store: JobProjectionStore = {
+      claim: async () => (claimed ? [] : ((claimed = true), [lease])),
+      heartbeat: async () => true,
+      loadSource: async () => source,
+      completeUpsert: async () => true,
+      completeRemove: async () => true,
+      finish: async (_task, _outcome, options) => {
+        finished.push(options);
+        return true;
+      },
+      enqueueReconciliation: async () => 0,
+    };
+    const consumer = new JobProjectionConsumer(
+      store,
+      options(true),
+      async () => {
+        throw new Error("postgres://user:secret@example.test/private-row");
+      },
+    );
+    consumer.start();
+    await Bun.sleep(20);
+    await consumer.stop(100);
+    expect(finished[0]).toMatchObject({
+      errorCode: "projection_failed",
+      errorMessage: undefined,
+    });
+    expect(JSON.stringify(finished)).not.toContain("secret");
+  });
+
+  test("returns at the shutdown deadline when an operation ignores abort", async () => {
+    let claimed = false;
+    const store: JobProjectionStore = {
+      claim: async () => (claimed ? [] : ((claimed = true), [lease])),
+      heartbeat: async () => true,
+      loadSource: async () => source,
+      completeUpsert: async () => new Promise<boolean>(() => {}),
+      completeRemove: async () => true,
+      finish: async () => true,
+      enqueueReconciliation: async () => 0,
+    };
+    const consumer = new JobProjectionConsumer(
+      store,
+      options(true),
+      async () => ({
+        action: "upsert",
+        canonicalGroupId: lease.entityId,
+        preferredJobId: source.preferredJobId,
+        authoritativeVersion: "7",
+        sourceContentHash: "a".repeat(64),
+        row: document,
+      }),
+    );
+    consumer.start();
+    await Bun.sleep(15);
+    const started = performance.now();
+    await consumer.stop(20);
+    expect(performance.now() - started).toBeLessThan(100);
+  });
 });

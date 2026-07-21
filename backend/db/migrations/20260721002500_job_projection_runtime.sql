@@ -126,7 +126,7 @@ BEGIN
     task_kind, entity_id, entity_version, idempotency_key, source_digest
   ) VALUES (
     'job.document.project', p_canonical_group_id::text, v_version,
-    'job-source:' || p_canonical_group_id::text || ':' || v_digest,
+    'job-source:' || p_canonical_group_id::text || ':' || v_version::text || ':' || v_digest,
     v_digest
   ) ON CONFLICT (idempotency_key) DO NOTHING;
   GET DIAGNOSTICS v_inserted = ROW_COUNT;
@@ -584,6 +584,8 @@ AS $$
 DECLARE
   v_task public.projection_reconciliation_tasks%ROWTYPE;
   v_removed integer;
+  v_live_digest text;
+  v_live_group_status text;
 BEGIN
   SELECT * INTO v_task FROM public.projection_reconciliation_tasks
   WHERE task_id = p_task_id AND task_kind = 'job.document.project'
@@ -597,6 +599,34 @@ BEGIN
   THEN
     RAISE EXCEPTION 'projection removal does not match leased entity/version'
       USING ERRCODE = '22023';
+  END IF;
+  v_live_digest := worker_private.job_projection_source_digest(
+    p_canonical_group_id
+  );
+  SELECT status INTO v_live_group_status
+  FROM public.canonical_job_groups
+  WHERE id = p_canonical_group_id;
+  IF v_task.source_digest IS NULL
+    OR v_task.source_digest IS DISTINCT FROM v_live_digest
+    OR v_live_group_status IS NOT DISTINCT FROM 'active'
+  THEN
+    UPDATE public.projection_reconciliation_tasks SET
+      status = 'succeeded', lease_owner = NULL, lease_token = NULL,
+      lease_until = NULL, last_error_code = NULL, last_error_message = NULL,
+      updated_at = clock_timestamp()
+    WHERE task_id = v_task.task_id;
+    INSERT INTO public.job_projection_task_audit (
+      task_id, claim_generation, task_kind, entity_id, entity_version,
+      attempt, outcome, duration_ms
+    ) VALUES (
+      v_task.task_id, v_task.claim_generation, v_task.task_kind,
+      v_task.entity_id, v_task.entity_version, v_task.attempts,
+      'stale_ignored', p_duration_ms
+    );
+    PERFORM worker_private.enqueue_current_job_projection_task(
+      p_canonical_group_id, v_live_digest
+    );
+    RETURN true;
   END IF;
   DELETE FROM public.job_search_documents
   WHERE canonical_group_id = p_canonical_group_id
@@ -639,49 +669,65 @@ BEGIN
     WHERE capability = 'projection_reconciliation' AND enabled
   ) THEN RETURN 0; END IF;
 
-  WITH candidates AS (
-    SELECT group_row.id AS canonical_group_id,
-      greatest(
-        1::bigint,
-        floor(extract(epoch FROM greatest(
-          group_row.updated_at,
-          coalesce(job.lifecycle_checked_at, '-infinity'::timestamptz),
-          coalesce(job.last_seen_at, '-infinity'::timestamptz),
-          coalesce(occurrence.updated_at, '-infinity'::timestamptz)
-        )) * 1000000)::bigint
-      ) AS entity_version
-    FROM public.canonical_job_groups AS group_row
-    LEFT JOIN public.jobs AS job ON job.job_id = group_row.preferred_job_id
-    LEFT JOIN public.job_occurrences AS occurrence ON occurrence.job_id = job.job_id
-    LEFT JOIN public.job_search_documents AS document
-      ON document.canonical_group_id = group_row.id
-    WHERE (group_row.status = 'active' AND group_row.preferred_job_id IS NOT NULL AND (
-        document.canonical_group_id IS NULL
-        OR document.preferred_job_id IS DISTINCT FROM group_row.preferred_job_id
-        OR document.source_updated_at IS NULL
-        OR document.source_updated_at < greatest(
-          group_row.updated_at,
-          coalesce(job.lifecycle_checked_at, '-infinity'::timestamptz),
-          coalesce(job.last_seen_at, '-infinity'::timestamptz),
-          coalesce(occurrence.updated_at, '-infinity'::timestamptz)
-        )
-      )) OR (group_row.status <> 'active' AND document.canonical_group_id IS NOT NULL)
+  WITH universe AS (
+    SELECT id AS canonical_group_id FROM public.canonical_job_groups
     UNION
-    SELECT document.canonical_group_id,
-      greatest(1::bigint, document.job_version + 1)
-    FROM public.job_search_documents AS document
+    SELECT canonical_group_id FROM public.job_search_documents
+  ), snapshots AS (
+    SELECT universe.canonical_group_id,
+      group_row.status AS group_status,
+      group_row.preferred_job_id,
+      document.job_version,
+      document.source_snapshot_digest,
+      worker_private.job_projection_source_digest(
+        universe.canonical_group_id
+      ) AS source_digest,
+      coalesce(task_version.max_version, 0) AS max_task_version
+    FROM universe
     LEFT JOIN public.canonical_job_groups AS group_row
-      ON group_row.id = document.canonical_group_id
-    WHERE group_row.id IS NULL
-    ORDER BY canonical_group_id
+      ON group_row.id = universe.canonical_group_id
+    LEFT JOIN public.job_search_documents AS document
+      ON document.canonical_group_id = universe.canonical_group_id
+    LEFT JOIN LATERAL (
+      SELECT max(task.entity_version) AS max_version
+      FROM public.projection_reconciliation_tasks AS task
+      WHERE task.task_kind = 'job.document.project'
+        AND task.entity_id = universe.canonical_group_id::text
+    ) AS task_version ON true
+  ), candidates AS (
+    SELECT snapshot.canonical_group_id, snapshot.source_digest,
+      greatest(
+        coalesce(snapshot.job_version, 0), snapshot.max_task_version
+      ) + 1 AS entity_version
+    FROM snapshots AS snapshot
+    WHERE ((
+        snapshot.group_status = 'active'
+        AND snapshot.preferred_job_id IS NOT NULL
+        AND snapshot.source_snapshot_digest IS DISTINCT FROM snapshot.source_digest
+      ) OR (
+        (snapshot.group_status IS DISTINCT FROM 'active'
+          OR snapshot.preferred_job_id IS NULL)
+        AND snapshot.job_version IS NOT NULL
+      ))
+    AND NOT EXISTS (
+      SELECT 1
+      FROM public.projection_reconciliation_tasks AS pending
+      WHERE pending.task_kind = 'job.document.project'
+        AND pending.entity_id = snapshot.canonical_group_id::text
+        AND pending.source_digest = snapshot.source_digest
+        AND pending.status IN ('queued', 'running', 'retryable')
+    )
+    ORDER BY snapshot.canonical_group_id
     LIMIT p_limit
   )
   INSERT INTO public.projection_reconciliation_tasks (
-    task_kind, entity_id, entity_version, idempotency_key
+    task_kind, entity_id, entity_version, idempotency_key, source_digest
   )
   SELECT 'job.document.project', candidate.canonical_group_id::text,
     candidate.entity_version,
-    'job-reconcile:' || candidate.canonical_group_id::text || ':' || candidate.entity_version::text
+    'job-source:' || candidate.canonical_group_id::text || ':'
+      || candidate.entity_version::text || ':' || candidate.source_digest,
+    candidate.source_digest
   FROM candidates AS candidate
   ON CONFLICT (idempotency_key) DO NOTHING;
   GET DIAGNOSTICS v_inserted = ROW_COUNT;
@@ -691,6 +737,15 @@ $$;
 
 ALTER TABLE public.job_projection_task_audit ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON public.job_projection_task_audit FROM PUBLIC;
+-- PR1 granted broad table DML for schema bring-up. PR2 closes that bootstrap
+-- path: production projection mutation is RPC-only so leases, controls, stale
+-- checks, and audit writes cannot be bypassed by the projector credential.
+REVOKE INSERT, UPDATE, DELETE ON public.matching_runtime_controls,
+  public.job_search_documents,
+  public.projection_reconciliation_tasks,
+  public.job_projection_task_audit FROM hirly_matching_projector;
+REVOKE ALL ON FUNCTION worker_private.job_projection_source_digest(uuid) FROM PUBLIC;
+REVOKE ALL ON FUNCTION worker_private.enqueue_current_job_projection_task(uuid, text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION worker_private.claim_job_projection_tasks(text, integer, integer) FROM PUBLIC;
 REVOKE ALL ON FUNCTION worker_private.heartbeat_job_projection_task(uuid, uuid, bigint, text, integer) FROM PUBLIC;
 REVOKE ALL ON FUNCTION worker_private.read_job_projection_source(uuid, uuid, bigint, text) FROM PUBLIC;

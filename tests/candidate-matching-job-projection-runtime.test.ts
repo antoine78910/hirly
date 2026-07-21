@@ -32,8 +32,35 @@ describe("job projection runtime migration", () => {
       "v_existing.job_version > v_task.entity_version",
     );
     expect(migration).toContain("job_version <= p_authoritative_version");
+    expect(migration).toContain(
+      "v_task.source_digest IS DISTINCT FROM v_live_digest",
+    );
+    expect(migration).toContain(
+      "v_live_preferred_job_id IS DISTINCT FROM p_document->>'preferred_job_id'",
+    );
     expect(migration).not.toMatch(/(?:INSERT INTO|UPDATE|DELETE FROM) public\.jobs\b/);
     expect(migration).not.toMatch(/(?:INSERT INTO|UPDATE|DELETE FROM) public\.canonical_job_groups\b/);
+  });
+
+  test("revokes bootstrap DML and reconciles a complete canonical snapshot digest", () => {
+    expect(migration).toContain(
+      "REVOKE INSERT, UPDATE, DELETE ON public.matching_runtime_controls",
+    );
+    expect(migration).toContain("public.job_search_documents");
+    expect(migration).toContain("public.projection_reconciliation_tasks");
+    expect(migration).toContain("source_snapshot_digest");
+    for (const field of [
+      "preferredJobId",
+      "groupStatus",
+      "validationStatus",
+      "applyabilityTier",
+      "applyFulfillmentStatus",
+      "sourceEligible",
+      "policyEligible",
+      "data",
+    ]) {
+      expect(migration).toContain(`'${field}'`);
+    }
   });
 
   test("rolls back only PR2 additions", () => {
