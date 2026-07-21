@@ -14,3 +14,7 @@ staged inventory snapshot, create the indexes named by `queryPlanEvidence()`, ru
 `ONLINE_MATCH_EXPLAIN_SQL`, and capture API-boundary p95/p99 plus inventory DB CPU,
 buffer, lock, and saturation metrics at peak×2. The matcher remains an oracle only;
 it does not write jobs, projections, actions, matches, or task state.
+
+This harness also does not establish Paris supply readiness. `PR0-S` remains a
+separate inventory-coverage gate over real fresh canonical supply; synthetic
+matching success cannot satisfy or bypass it.

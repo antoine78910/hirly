@@ -1,6 +1,6 @@
 # Candidate Projection Writer Ledger (PR0)
 
-Status: **characterized; producer activation blocked**  
+Status: **characterized; producer activation blocked**
 Classification: `PY_FIX` compatibility bridge for existing Python writers; future relay/consumer is `TS_NEW`.
 
 This ledger inventories the current authoritative primary-database writers that
@@ -105,4 +105,3 @@ until a separately characterized owner migration occurs.
   green against the writer-inventory regression test.
 - Producer activation is blocked until the trigger/RPC integration tests and
   duplicate/out-of-order consumer tests exist.
-
