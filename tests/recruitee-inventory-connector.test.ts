@@ -111,6 +111,37 @@ describe("Recruitee inventory connector", () => {
     }
   });
 
+  test("normalizes strict offsetless timestamps in the public offers response before offer validation", async () => {
+    const response = JSON.parse(
+      await readFile(
+        new URL("./fixtures/g011/recruitee-public-offers-offsetless.json", import.meta.url),
+        "utf8",
+      ),
+    );
+    const transport = createRecruiteeTrialTransport({
+      approvedTenantId: "vaulttec",
+      fetch: async () => new Response(JSON.stringify(response), { status: 200 }),
+    });
+
+    await expect(transport.fetch(new AbortController().signal)).resolves.toEqual([
+      expect.objectContaining({
+        published_at: "2026-07-21T10:11:12.123456Z",
+        created_at: "2026-07-20T09:08:07Z",
+      }),
+    ]);
+
+    const malformed = createRecruiteeTrialTransport({
+      approvedTenantId: "vaulttec",
+      fetch: async () => new Response(JSON.stringify({
+        ...response,
+        offers: [{ ...response.offers[0], published_at: "2026-07-21T10:11:12UTC" }],
+      }), { status: 200 }),
+    });
+    await expect(malformed.fetch(new AbortController().signal)).rejects.toMatchObject({
+      classification: "malformed",
+    });
+  });
+
   test("normalizes frozen fixture identity, URL, country and fulfillment parity", async () => {
     const data = await fixture();
     const rows = data.raw.map((raw) => recruiteeRawJobSchema.parse(raw));

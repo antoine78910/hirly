@@ -66,9 +66,35 @@ export const recruiteeRawJobSchema = z
 
 export type RecruiteeRawJob = z.output<typeof recruiteeRawJobSchema>;
 
-const recruiteeTrialResponseSchema = z
-  .object({ offers: z.array(recruiteeRawJobSchema) })
-  .passthrough();
+function normalizeRecruiteeTrialResponse(value: unknown): unknown {
+  if (
+    value === null ||
+    typeof value !== "object" ||
+    Array.isArray(value) ||
+    !("offers" in value) ||
+    !Array.isArray(value.offers)
+  ) {
+    return value;
+  }
+  return {
+    ...value,
+    offers: value.offers.map((offer) => {
+      if (offer === null || typeof offer !== "object" || Array.isArray(offer)) {
+        return offer;
+      }
+      return {
+        ...offer,
+        published_at: normalizeRecruiteeTimestamp(offer.published_at),
+        created_at: normalizeRecruiteeTimestamp(offer.created_at),
+      };
+    }),
+  };
+}
+
+const recruiteeTrialResponseSchema = z.preprocess(
+  normalizeRecruiteeTrialResponse,
+  z.object({ offers: z.array(recruiteeRawJobSchema) }).passthrough(),
+);
 
 // This is a fixture safety ceiling, not a claim about a vendor quota.
 const rateLimit = { requestsPerMinute: 1, concurrency: 1 } as const;
