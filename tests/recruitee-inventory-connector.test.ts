@@ -89,19 +89,21 @@ describe("Recruitee inventory connector", () => {
     );
   });
 
-  test("interprets Recruitee timezone-less offer timestamps as UTC and rejects malformed values", async () => {
+  test("normalizes Recruitee public-offers UTC timestamps and rejects malformed values", async () => {
     const data = await fixture();
     const parsed = recruiteeRawJobSchema.parse({
       ...data.raw[0],
-      published_at: "2026-07-21T10:11:12.123456",
-      created_at: "2026-07-20T09:08:07",
+      published_at: "2026-07-21 10:11:12 UTC",
+      created_at: "2026-07-20T09:08:07.123456",
     });
 
-    expect(parsed.published_at).toBe("2026-07-21T10:11:12.123456Z");
-    expect(parsed.created_at).toBe("2026-07-20T09:08:07Z");
+    expect(parsed.published_at).toBe("2026-07-21T10:11:12Z");
+    expect(parsed.created_at).toBe("2026-07-20T09:08:07.123456Z");
 
     for (const published_at of [
       "2026-07-21 10:11:12",
+      "2026-07-21 10:11:12 utc",
+      "2026-07-21 10:11:12 UTC ",
       "2026-07-21T10:11",
       "2026-07-21T10:11:12UTC",
     ]) {
@@ -111,7 +113,7 @@ describe("Recruitee inventory connector", () => {
     }
   });
 
-  test("normalizes strict offsetless timestamps in the public offers response before offer validation", async () => {
+  test("normalizes live public-offers UTC timestamps before offer validation", async () => {
     const response = JSON.parse(
       await readFile(
         new URL("./fixtures/g011/recruitee-public-offers-offsetless.json", import.meta.url),
@@ -125,7 +127,7 @@ describe("Recruitee inventory connector", () => {
 
     await expect(transport.fetch(new AbortController().signal)).resolves.toEqual([
       expect.objectContaining({
-        published_at: "2026-07-21T10:11:12.123456Z",
+        published_at: "2026-07-21T10:11:12Z",
         created_at: "2026-07-20T09:08:07Z",
       }),
     ]);

@@ -24,16 +24,22 @@ import { approveAtsInventoryShadowScope } from "../ats-inventory-readiness";
 const optionalText = z.string().trim().min(1).nullable().optional();
 const optionalUrl = z.url().nullable().optional();
 
-// Recruitee's public offers endpoint can omit an offset (for example,
-// `2026-07-21T10:11:12.123456`).  Treat only this exact ISO wall-clock form
-// as UTC before applying the usual explicit-offset validation.  All other
-// timestamp shapes still fail closed at the provider boundary.
+// Recruitee's public offers endpoint emits UTC timestamps as
+// `YYYY-MM-DD HH:mm:ss UTC`, and older captures omit the offset in ISO
+// wall-clock form. Treat only those exact wire forms as UTC before applying
+// the usual explicit-offset validation. All other timestamp shapes still fail
+// closed at the provider boundary.
 function normalizeRecruiteeTimestamp(value: unknown): unknown {
-  if (
-    typeof value === "string" &&
-    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?$/.test(value)
-  ) {
-    return `${value}Z`;
+  if (typeof value === "string") {
+    const recruiteeUtc = /^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2}) UTC$/.exec(
+      value,
+    );
+    if (recruiteeUtc) {
+      return `${recruiteeUtc[1]}T${recruiteeUtc[2]}Z`;
+    }
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?$/.test(value)) {
+      return `${value}Z`;
+    }
   }
   return value;
 }
