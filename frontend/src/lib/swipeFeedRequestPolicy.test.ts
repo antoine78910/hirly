@@ -117,4 +117,10 @@ describe("Swipe Feed v2 request policy", () => {
     expect(resolveSwipeFeedSuggestions({ filters: { searchRadius: "worldwide" } }).map(({ id }) => id))
       .toEqual(["preferences", "revisit_later"]);
   });
+
+  it("recognizes populated array filters as broadenable", () => {
+    expect(resolveSwipeFeedSuggestions({
+      filters: { jobTypes: ["full_time"] },
+    }).map(({ id }) => id)).toEqual(["preferences", "filters"]);
+  });
 });

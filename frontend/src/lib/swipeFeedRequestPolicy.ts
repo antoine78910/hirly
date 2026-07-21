@@ -118,7 +118,10 @@ export function resolveSwipeFeedSuggestions(input: {
   const hasBroadenableFilter = Boolean(
     Number(filters.minSalary || 0) > 0
     || (filters.postedDate && filters.postedDate !== "any")
-    || arrays.some((key) => Array.isArray(filters[key]) && filters[key].length)
+    || arrays.some((key) => {
+      const value = filters[key];
+      return Array.isArray(value) && value.length > 0;
+    })
     || filters.includeUnknownLocation === false
     || filters.includeUnknownSalary === false
     || filters.onlyMyCountry === true,
