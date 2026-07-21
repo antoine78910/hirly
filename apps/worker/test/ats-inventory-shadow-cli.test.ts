@@ -58,71 +58,47 @@ describe("ATS inventory shadow CLI", () => {
     ])).toThrow("exact provider, tenant, country FR");
   });
 
-  test("writes an immutable, read-only run artifact through the approved transport", async () => {
+  test("fails closed before Greenhouse public transport can claim a complete snapshot", async () => {
     const root = await mkdtemp(join(tmpdir(), "ats-shadow-cli-"));
     try {
       await writeFile(join(root, "policy.json"), JSON.stringify(policy()));
       let calls = 0;
       const output = join(root, "runs", "first.json");
-      const artifact = await runAtsInventoryShadowCli(runCommand(root, output), {
+      await expect(runAtsInventoryShadowCli(runCommand(root, output), {
         now: () => now,
         makeRunId: () => "run-one",
-        fetch: async (url, init) => {
+        fetch: async () => {
           calls += 1;
-          expect(url).toBe("https://boards-api.greenhouse.io/v1/boards/vaulttec/jobs?content=true");
-          expect(init).toMatchObject({ method: "GET", credentials: "omit", redirect: "error" });
           return greenhouseResponse("1");
         },
-      });
-      expect(calls).toBe(1);
-      expect(artifact).toMatchObject({
-        schemaVersion: "job-supply-shadow-run.v1",
-        runId: "run-one",
-        provider: "greenhouse",
-        tenantId: "vaulttec",
-        countryCode: "FR",
-        complete: true,
-        canonicalWritesEnabled: false,
-        jobs: [{ externalId: "vaulttec:1" }],
-      });
-      await expect(runAtsInventoryShadowCli(runCommand(root, output), { now: () => now, fetch: async () => greenhouseResponse("1") }))
-        .rejects.toThrow();
-      expect(JSON.parse(await readFile(output, "utf8"))).toEqual(artifact);
+      })).rejects.toThrow("greenhouse public transport cannot prove complete snapshots");
+      expect(calls).toBe(0);
+      await expect(readFile(output, "utf8")).rejects.toThrow();
     } finally {
       await rm(root, { recursive: true, force: true });
     }
   });
 
-  test("seals exactly two run artifacts with verifier-compatible relative SHA-256 descriptors", async () => {
+  test("refuses to seal Greenhouse artifacts that merely assert completeness", async () => {
     const root = await mkdtemp(join(tmpdir(), "ats-shadow-cli-"));
     try {
-      await writeFile(join(root, "policy.json"), JSON.stringify(policy()));
       const firstPath = join(root, "runs", "first.json");
       const secondPath = join(root, "runs", "second.json");
-      await runAtsInventoryShadowCli(runCommand(root, firstPath), {
-        now: () => now, makeRunId: () => "run-one", fetch: async () => greenhouseResponse("1"),
+      const run = (runId: string, capturedAt: string) => ({
+        schemaVersion: "job-supply-shadow-run.v1", runId, provider: "greenhouse",
+        tenantId: "vaulttec", countryCode: "FR", policyDigest: "a".repeat(64),
+        complete: true, canonicalWritesEnabled: false, capturedAt,
+        jobs: [{ externalId: "vaulttec:1", fingerprint: "b".repeat(64) }],
       });
-      await runAtsInventoryShadowCli(runCommand(root, secondPath), {
-        now: () => new Date("2026-07-22T00:00:00.000Z"), makeRunId: () => "run-two", fetch: async () => greenhouseResponse("2"),
-      });
+      await Bun.write(firstPath, JSON.stringify(run("run-one", "2026-07-21T00:00:00.000Z")));
+      await Bun.write(secondPath, JSON.stringify(run("run-two", "2026-07-22T00:00:00.000Z")));
       const scorecardPath = join(root, "scorecards", "sealed.json");
       const command = parseAtsInventoryShadowArgs([
         "seal", "--run", firstPath, "--run", secondPath, "--output", scorecardPath, "--evidence-root", root,
       ]);
-      const scorecard = await runAtsInventoryShadowCli(command);
-      if (!("runs" in scorecard)) throw new Error("seal must return a scorecard");
-      expect(scorecard).toMatchObject({
-        schemaVersion: 1,
-        verdict: "complete_shadow_ready",
-        canonicalWritesEnabled: false,
-        runIds: ["run-one", "run-two"],
-        runs: [{ path: "runs/first.json" }, { path: "runs/second.json" }],
-      });
-      for (const descriptor of scorecard.runs) {
-        const bytes = await readFile(join(root, descriptor.path));
-        expect(descriptor.sha256).toBe(createHash("sha256").update(bytes).digest("hex"));
-      }
-      await expect(runAtsInventoryShadowCli(command)).rejects.toThrow();
+      await expect(runAtsInventoryShadowCli(command))
+        .rejects.toThrow("greenhouse public transport cannot prove complete snapshots");
+      await expect(readFile(scorecardPath, "utf8")).rejects.toThrow();
     } finally {
       await rm(root, { recursive: true, force: true });
     }

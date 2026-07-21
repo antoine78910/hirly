@@ -187,6 +187,26 @@ describe("ATS inventory production shadow readiness", () => {
     for (const runs of invalidSets) expect(() => buildAtsRepeatedShadowScorecard(runs)).toThrow(AtsShadowRefusal);
   });
 
+  test("fails closed when Greenhouse or Recruitee claim complete snapshots", () => {
+    for (const provider of ["greenhouse", "recruitee"] as const) {
+      const digest = approve(provider).policyDigest;
+      const base = {
+        capturedAt: "2026-07-21T00:00:00.000+00:00",
+        provider,
+        tenantId: "vaulttec",
+        countryCode: "FR",
+        policyDigest: digest,
+        complete: true,
+        requestCount: 1,
+        jobs: [{ externalId: "1", fingerprint: "a" }],
+      };
+      expect(() => buildAtsRepeatedShadowScorecard([
+        { ...base, runId: "a" },
+        { ...base, runId: "b", capturedAt: "2026-07-22T00:00:00.000+00:00" },
+      ])).toThrow(`${provider} public transport cannot prove complete snapshots`);
+    }
+  });
+
   test("complete empty snapshots can report removals without expiry mutation", () => {
     const digest = approve("greenhouse").policyDigest;
     const scorecard = buildAtsRepeatedShadowScorecard([
