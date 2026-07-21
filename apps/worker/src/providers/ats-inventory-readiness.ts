@@ -27,7 +27,10 @@ export type ProductionShadowProvider = z.output<
   typeof productionShadowProviderSchema
 >;
 
-const completeSnapshotProviders = new Set<ProductionShadowProvider>(["nicoka"]);
+const completeSnapshotProviders = new Set<ProductionShadowProvider>([
+  "greenhouse",
+  "nicoka",
+]);
 
 export function assertCompleteShadowSnapshotProven(
   provider: ProductionShadowProvider,

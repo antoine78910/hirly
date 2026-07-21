@@ -39,7 +39,7 @@ describe("G019 Greenhouse shadow migration", () => {
         expect(init.method).toBe("GET");
         expect(init.credentials).toBe("omit");
         expect(init.redirect).toBe("error");
-        return Response.json({ jobs: [] });
+        return Response.json({ jobs: [], meta: { total: 0 } });
       },
     });
     expect(await transport.fetch(new AbortController().signal)).toEqual([]);
@@ -49,6 +49,27 @@ describe("G019 Greenhouse shadow migration", () => {
       liveTransportReady: false,
       canonicalWriteReady: false,
       credentialsAccepted: false,
+    });
+  });
+
+  test("rejects a response whose documented total is not a complete snapshot", async () => {
+    const transport = createGreenhouseShadowTransport({
+      approvedTenantId: "vaulttec",
+      fetch: async () => Response.json({
+        jobs: [{
+          id: "127817",
+          title: "Incomplete snapshot",
+          location: { name: "Paris, France" },
+          absolute_url: "https://boards.greenhouse.io/vaulttec/jobs/127817",
+          content: "Read-only shadow fixture",
+        }],
+        meta: { total: 2 },
+      }),
+    });
+
+    await expect(transport.fetch(new AbortController().signal)).rejects.toMatchObject({
+      classification: "malformed",
+      message: "Greenhouse shadow response total did not reconcile",
     });
   });
 
