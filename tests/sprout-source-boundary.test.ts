@@ -215,3 +215,28 @@ describe("Sprout source persistence boundary", () => {
     expect(canaryRollback).toContain("DROP COLUMN canary_enabled");
   });
 });
+
+const timestampOrderingMigration = readFileSync(
+  new URL(
+    "../backend/db/migrations/20260721002900_sprout_source_attempt_timestamp.sql",
+    import.meta.url,
+  ),
+  "utf8",
+);
+
+describe("Sprout source commit timestamps", () => {
+  test("uses one commit timestamp for ordered attempt and success fields", () => {
+    expect(timestampOrderingMigration).toContain(
+      "v_source_commit_at := clock_timestamp();",
+    );
+    expect(timestampOrderingMigration).toContain(
+      "last_attempt_at = v_source_commit_at",
+    );
+    expect(timestampOrderingMigration).toContain(
+      "last_success_at = v_source_commit_at",
+    );
+    expect(timestampOrderingMigration).not.toContain(
+      "last_success_at = clock_timestamp()",
+    );
+  });
+});
