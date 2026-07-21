@@ -1,6 +1,10 @@
 -- TS_MIGRATION: retain observed ATS evidence without expanding the fulfilment-safe catalogue.
 BEGIN;
 
+-- This is an atomic, migration-owned metadata repair. Normal provider writes
+-- remain guarded by worker_private.write_jobs_and_complete.
+ALTER TABLE public.jobs DISABLE TRIGGER jobs_claimed_provider_write_guard;
+
 WITH classified AS (
   SELECT
     job_id,
@@ -55,5 +59,7 @@ SET
   )
 FROM evidence
 WHERE job.job_id = evidence.job_id;
+
+ALTER TABLE public.jobs ENABLE TRIGGER jobs_claimed_provider_write_guard;
 
 COMMIT;
