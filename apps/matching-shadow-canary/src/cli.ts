@@ -5,14 +5,14 @@ import { executeFrozenShadowCanary, type FrozenShadowCanaryInput, type InjectedB
 const fixturePath = resolve(import.meta.dir, "../test/fixtures/paris-fullstack-shadow.json");
 const defaultOutputPath = resolve(import.meta.dir, "../../../artifacts/candidate-matching/g008-shadow-canary.json");
 
-function argument(name: string): string | undefined {
+function argument(args: readonly string[], name: string): string | undefined {
   const prefix = `--${name}=`;
-  return process.argv.find((value) => value.startsWith(prefix))?.slice(prefix.length);
+  return args.find((value) => value.startsWith(prefix))?.slice(prefix.length);
 }
 
 export async function runShadowCanaryCli(args = process.argv.slice(2)): Promise<void> {
   const execute = args.includes("--execute-frozen");
-  const injectedBreach = (argument("inject-breach") ?? "none") as InjectedBreach;
+  const injectedBreach = (argument(args, "inject-breach") ?? "none") as InjectedBreach;
   if (!["none", "parity", "latency", "supply", "error"].includes(injectedBreach)) {
     throw new Error(`unsupported injected breach: ${injectedBreach}`);
   }
@@ -25,7 +25,7 @@ export async function runShadowCanaryCli(args = process.argv.slice(2)): Promise<
   }, { execute, injectedBreach });
   if (visibleLegacyResponses !== 1) throw new Error("shadow canary must expose exactly one legacy response");
 
-  const outputPath = resolve(argument("output") ?? defaultOutputPath);
+  const outputPath = resolve(argument(args, "output") ?? defaultOutputPath);
   await mkdir(dirname(outputPath), { recursive: true });
   await writeFile(outputPath, `${JSON.stringify(evidence, null, 2)}\n`);
   process.stdout.write(`${outputPath}\n`);

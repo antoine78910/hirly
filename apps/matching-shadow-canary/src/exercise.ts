@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { OnlineMatchResponse } from "@hirly/contracts";
+import { onlineMatchResponseSchema, type OnlineMatchResponse } from "@hirly/contracts";
 import {
   DISABLED_SHADOW_CANARY_CONTROLS,
   evaluateShadowCanary,
@@ -123,6 +123,8 @@ function assertFrozenInput(input: FrozenShadowCanaryInput): void {
     || input.thresholds.minimumFreshVisibleCanonicalGroups < 0) {
     throw new Error("minimumFreshVisibleCanonicalGroups must be a non-negative integer");
   }
+  onlineMatchResponseSchema.parse(input.legacy);
+  onlineMatchResponseSchema.parse(input.onlineV2);
 }
 
 function applyBreach(input: FrozenShadowCanaryInput, breach: InjectedBreach) {
@@ -157,6 +159,14 @@ export function executeFrozenShadowCanary(
     queryPlan: input.queryPlan,
   };
   const base = evaluateShadowCanary(controls, input.context, observation, injected.supplyGates, new Date(input.observedAt));
+  const baseline = evaluateShadowCanary(controls, input.context, {
+    legacy: input.legacy,
+    onlineV2: input.onlineV2,
+    onlineV2Domain: input.onlineV2Domain,
+    legacyLatencyMs: input.legacyLatencyMs,
+    onlineV2LatencyMs: input.onlineV2LatencyMs,
+    queryPlan: input.queryPlan,
+  }, input.supplyGates, new Date(input.observedAt));
   port.exposeLegacy(input.legacy);
 
   const selector = input.controls.selectors.find((candidate) => candidate.cohort === input.context.cohort
@@ -180,7 +190,7 @@ export function executeFrozenShadowCanary(
   const firstFailed = stages.find((stage) => !stage.passed);
   const thresholdFailure = firstFailed ? `${firstFailed.stage.toUpperCase()}_THRESHOLD_BREACH` : null;
   const rollbackReason = base.rollbackReason ?? thresholdFailure ?? "OBSERVATION_ONLY";
-  const automaticRollback = base.canaryAuthorized && thresholdFailure !== null;
+  const automaticRollback = baseline.canaryAuthorized && (base.rollbackReason !== null || thresholdFailure !== null);
   const evidenceWithoutDigest = {
     schemaVersion: SHADOW_CANARY_EVIDENCE_VERSION,
     exerciseId: input.exerciseId,
@@ -207,7 +217,7 @@ export function executeFrozenShadowCanary(
     },
     decision: {
       shadowExecuted: base.shadowExecuted,
-      canaryAuthorizedBeforeThresholds: base.canaryAuthorized,
+      canaryAuthorizedBeforeThresholds: baseline.canaryAuthorized,
       canaryAuthorized: false as const,
       automaticRollback,
       rollbackReason,
