@@ -47,6 +47,7 @@ export interface FeedReadSnapshot {
   snapshotVersion: string;
   profileVersion: string;
   actionWatermark: string;
+  queryFingerprint: string;
   profileReady: boolean;
   inventoryState: InventoryState;
   candidates: readonly FeedCandidate[];
@@ -56,6 +57,7 @@ export interface FeedReadSnapshot {
 export interface FeedReadRepository {
   readIndexedCandidates(input: {
     candidateId: string;
+    effectiveQuery: FeedEffectiveQuery | null;
     limit: number;
     after: FeedCursorPosition | null;
   }): Promise<FeedReadSnapshot>;
@@ -95,6 +97,7 @@ export interface FeedReadResponse {
     snapshotVersion: string;
     profileVersion: string;
     actionWatermark: string;
+    queryFingerprint: string;
   };
   summary: FeedSummary;
 }
@@ -104,6 +107,7 @@ interface CursorEnvelope {
   snapshotVersion: string;
   profileVersion: string;
   actionWatermark: string;
+  queryFingerprint: string;
   after: FeedCursorPosition;
 }
 
@@ -135,6 +139,7 @@ function decodeCursor(value: string): CursorEnvelope {
       typeof parsed.snapshotVersion !== "string" ||
       typeof parsed.profileVersion !== "string" ||
       typeof parsed.actionWatermark !== "string" ||
+      typeof parsed.queryFingerprint !== "string" ||
       !parsed.after ||
       typeof parsed.after.relevanceScore !== "number" ||
       typeof parsed.after.canonicalGroupId !== "string"
@@ -184,8 +189,14 @@ export class FeedV2ReadService {
 
     const limit = Math.max(1, Math.min(request.limit ?? 12, 100));
     const cursor = request.cursor ? decodeCursor(request.cursor) : null;
+    const queryFingerprint =
+      request.assertion.effectiveQuery?.fingerprint ?? "candidate-profile";
+    if (cursor && cursor.queryFingerprint !== queryFingerprint) {
+      throw new FeedCursorError("stale_cursor");
+    }
     const snapshot = await this.repository.readIndexedCandidates({
       candidateId: request.assertion.candidateId,
+      effectiveQuery: request.assertion.effectiveQuery ?? null,
       limit: Math.max(limit, Math.min(this.options.coarseLimit ?? 1_000, 1_000)),
       after: cursor?.after ?? null,
     });
@@ -194,7 +205,9 @@ export class FeedV2ReadService {
       cursor &&
       (cursor.snapshotVersion !== snapshot.snapshotVersion ||
         cursor.profileVersion !== snapshot.profileVersion ||
-        cursor.actionWatermark !== snapshot.actionWatermark)
+        cursor.actionWatermark !== snapshot.actionWatermark ||
+        cursor.queryFingerprint !== snapshot.queryFingerprint ||
+        snapshot.queryFingerprint !== queryFingerprint)
     ) {
       throw new FeedCursorError("stale_cursor");
     }
@@ -269,6 +282,7 @@ export class FeedV2ReadService {
             snapshotVersion: snapshot.snapshotVersion,
             profileVersion: snapshot.profileVersion,
             actionWatermark: snapshot.actionWatermark,
+            queryFingerprint: snapshot.queryFingerprint,
             after: {
               relevanceScore: lastScanned.relevanceScore,
               canonicalGroupId: lastScanned.canonicalGroupId,
@@ -286,6 +300,7 @@ export class FeedV2ReadService {
         snapshotVersion: snapshot.snapshotVersion,
         profileVersion: snapshot.profileVersion,
         actionWatermark: snapshot.actionWatermark,
+        queryFingerprint: snapshot.queryFingerprint,
       },
       summary,
     };
