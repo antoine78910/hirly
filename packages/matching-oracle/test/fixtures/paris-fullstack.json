@@ -1,0 +1,80 @@
+{
+  "profile": {
+    "candidateId": "candidate-paris",
+    "version": 1,
+    "roleFamilyIds": ["software-engineering"],
+    "skillIds": ["typescript", "react", "node"],
+    "countryCodes": ["FR"],
+    "contractTypes": ["permanent"],
+    "workModes": ["hybrid", "remote"],
+    "salaryFloor": 50000,
+    "freshnessWindowDays": 30
+  },
+  "jobs": [
+    {
+      "canonicalGroupId": "group-best",
+      "preferredJobId": "job-best",
+      "jobVersion": "v1",
+      "active": true,
+      "validationStatus": "valid",
+      "roleFamilyIds": ["software-engineering"],
+      "skillIds": ["typescript", "react", "node"],
+      "countryCode": "FR",
+      "contractType": "permanent",
+      "workMode": "hybrid",
+      "salaryFloor": 65000,
+      "publishedAt": "2026-07-20T00:00:00Z",
+      "expiresAt": "2026-08-20T00:00:00Z",
+      "fulfillmentRoute": "manual",
+      "qualityScore": 90
+    },
+    {
+      "canonicalGroupId": "group-actioned",
+      "preferredJobId": "job-actioned",
+      "jobVersion": "v1",
+      "active": true,
+      "validationStatus": "valid",
+      "roleFamilyIds": ["software-engineering"],
+      "skillIds": ["typescript", "node"],
+      "countryCode": "FR",
+      "contractType": "permanent",
+      "workMode": "remote",
+      "salaryFloor": 60000,
+      "publishedAt": "2026-07-19T00:00:00Z",
+      "fulfillmentRoute": "auto",
+      "qualityScore": 80
+    },
+    {
+      "canonicalGroupId": "group-expired",
+      "preferredJobId": "job-expired",
+      "jobVersion": "v1",
+      "active": true,
+      "validationStatus": "valid",
+      "roleFamilyIds": ["software-engineering"],
+      "skillIds": ["typescript"],
+      "countryCode": "FR",
+      "contractType": "permanent",
+      "workMode": "remote",
+      "publishedAt": "2026-06-01T00:00:00Z",
+      "expiresAt": "2026-07-01T00:00:00Z",
+      "fulfillmentRoute": "auto",
+      "qualityScore": 60
+    },
+    {
+      "canonicalGroupId": "group-wrong-country",
+      "preferredJobId": "job-wrong-country",
+      "jobVersion": "v1",
+      "active": true,
+      "validationStatus": "valid",
+      "roleFamilyIds": ["software-engineering"],
+      "skillIds": ["typescript", "react"],
+      "countryCode": "US",
+      "contractType": "permanent",
+      "workMode": "remote",
+      "publishedAt": "2026-07-20T00:00:00Z",
+      "fulfillmentRoute": "auto",
+      "qualityScore": 90
+    }
+  ],
+  "actions": [{ "canonicalGroupId": "group-actioned", "kind": "applied" }]
+}

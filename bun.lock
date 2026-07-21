@@ -89,6 +89,14 @@
         "typescript": "5.9.3",
       },
     },
+    "packages/matching-oracle": {
+      "name": "@hirly/matching-oracle",
+      "version": "0.1.0",
+      "devDependencies": {
+        "@types/bun": "1.3.14",
+        "typescript": "5.9.3",
+      },
+    },
     "packages/observability": {
       "name": "@hirly/observability",
       "version": "0.1.0",
@@ -112,6 +120,8 @@
     "@hirly/ingestion": ["@hirly/ingestion@workspace:packages/ingestion"],
 
     "@hirly/job-ingestion-audit": ["@hirly/job-ingestion-audit@workspace:apps/job-ingestion-audit"],
+
+    "@hirly/matching-oracle": ["@hirly/matching-oracle@workspace:packages/matching-oracle"],
 
     "@hirly/observability": ["@hirly/observability@workspace:packages/observability"],
 
