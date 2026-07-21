@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { readFile } from "node:fs/promises";
 import fixture from "./fixtures/paris-fullstack-shadow.json";
 import {
   SHADOW_CANARY_EVIDENCE_VERSION,
@@ -20,6 +21,17 @@ function run(execute: boolean, injectedBreach: InjectedBreach = "none") {
 }
 
 describe("G008 frozen shadow-canary exercise", () => {
+  test("has no database, network, canonical writer, provider writer, or task-enqueue dependency", async () => {
+    const packageJson = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8")) as {
+      dependencies: Record<string, string>;
+    };
+    const exerciseSource = await readFile(new URL("../src/exercise.ts", import.meta.url), "utf8");
+    expect(Object.keys(packageJson.dependencies).sort()).toEqual(["@hirly/contracts", "@hirly/matching-oracle"]);
+    expect(exerciseSource).not.toMatch(/from ["'](?:postgres|pg|@hirly\/db|@hirly\/worker)/);
+    expect(exerciseSource).not.toMatch(/\b(?:fetch|Bun\.serve)\s*\(/);
+    expect(exerciseSource).not.toMatch(/\b(?:INSERT|UPDATE|DELETE|MERGE)\b/);
+  });
+
   test("keeps rollout disabled by default and exposes exactly one legacy response", () => {
     const { evidence, exposed } = run(false);
     expect(evidence.schemaVersion).toBe(SHADOW_CANARY_EVIDENCE_VERSION);
