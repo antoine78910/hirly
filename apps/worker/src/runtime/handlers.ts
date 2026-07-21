@@ -430,8 +430,12 @@ export function createTaskHandlers(
                     groupsCreated: result.groupsCreated,
                     listingCounts: {
                       fetched: commit.entries.length,
-                      added: result.canonicalUpserts,
-                      ignored: Math.max(0, commit.entries.length - result.canonicalUpserts),
+                      // A canonical upsert may refresh an existing listing.
+                      // Keep the operational "added" counter aligned with
+                      // page_complete: only newly-created canonical groups
+                      // represent new inventory.
+                      added: result.groupsCreated,
+                      ignored: Math.max(0, commit.entries.length - result.groupsCreated),
                       errors: 0,
                     },
                   },
