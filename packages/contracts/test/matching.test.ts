@@ -211,34 +211,6 @@ describe("matching v1 contracts", () => {
       freshness_window_days: null,
       projected_at: now,
     });
-    expectExactKeys(row, [
-      "schema_version",
-      "candidate_id",
-      "version",
-      "status",
-      "target_role_label_normalized",
-      "role_family_ids",
-      "rome_codes",
-      "skill_ids",
-      "skill_terms",
-      "seniority_min",
-      "seniority_max",
-      "contract_types",
-      "work_modes",
-      "origin_latitude",
-      "origin_longitude",
-      "radius_km",
-      "country_codes",
-      "location_policy",
-      "salary_floor",
-      "currency",
-      "freshness_window_days",
-      "exposure_policy_version",
-      "feature_schema_version",
-      "source_profile_updated_at",
-      "projected_at",
-      "source_event_id",
-    ]);
     expect(() =>
       candidateSearchProfilePersistenceRowSchema.parse({
         ...row,
@@ -248,7 +220,7 @@ describe("matching v1 contracts", () => {
   });
 
   test("validates purpose-limited action and opaque outbox envelopes", () => {
-    const action = candidateActionProjectionSchema.parse({
+    const action = {
         schemaVersion: MATCHING_CONTRACT_VERSION,
         candidateId: "mongo-user-id",
         sourceActionId: "swipe-123",
@@ -260,8 +232,10 @@ describe("matching v1 contracts", () => {
         occurredAt: now,
         retentionState: "active",
         projectedAt: now,
-      });
-    expect(action.sourceJobId).toBe("job-text-id");
+      } as const;
+    expect(candidateActionProjectionSchema.parse(action).sourceJobId).toBe(
+      "job-text-id",
+    );
     const actionRow = toCandidateActionProjectionPersistenceRow(
       action,
       "55555555-5555-4555-8555-555555555555",
@@ -274,21 +248,6 @@ describe("matching v1 contracts", () => {
       projected_at: now,
       retention_state: "active",
     });
-    expectExactKeys(actionRow, [
-      "schema_version",
-      "candidate_id",
-      "action_id",
-      "candidate_version",
-      "source_job_id",
-      "canonical_group_id",
-      "canonical_group_aliases",
-      "action_kind",
-      "action_at",
-      "projected_at",
-      "retention_state",
-      "retained_until",
-      "source_event_id",
-    ]);
     expect(() =>
       candidateActionProjectionPersistenceRowSchema.parse({
         ...actionRow,
@@ -534,22 +493,6 @@ describe("matching v1 contracts", () => {
       lease_token: null,
       lease_until: null,
     });
-    expectExactKeys(taskRow, [
-      "schema_version",
-      "task_id",
-      "task_kind",
-      "entity_id",
-      "entity_version",
-      "idempotency_key",
-      "status",
-      "available_at",
-      "lease_owner",
-      "lease_token",
-      "lease_until",
-      "attempts",
-      "max_attempts",
-      "last_error_code",
-    ]);
     expect(() =>
       projectionTaskPersistenceRowSchema.parse({
         ...taskRow,

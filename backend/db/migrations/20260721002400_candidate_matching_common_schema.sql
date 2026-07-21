@@ -217,7 +217,7 @@ CREATE TABLE public.job_search_documents (
   feature_schema_version text NOT NULL CHECK (length(btrim(feature_schema_version)) > 0),
   search_text text NOT NULL,
   search_vector tsvector GENERATED ALWAYS AS (to_tsvector('simple', search_text)) STORED,
-  source_updated_at timestamptz NOT NULL,
+  projected_at timestamptz NOT NULL,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   CONSTRAINT job_search_documents_salary_guard CHECK (
