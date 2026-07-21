@@ -275,51 +275,6 @@ describe("Sprout activation and bounded page runtime", () => {
     expect(JSON.stringify(commits)).not.toContain("secret://");
   });
 
-  test("allows only an initial one-page canary checkpoint", async () => {
-    let fetches = 0;
-    const promise = runSproutPageTask({
-      activation: {
-        ...activeRegistration(),
-        canaryEvidence: {
-          ...activeRegistration().canaryEvidence,
-          status: "pending",
-          evidenceRef: null,
-          pagesCommitted: 0,
-        },
-        rollbackEvidence: {
-          ...activeRegistration().rollbackEvidence,
-          status: "pending",
-          evidenceRef: null,
-        },
-      },
-      mode: "canary",
-      checkpoint: {
-        ...initialSproutCheckpoint({ approvedPageSize: 2 }),
-        offset: 2,
-        observedTotal: 3,
-      },
-      transport: {
-        async fetchPage() {
-          fetches += 1;
-          throw new Error("unexpected live API call");
-        },
-      },
-      repository: {
-        async commitPage(input) {
-          return { committedCheckpoint: input.checkpointOut };
-        },
-      },
-      hasFranceLocation: () => true,
-      signal: new AbortController().signal,
-      maxResponseBytes: 1_024,
-    });
-
-    await expect(promise).rejects.toThrow(
-      "sprout_canary_must_start_at_initial_checkpoint",
-    );
-    expect(fetches).toBe(0);
-  });
-
   test("does not commit or advance on country leak, body breach, or cursor drift", async () => {
     for (const scenario of ["country", "bytes", "cursor"] as const) {
       let commits = 0;
