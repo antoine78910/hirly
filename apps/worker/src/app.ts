@@ -66,6 +66,7 @@ export async function startApplication(
         config.JOB_PROJECTION_RECONCILIATION_BATCH_SIZE,
     },
     undefined,
+    undefined,
     logger,
   );
   const scheduler = new Scheduler(store, logger, {

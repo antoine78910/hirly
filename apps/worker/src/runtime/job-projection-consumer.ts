@@ -62,11 +62,23 @@ export class JobProjectionConsumer {
     private readonly store: JobProjectionStore,
     private readonly options: JobProjectionConsumerOptions,
     private readonly project: Project = projectJobSearchDocument,
-    private readonly logger?: Logger,
     private readonly now: () => Date = () => new Date(),
+    private readonly logger?: Logger,
   ) {}
 
   start(): void {
+    this.logger?.emit({
+      service: "hirly-worker",
+      version: "0.1.0",
+      environment: process.env.NODE_ENV ?? "unknown",
+      event: "job_projection.startup",
+      severity: "info",
+      details: {
+        enabled: this.options.enabled,
+        concurrency: this.options.concurrency,
+        batchSize: this.options.batchSize,
+      },
+    });
     if (!this.options.enabled || this.runPromise) return;
     this.runPromise = this.run();
   }
