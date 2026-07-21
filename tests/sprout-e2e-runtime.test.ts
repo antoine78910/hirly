@@ -3,6 +3,7 @@ import fixture from "./fixtures/sprout/france-page.sanitized.json";
 import { sourcePageCommitSchema } from "../packages/contracts/src/index";
 import type { RuntimeStore } from "../apps/worker/src/runtime/types";
 import { createTaskHandlers } from "../apps/worker/src/runtime/handlers";
+import { createJsonLogger } from "../packages/observability/src/index";
 import {
   SproutHttpTransport,
   buildSproutCommitEntry,
@@ -67,6 +68,54 @@ describe("Sprout authenticated transport", () => {
     const headers = new Headers(calls[0]?.init.headers);
     expect(headers.get("authorization")).toBe("Bearer fixture-access-token");
     expect(headers.get("x-refresh-token")).toBe("fixture-refresh-token");
+  });
+
+  test("reports allowlisted response and retry/backoff telemetry", async () => {
+    const operations: unknown[] = [];
+    const sleeps: number[] = [];
+    let requests = 0;
+    const transport = new SproutHttpTransport({
+      endpoint: "https://api.sprout.invalid/jobs",
+      allowedOrigins: ["https://api.sprout.invalid"],
+      maxResponseBytes: 1_000_000,
+      secrets: {
+        async resolve() {
+          return { accessToken: "private-access", refreshToken: "private-refresh" };
+        },
+      },
+      fetch: (async () => {
+        requests += 1;
+        return requests === 1
+          ? new Response(null, { status: 429, headers: { "retry-after": "0" } })
+          : Response.json(fixture);
+      }) as typeof fetch,
+      sleep: async (milliseconds) => { sleeps.push(milliseconds); },
+      onOperation(operation) { operations.push(operation); },
+    });
+
+    await transport.fetchPage(
+      { countryCode: "FR", offset: 0, pageSize: 2, credentialRef: "secret://sprout/france-api" },
+      new AbortController().signal,
+    );
+
+    expect(sleeps).toEqual([0]);
+    expect(operations).toHaveLength(2);
+    expect(operations[0]).toMatchObject({
+      type: "retry_backoff",
+      attempt: 1,
+      nextAttempt: 2,
+      status: 429,
+      classification: "rate_limited",
+      backoffMs: 0,
+    });
+    expect(operations[1]).toMatchObject({
+      type: "fetch_response",
+      attempt: 2,
+      status: 200,
+      itemCount: 2,
+    });
+    expect(JSON.stringify(operations)).not.toContain("private-access");
+    expect(JSON.stringify(operations)).not.toContain("private-refresh");
   });
 
   test("fails closed before fetch when either runtime credential is unavailable", async () => {
@@ -216,6 +265,7 @@ describe("Sprout source commit pipeline", () => {
 
   test("runs one initial canary page through the production task handler", async () => {
     const commits: unknown[] = [];
+    const logLines: string[] = [];
     let released = 0;
     const store = {
       async assertProviderRunnable() {},
@@ -275,7 +325,11 @@ describe("Sprout source commit pipeline", () => {
         };
       },
     } as unknown as RuntimeStore;
-    const handler = createTaskHandlers(store, undefined, undefined, {
+    const handler = createTaskHandlers(
+      store,
+      createJsonLogger((line) => logLines.push(line)),
+      undefined,
+      {
       sproutAllowedOrigins: ["https://api.sprout.invalid"],
       sproutSecretResolver: {
         async resolve() {
@@ -287,7 +341,8 @@ describe("Sprout source commit pipeline", () => {
       },
       sproutFetch: (async () => Response.json(fixture)) as typeof fetch,
       providerClaimHeartbeatMs: 10_000,
-    })["provider.fetch_page"]!;
+      },
+    )["provider.fetch_page"]!;
 
     await expect(handler(task("canary"), new AbortController().signal)).resolves.toEqual({ taskCompleted: true });
     expect(commits).toHaveLength(1);
@@ -298,5 +353,73 @@ describe("Sprout source commit pipeline", () => {
     expect(JSON.stringify(commits)).not.toContain("fixture-access-token");
     expect(JSON.stringify(commits)).not.toContain("fixture-refresh-token");
     expect(released).toBe(0);
+
+    const events = logLines.map((line) => JSON.parse(line));
+    expect(events.map((event) => event.event)).toEqual([
+      "sprout.page_start",
+      "sprout.fetch_response",
+      "sprout.page_committed",
+      "sprout.page_complete",
+    ]);
+    for (const event of events) {
+      expect(event).toMatchObject({
+        runId: task().runId,
+        taskId: task().taskId,
+        taskType: "provider.fetch_page",
+        provider: "sprout",
+      });
+    }
+    expect(events[1]).toMatchObject({
+      details: { status: 200, responseBytes: expect.any(Number), itemCount: 2 },
+    });
+    expect(events[2]).toMatchObject({
+      details: {
+        itemCount: 2,
+        checkpointInOffset: 0,
+        checkpointOutOffset: 2,
+        snapshotsInserted: 2,
+        canonicalUpserts: 2,
+      },
+    });
+    const serializedLogs = JSON.stringify(events);
+    expect(serializedLogs).not.toContain("fixture-access-token");
+    expect(serializedLogs).not.toContain("fixture-refresh-token");
+    expect(serializedLogs).not.toContain("secret://");
+    expect(serializedLogs).not.toContain("api.sprout.invalid");
+    expect(serializedLogs).not.toContain(JSON.stringify(fixture.jobs[0]));
+
+    const failedLines: string[] = [];
+    const failedHandler = createTaskHandlers(
+      store,
+      createJsonLogger((line) => failedLines.push(line)),
+      undefined,
+      {
+        sproutAllowedOrigins: ["https://api.sprout.invalid"],
+        sproutSecretResolver: {
+          async resolve() {
+            throw {
+              message: "Authorization: Basic private-auth Cookie: private-cookie",
+              refreshToken: "private-refresh",
+            };
+          },
+        },
+        sproutFetch: (async () => Response.json(fixture)) as typeof fetch,
+        providerClaimHeartbeatMs: 10_000,
+      },
+    )["provider.fetch_page"]!;
+    await expect(
+      failedHandler(task("canary"), new AbortController().signal),
+    ).rejects.toThrow("sprout_credential_unavailable");
+    const terminal = failedLines
+      .map((line) => JSON.parse(line))
+      .find((event) => event.event === "sprout.page_terminal");
+    expect(terminal).toMatchObject({
+      outcome: "failed",
+      reasonCode: "authorization_blocked",
+      details: { message: "sprout_credential_unavailable" },
+    });
+    expect(JSON.stringify(failedLines)).not.toContain("private-auth");
+    expect(JSON.stringify(failedLines)).not.toContain("private-cookie");
+    expect(JSON.stringify(failedLines)).not.toContain("private-refresh");
   });
 });

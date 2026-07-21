@@ -47,5 +47,7 @@ describe("structured observability", () => {
       outcome: "succeeded",
     });
     expect(JSON.parse(line).event).toBe("task.completed");
+    expect(JSON.parse(line).runId).toBe("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
+    expect(JSON.parse(line).taskId).toBe("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb");
   });
 });

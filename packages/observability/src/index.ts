@@ -7,6 +7,7 @@ const credentialUrl = /\b(?:postgres(?:ql)?|https?):\/\/[^/\s:@]+:[^@\s]+@/gi;
 const bearer = /\bBearer\s+[A-Za-z0-9._~+/-]+=*/gi;
 const email = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
 const phone = /(?:\+\d{1,3}[\s.-]?)?(?:\(\d{2,4}\)[\s.-]?)?\d[\d\s.-]{7,}\d/g;
+const uuid = /\b[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/gi;
 const querySecret =
   /([?&](?:access_token|api_key|apikey|authorization|password|secret|token)=)[^&#\s]*/gi;
 
@@ -54,7 +55,12 @@ export const eventSchema = z
 export type StructuredEvent = z.infer<typeof eventSchema>;
 
 function redactString(value: string): string {
-  return value.replace(credentialUrl, (match) => {
+  const uuids: string[] = [];
+  const protectedValue = value.replace(uuid, (match) => {
+    const index = uuids.push(match) - 1;
+    return `[HIRLY_UUID_${index}]`;
+  });
+  const redacted = protectedValue.replace(credentialUrl, (match) => {
     const schemeEnd = match.indexOf("://") + 3;
     return `${match.slice(0, schemeEnd)}[REDACTED]@`;
   })
@@ -62,6 +68,9 @@ function redactString(value: string): string {
     .replace(querySecret, "$1[REDACTED]")
     .replace(email, "[REDACTED_EMAIL]")
     .replace(phone, "[REDACTED_PHONE]");
+  return redacted.replace(/\[HIRLY_UUID_(\d+)\]/g, (_match, index: string) =>
+    uuids[Number(index)] ?? "[REDACTED]"
+  );
 }
 
 export function redact(value: unknown, key = ""): unknown {
