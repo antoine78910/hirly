@@ -1,0 +1,342 @@
+{
+  "schemaVersion": "hirly.analytics-registry.v1",
+  "events": [
+    {
+      "name": "landing_view",
+      "schemaVersion": 1,
+      "definition": "A visitor viewed the public landing page.",
+      "identityPolicy": "either",
+      "authoritativeSource": "frontend",
+      "semanticDeduplicationKey": null,
+      "canonicalTimeQualities": ["validated_client_occurrence"],
+      "requiredProperties": {},
+      "optionalProperties": {},
+      "legacyAliases": []
+    },
+    {
+      "name": "user_signed_up",
+      "schemaVersion": 1,
+      "definition": "A durable user account was created by the backend.",
+      "identityPolicy": "identified",
+      "authoritativeSource": "backend",
+      "semanticDeduplicationKey": "user_id",
+      "canonicalTimeQualities": ["exact_business_timestamp", "server_received_at"],
+      "requiredProperties": {},
+      "optionalProperties": {
+        "auth_source": { "type": "string", "privacy": "public" },
+        "has_gmail_provider": { "type": "boolean", "privacy": "public" }
+      },
+      "legacyAliases": ["signup_completed"]
+    },
+    {
+      "name": "user_logged_in",
+      "schemaVersion": 1,
+      "definition": "A known user completed backend authentication.",
+      "identityPolicy": "identified",
+      "authoritativeSource": "backend",
+      "semanticDeduplicationKey": null,
+      "canonicalTimeQualities": ["server_received_at"],
+      "requiredProperties": {},
+      "optionalProperties": {
+        "auth_source": { "type": "string", "privacy": "public" },
+        "has_gmail_provider": { "type": "boolean", "privacy": "public" }
+      },
+      "legacyAliases": ["login_completed"]
+    },
+    {
+      "name": "auth_ui_succeeded",
+      "schemaVersion": 1,
+      "definition": "The browser completed an authentication user-interface flow.",
+      "identityPolicy": "either",
+      "authoritativeSource": "frontend",
+      "semanticDeduplicationKey": null,
+      "canonicalTimeQualities": ["validated_client_occurrence"],
+      "requiredProperties": {},
+      "optionalProperties": {
+        "method": { "type": "string", "privacy": "public" },
+        "source": { "type": "string", "privacy": "public" }
+      },
+      "legacyAliases": ["auth_success"]
+    },
+    {
+      "name": "cv_upload_started",
+      "schemaVersion": 1,
+      "definition": "A user started a CV upload in the browser.",
+      "identityPolicy": "identified",
+      "authoritativeSource": "frontend",
+      "semanticDeduplicationKey": null,
+      "canonicalTimeQualities": ["validated_client_occurrence"],
+      "requiredProperties": {},
+      "optionalProperties": {
+        "source": { "type": "string", "privacy": "public" }
+      },
+      "legacyAliases": []
+    },
+    {
+      "name": "cv_upload_failed",
+      "schemaVersion": 1,
+      "definition": "A CV upload flow failed before a durable backend success.",
+      "identityPolicy": "identified",
+      "authoritativeSource": "frontend",
+      "semanticDeduplicationKey": null,
+      "canonicalTimeQualities": ["validated_client_occurrence"],
+      "requiredProperties": {},
+      "optionalProperties": {
+        "source": { "type": "string", "privacy": "public" }
+      },
+      "legacyAliases": []
+    },
+    {
+      "name": "cv_uploaded",
+      "schemaVersion": 1,
+      "definition": "The backend persisted a successfully processed CV.",
+      "identityPolicy": "identified",
+      "authoritativeSource": "backend",
+      "semanticDeduplicationKey": null,
+      "canonicalTimeQualities": ["server_received_at"],
+      "requiredProperties": {},
+      "optionalProperties": {
+        "file_format": { "type": "string", "privacy": "public" },
+        "has_photo": { "type": "boolean", "privacy": "public" },
+        "skills_count": { "type": "integer", "privacy": "public" },
+        "experience_count": { "type": "integer", "privacy": "public" },
+        "used_ai_fallback": { "type": "boolean", "privacy": "public" }
+      },
+      "legacyAliases": ["cv_upload_completed"]
+    },
+    {
+      "name": "job_card_viewed",
+      "schemaVersion": 1,
+      "definition": "A job card became visible to a user.",
+      "identityPolicy": "identified",
+      "authoritativeSource": "frontend",
+      "semanticDeduplicationKey": null,
+      "canonicalTimeQualities": ["validated_client_occurrence"],
+      "requiredProperties": {},
+      "optionalProperties": {
+        "job_id": { "type": "string", "privacy": "pseudonymous" },
+        "provider": { "type": "string", "privacy": "public" }
+      },
+      "legacyAliases": []
+    },
+    {
+      "name": "job_dismissed",
+      "schemaVersion": 1,
+      "definition": "The persisted swipe writer recorded a job dismissal.",
+      "identityPolicy": "identified",
+      "authoritativeSource": "backend",
+      "semanticDeduplicationKey": "user_id:job_id",
+      "canonicalTimeQualities": ["exact_business_timestamp", "server_received_at"],
+      "requiredProperties": {},
+      "optionalProperties": {
+        "job_provider": { "type": "string", "privacy": "public" },
+        "ats_provider": { "type": "string", "privacy": "public" }
+      },
+      "legacyAliases": ["job_swiped_left"]
+    },
+    {
+      "name": "job_application_created",
+      "schemaVersion": 1,
+      "definition": "The backend persisted a new canonical application.",
+      "identityPolicy": "identified",
+      "authoritativeSource": "backend",
+      "semanticDeduplicationKey": "application_id",
+      "canonicalTimeQualities": ["exact_business_timestamp", "server_received_at"],
+      "requiredProperties": {
+        "application_id": { "type": "string", "privacy": "pseudonymous" }
+      },
+      "optionalProperties": {
+        "job_provider": { "type": "string", "privacy": "public" },
+        "ats_provider": { "type": "string", "privacy": "public" },
+        "package_status": { "type": "string", "privacy": "public" }
+      },
+      "legacyAliases": ["job_swiped_right", "application_generated"]
+    },
+    {
+      "name": "application_intent_started",
+      "schemaVersion": 1,
+      "definition": "A user initiated the browser application flow.",
+      "identityPolicy": "identified",
+      "authoritativeSource": "frontend",
+      "semanticDeduplicationKey": null,
+      "canonicalTimeQualities": ["validated_client_occurrence"],
+      "requiredProperties": {},
+      "optionalProperties": {
+        "job_id": { "type": "string", "privacy": "pseudonymous" }
+      },
+      "legacyAliases": ["application_generation_started"]
+    },
+    {
+      "name": "checkout_intent_started",
+      "schemaVersion": 1,
+      "definition": "A user initiated checkout in the browser.",
+      "identityPolicy": "identified",
+      "authoritativeSource": "frontend",
+      "semanticDeduplicationKey": null,
+      "canonicalTimeQualities": ["validated_client_occurrence"],
+      "requiredProperties": {},
+      "optionalProperties": {
+        "source": { "type": "string", "privacy": "public" },
+        "plan": { "type": "string", "privacy": "public" },
+        "interval": { "type": "string", "privacy": "public" }
+      },
+      "legacyAliases": ["checkout_started"]
+    },
+    {
+      "name": "payment_succeeded",
+      "schemaVersion": 1,
+      "definition": "A Stripe webhook confirmed a successful payment.",
+      "identityPolicy": "identified",
+      "authoritativeSource": "backend",
+      "semanticDeduplicationKey": "invoice_id",
+      "canonicalTimeQualities": ["exact_business_timestamp"],
+      "requiredProperties": {
+        "invoice_id": { "type": "string", "privacy": "pseudonymous" },
+        "currency": { "type": "string", "privacy": "public" },
+        "revenue": { "type": "number", "privacy": "public" }
+      },
+      "optionalProperties": {
+        "subscription_id": { "type": "string", "privacy": "pseudonymous" },
+        "plan": { "type": "string", "privacy": "public" }
+      },
+      "legacyAliases": []
+    },
+    {
+      "name": "subscription_activated",
+      "schemaVersion": 1,
+      "definition": "The Stripe webhook recorded a user's first observed successful positive subscription payment.",
+      "identityPolicy": "identified",
+      "authoritativeSource": "backend",
+      "semanticDeduplicationKey": "user_id",
+      "canonicalTimeQualities": ["exact_business_timestamp"],
+      "requiredProperties": {
+        "invoice_id": { "type": "string", "privacy": "pseudonymous" },
+        "subscription_id": { "type": "string", "privacy": "pseudonymous" },
+        "currency": { "type": "string", "privacy": "public" },
+        "revenue": { "type": "number", "privacy": "public" }
+      },
+      "optionalProperties": {
+        "plan": { "type": "string", "privacy": "public" },
+        "billing_reason": { "type": "string", "privacy": "public" }
+      },
+      "legacyAliases": []
+    },
+    {
+      "name": "subscription_churned",
+      "schemaVersion": 1,
+      "definition": "A previously paid Stripe subscription generation lost paid entitlement.",
+      "identityPolicy": "identified",
+      "authoritativeSource": "backend",
+      "semanticDeduplicationKey": "subscription_id:generation",
+      "canonicalTimeQualities": ["exact_business_timestamp"],
+      "requiredProperties": {
+        "subscription_id": { "type": "string", "privacy": "pseudonymous" },
+        "generation": { "type": "integer", "privacy": "public", "minimum": 1 },
+        "status": { "type": "string", "privacy": "public" }
+      },
+      "optionalProperties": {
+        "reason": { "type": "string", "privacy": "public" }
+      },
+      "legacyAliases": []
+    },
+    {
+      "name": "payment_refunded",
+      "schemaVersion": 1,
+      "definition": "A Stripe webhook confirmed a successful refund.",
+      "identityPolicy": "identified",
+      "authoritativeSource": "backend",
+      "semanticDeduplicationKey": "refund_id",
+      "canonicalTimeQualities": ["exact_business_timestamp"],
+      "requiredProperties": {
+        "refund_id": { "type": "string", "privacy": "pseudonymous" },
+        "invoice_id": { "type": "string", "privacy": "pseudonymous" },
+        "currency": { "type": "string", "privacy": "public" },
+        "revenue": { "type": "number", "privacy": "public" }
+      },
+      "optionalProperties": {
+        "subscription_id": { "type": "string", "privacy": "pseudonymous" },
+        "plan": { "type": "string", "privacy": "public" }
+      },
+      "legacyAliases": []
+    },
+    {
+      "name": "account_deleted",
+      "schemaVersion": 1,
+      "definition": "The backend accepted and completed account deletion.",
+      "identityPolicy": "identified",
+      "authoritativeSource": "backend",
+      "semanticDeduplicationKey": "user_id",
+      "canonicalTimeQualities": ["server_received_at"],
+      "requiredProperties": {},
+      "optionalProperties": {},
+      "legacyAliases": []
+    },
+    {
+      "name": "onboarding_started",
+      "schemaVersion": 1,
+      "definition": "A known user started onboarding.",
+      "identityPolicy": "identified",
+      "authoritativeSource": "frontend",
+      "semanticDeduplicationKey": null,
+      "canonicalTimeQualities": ["validated_client_occurrence"],
+      "requiredProperties": {},
+      "optionalProperties": {},
+      "legacyAliases": []
+    },
+    {
+      "name": "onboarding_completed",
+      "schemaVersion": 1,
+      "definition": "A known user completed the onboarding interface.",
+      "identityPolicy": "identified",
+      "authoritativeSource": "frontend",
+      "semanticDeduplicationKey": "user_id",
+      "canonicalTimeQualities": ["validated_client_occurrence"],
+      "requiredProperties": {},
+      "optionalProperties": {},
+      "legacyAliases": []
+    },
+    {
+      "name": "ui_interaction",
+      "schemaVersion": 1,
+      "definition": "A non-conversion user-interface interaction used for product diagnostics.",
+      "identityPolicy": "either",
+      "authoritativeSource": "frontend",
+      "semanticDeduplicationKey": null,
+      "canonicalTimeQualities": ["validated_client_occurrence"],
+      "requiredProperties": {
+        "interaction": { "type": "string", "privacy": "public" }
+      },
+      "optionalProperties": {
+        "surface": { "type": "string", "privacy": "public" }
+      },
+      "legacyAliases": [
+        "action_required_answer_saved",
+        "admin_application_assigned",
+        "admin_application_email_sent",
+        "admin_application_opened",
+        "admin_status_updated",
+        "admin_view",
+        "application_action_required",
+        "application_blocked",
+        "application_defaults_updated",
+        "application_prepare_failed",
+        "application_prepared",
+        "application_submitted",
+        "cta_login_clicked",
+        "cta_signup_clicked",
+        "cta_start_swiping_clicked",
+        "filters_applied",
+        "landing_account_logout",
+        "login_email_submitted",
+        "onboarding_step_completed",
+        "prepare_again_clicked",
+        "profile_updated",
+        "profile_view",
+        "signin_google_clicked",
+        "signin_page_view",
+        "swipe_page_view",
+        "tracker_view"
+      ]
+    }
+  ]
+}

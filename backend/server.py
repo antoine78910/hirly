@@ -461,25 +461,42 @@ async def _posthog_unhandled_exception_handler(
         content={"detail": "Internal server error"},
     )
 
-_ANALYTICS_REGISTRY_PATH = (
-    Path(__file__).resolve().parents[1]
-    / "packages"
-    / "contracts"
-    / "src"
-    / "analytics-registry.v1.json"
+_ANALYTICS_REGISTRY_PATHS = (
+    (
+        Path(__file__).resolve().parents[1]
+        / "packages"
+        / "contracts"
+        / "src"
+        / "analytics-registry.v1.json"
+    ),
+    # Railway deploys this service with `backend` as its root directory, so the
+    # monorepo contract path is not present in the runtime image. This checked-in
+    # mirror is kept byte-identical to the canonical contract by a regression test.
+    Path(__file__).resolve().with_name("analytics-registry.v1.json"),
 )
 
 
 def _load_analytics_registry() -> Dict[str, Any]:
-    try:
-        registry = json.loads(_ANALYTICS_REGISTRY_PATH.read_text(encoding="utf-8"))
-        events = registry.get("events")
-        if registry.get("schemaVersion") != "hirly.analytics-registry.v1" or not isinstance(events, list):
-            raise ValueError("unsupported analytics registry")
-        return registry
-    except Exception as exc:
-        logger.error("analytics_registry_load_failed error=%s", type(exc).__name__)
-        return {"schemaVersion": "unavailable", "events": []}
+    failures = []
+    for path in _ANALYTICS_REGISTRY_PATHS:
+        try:
+            registry = json.loads(path.read_text(encoding="utf-8"))
+            events = registry.get("events")
+            if (
+                registry.get("schemaVersion") != "hirly.analytics-registry.v1"
+                or not isinstance(events, list)
+            ):
+                raise ValueError("unsupported analytics registry")
+            logger.info(
+                "analytics_registry_loaded path=%s events=%s",
+                path,
+                len(events),
+            )
+            return registry
+        except Exception as exc:
+            failures.append(f"{path.name}:{type(exc).__name__}")
+    logger.error("analytics_registry_load_failed attempts=%s", ",".join(failures))
+    return {"schemaVersion": "unavailable", "events": []}
 
 
 _ANALYTICS_REGISTRY = _load_analytics_registry()
