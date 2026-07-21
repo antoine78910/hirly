@@ -25,6 +25,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@hirly/feed-v2": "workspace:*",
+        "postgres": "3.4.7",
       },
       "devDependencies": {
         "@types/bun": "1.3.14",
@@ -38,6 +39,17 @@
         "@hirly/db": "workspace:*",
         "@hirly/ingestion": "workspace:*",
         "postgres": "3.4.7",
+      },
+      "devDependencies": {
+        "@types/bun": "1.3.14",
+        "typescript": "5.9.3",
+      },
+    },
+    "apps/job-projection-backfill": {
+      "name": "@hirly/job-projection-backfill",
+      "version": "0.1.0",
+      "dependencies": {
+        "@hirly/db": "workspace:*",
       },
       "devDependencies": {
         "@types/bun": "1.3.14",
@@ -169,6 +181,8 @@
     "@hirly/ingestion": ["@hirly/ingestion@workspace:packages/ingestion"],
 
     "@hirly/job-ingestion-audit": ["@hirly/job-ingestion-audit@workspace:apps/job-ingestion-audit"],
+
+    "@hirly/job-projection-backfill": ["@hirly/job-projection-backfill@workspace:apps/job-projection-backfill"],
 
     "@hirly/matching": ["@hirly/matching@workspace:packages/matching"],
 
