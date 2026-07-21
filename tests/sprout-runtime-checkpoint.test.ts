@@ -24,9 +24,30 @@ function activeRegistration(): SproutActivation {
     approvedPageSize: 2,
     enabled: true,
     transportEnabled: true,
+    canaryEnabled: true,
     backfillEnabled: true,
     providerCountryKillSwitch: false,
     sourceCountryKillSwitch: false,
+    canaryEvidence: {
+      status: "passed",
+      evidenceRef: "artifact://sprout/canary-2026-07-21",
+      pagesCommitted: 1,
+      identityReadBack: true,
+      rawSnapshotLinked: true,
+      occurrenceLinked: true,
+      checkpointReadBack: true,
+      singleWriterVerified: true,
+    },
+    rollbackEvidence: {
+      status: "passed",
+      evidenceRef: "artifact://sprout/rollback-2026-07-21",
+      providerKillSwitchVerified: true,
+      sourceKillSwitchVerified: true,
+      scheduleDisableVerified: true,
+      transportDisableVerified: true,
+      outstandingTasksStopVerified: true,
+      writerClaimReleaseVerified: true,
+    },
   };
 }
 
@@ -89,6 +110,7 @@ describe("Sprout activation and bounded page runtime", () => {
       writerRuntime: "none",
       enabled: false,
       transportEnabled: false,
+      canaryEnabled: false,
       incrementalEnabled: false,
       backfillEnabled: false,
       providerCountryKillSwitch: true,
@@ -100,7 +122,15 @@ describe("Sprout activation and bounded page runtime", () => {
     expect(() =>
       assertSproutActivationReady(
         {
-          ...SPROUT_FRANCE_DISABLED_REGISTRATION,
+          ...activeRegistration(),
+          authorizationStatus: "unverified",
+          writerRuntime: "none",
+          enabled: false,
+          transportEnabled: false,
+          canaryEnabled: false,
+          backfillEnabled: false,
+          providerCountryKillSwitch: true,
+          sourceCountryKillSwitch: true,
           policyEvidenceRef: null,
           redisplayAllowed: false,
           fullTextRetentionAllowed: false,
@@ -116,7 +146,15 @@ describe("Sprout activation and bounded page runtime", () => {
     let commits = 0;
     const promise = runSproutPageTask({
       activation: {
-        ...SPROUT_FRANCE_DISABLED_REGISTRATION,
+        ...activeRegistration(),
+        authorizationStatus: "unverified",
+        writerRuntime: "none",
+        enabled: false,
+        transportEnabled: false,
+        canaryEnabled: false,
+        backfillEnabled: false,
+        providerCountryKillSwitch: true,
+        sourceCountryKillSwitch: true,
         policyEvidenceRef: null,
         redisplayAllowed: false,
         fullTextRetentionAllowed: false,
@@ -146,12 +184,58 @@ describe("Sprout activation and bounded page runtime", () => {
     expect(commits).toBe(0);
   });
 
+  test("blocks production modes before canary read-back and rollback evidence pass", async () => {
+    for (const incomplete of [
+      {
+        canaryEvidence: {
+          ...activeRegistration().canaryEvidence,
+          checkpointReadBack: false,
+        },
+      },
+      {
+        rollbackEvidence: {
+          ...activeRegistration().rollbackEvidence,
+          writerClaimReleaseVerified: false,
+        },
+      },
+    ]) {
+      let fetches = 0;
+      let commits = 0;
+      const promise = runSproutPageTask({
+        activation: { ...activeRegistration(), ...incomplete },
+        mode: "backfill",
+        checkpoint: initialSproutCheckpoint({ approvedPageSize: 2 }),
+        transport: {
+          async fetchPage() {
+            fetches += 1;
+            throw new Error("unexpected live API call");
+          },
+        },
+        repository: {
+          async commitPage(input) {
+            commits += 1;
+            return { committedCheckpoint: input.checkpointOut };
+          },
+        },
+        hasFranceLocation: () => true,
+        signal: new AbortController().signal,
+        maxResponseBytes: 1_024,
+      });
+
+      await expect(promise).rejects.toThrow(
+        "sprout_release_evidence_incomplete",
+      );
+      expect(fetches).toBe(0);
+      expect(commits).toBe(0);
+    }
+  });
+
   test("commits one bounded FR page and advances the checkpoint atomically", async () => {
     const transportInputs: unknown[] = [];
     const commits: unknown[] = [];
     const result = await runSproutPageTask({
       activation: activeRegistration(),
-      mode: "backfill",
+      mode: "canary",
       checkpoint: initialSproutCheckpoint({ approvedPageSize: 2 }),
       transport: {
         async fetchPage(input) {
@@ -189,6 +273,51 @@ describe("Sprout activation and bounded page runtime", () => {
     expect(commits).toHaveLength(1);
     expect(JSON.stringify(commits)).not.toContain("credentialRef");
     expect(JSON.stringify(commits)).not.toContain("secret://");
+  });
+
+  test("allows only an initial one-page canary checkpoint", async () => {
+    let fetches = 0;
+    const promise = runSproutPageTask({
+      activation: {
+        ...activeRegistration(),
+        canaryEvidence: {
+          ...activeRegistration().canaryEvidence,
+          status: "pending",
+          evidenceRef: null,
+          pagesCommitted: 0,
+        },
+        rollbackEvidence: {
+          ...activeRegistration().rollbackEvidence,
+          status: "pending",
+          evidenceRef: null,
+        },
+      },
+      mode: "canary",
+      checkpoint: {
+        ...initialSproutCheckpoint({ approvedPageSize: 2 }),
+        offset: 2,
+        observedTotal: 3,
+      },
+      transport: {
+        async fetchPage() {
+          fetches += 1;
+          throw new Error("unexpected live API call");
+        },
+      },
+      repository: {
+        async commitPage(input) {
+          return { committedCheckpoint: input.checkpointOut };
+        },
+      },
+      hasFranceLocation: () => true,
+      signal: new AbortController().signal,
+      maxResponseBytes: 1_024,
+    });
+
+    await expect(promise).rejects.toThrow(
+      "sprout_canary_must_start_at_initial_checkpoint",
+    );
+    expect(fetches).toBe(0);
   });
 
   test("does not commit or advance on country leak, body breach, or cursor drift", async () => {

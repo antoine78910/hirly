@@ -50,7 +50,7 @@ export interface SproutPageTaskResult {
 
 export async function runSproutPageTask<RawJob>(input: {
   activation: SproutActivation;
-  mode: "backfill" | "incremental";
+  mode: "canary" | "backfill" | "incremental";
   checkpoint: SproutCheckpoint;
   transport: SproutRuntimeTransport<RawJob>;
   repository: SproutPageCommitRepository<RawJob>;
@@ -61,6 +61,9 @@ export async function runSproutPageTask<RawJob>(input: {
 }): Promise<SproutPageTaskResult> {
   const activation = assertSproutActivationReady(input.activation, input.mode);
   const checkpointIn = sproutCheckpointSchema.parse(input.checkpoint);
+  if (input.mode === "canary" && checkpointIn.offset !== 0) {
+    throw new Error("sprout_canary_must_start_at_initial_checkpoint");
+  }
   if (checkpointIn.pageSize !== activation.approvedPageSize) {
     throw new Error("sprout_checkpoint_unapproved_page_size");
   }

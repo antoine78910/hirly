@@ -160,8 +160,14 @@ country leak, abort or lease loss leaves the input checkpoint unchanged.
 3. Enable only shadow/no-canonical-write mode and compare country validity,
    schema rejection, freshness, applyability and duplicates.
 4. Run a one-page canary and read back identity, raw linkage, occurrence and
-   checkpoint evidence before raising any cap.
-5. Stop immediately on authorization/policy expiry, auth failure, repeated rate
+   checkpoint evidence before raising any cap. Record the evidence reference,
+   exactly one committed page, and the single-writer check in the activation
+   record.
+5. Exercise rollback and record evidence that both `FR` kill switches,
+   scheduling, transport, outstanding tasks and the writer claim can all be
+   stopped or released. Backfill and incremental modes fail closed until every
+   canary read-back and rollback check is recorded as passed.
+6. Stop immediately on authorization/policy expiry, auth failure, repeated rate
    limiting, drift, leakage, duplicate regression or fulfillment degradation.
 
 Rollback order is: set the provider and source `FR` kill switches, disable the

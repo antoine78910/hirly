@@ -13,6 +13,7 @@ export const sproutFranceRegistrationSchema = z
     concurrency: z.literal(1),
     enabled: z.boolean(),
     transportEnabled: z.boolean(),
+    canaryEnabled: z.boolean(),
     incrementalEnabled: z.boolean(),
     backfillEnabled: z.boolean(),
     providerCountryKillSwitch: z.boolean(),
@@ -38,6 +39,7 @@ export const SPROUT_FRANCE_DISABLED_REGISTRATION =
     concurrency: 1,
     enabled: false,
     transportEnabled: false,
+    canaryEnabled: false,
     incrementalEnabled: false,
     backfillEnabled: false,
     providerCountryKillSwitch: true,
@@ -52,17 +54,43 @@ export const sproutActivationSchema = sproutFranceRegistrationSchema.extend({
   credentialRef: z
     .string()
     .regex(/^secret:\/\/[a-z0-9][a-z0-9/_-]{2,127}$/),
+  canaryEvidence: z
+    .object({
+      status: z.enum(["pending", "failed", "passed"]),
+      evidenceRef: z.string().trim().min(1).max(512).nullable(),
+      pagesCommitted: z.union([z.literal(0), z.literal(1)]),
+      identityReadBack: z.boolean(),
+      rawSnapshotLinked: z.boolean(),
+      occurrenceLinked: z.boolean(),
+      checkpointReadBack: z.boolean(),
+      singleWriterVerified: z.boolean(),
+    })
+    .strict(),
+  rollbackEvidence: z
+    .object({
+      status: z.enum(["pending", "failed", "passed"]),
+      evidenceRef: z.string().trim().min(1).max(512).nullable(),
+      providerKillSwitchVerified: z.boolean(),
+      sourceKillSwitchVerified: z.boolean(),
+      scheduleDisableVerified: z.boolean(),
+      transportDisableVerified: z.boolean(),
+      outstandingTasksStopVerified: z.boolean(),
+      writerClaimReleaseVerified: z.boolean(),
+    })
+    .strict(),
 });
 
 export type SproutActivation = z.infer<typeof sproutActivationSchema>;
 
 export function assertSproutActivationReady(
   input: SproutActivation,
-  mode: "backfill" | "incremental",
+  mode: "canary" | "backfill" | "incremental",
 ): SproutActivation {
   const activation = sproutActivationSchema.parse(input);
   const modeEnabled =
-    mode === "backfill"
+    mode === "canary"
+      ? activation.canaryEnabled
+      : mode === "backfill"
       ? activation.backfillEnabled
       : activation.incrementalEnabled;
   if (
@@ -81,5 +109,31 @@ export function assertSproutActivationReady(
   ) {
     throw new Error("sprout_activation_blocked");
   }
+  if (mode !== "canary" && !releaseEvidencePassed(activation)) {
+    throw new Error("sprout_release_evidence_incomplete");
+  }
   return activation;
+}
+
+function releaseEvidencePassed(activation: SproutActivation): boolean {
+  const canary = activation.canaryEvidence;
+  const rollback = activation.rollbackEvidence;
+  return (
+    canary.status === "passed" &&
+    canary.evidenceRef !== null &&
+    canary.pagesCommitted === 1 &&
+    canary.identityReadBack &&
+    canary.rawSnapshotLinked &&
+    canary.occurrenceLinked &&
+    canary.checkpointReadBack &&
+    canary.singleWriterVerified &&
+    rollback.status === "passed" &&
+    rollback.evidenceRef !== null &&
+    rollback.providerKillSwitchVerified &&
+    rollback.sourceKillSwitchVerified &&
+    rollback.scheduleDisableVerified &&
+    rollback.transportDisableVerified &&
+    rollback.outstandingTasksStopVerified &&
+    rollback.writerClaimReleaseVerified
+  );
 }
