@@ -7754,6 +7754,30 @@ async def _try_feed_v2(
                     continue
                 card = dict(source)
                 card.update(match)
+                location = next(
+                    (item for item in card.get("locations", []) if isinstance(item, dict)),
+                    {},
+                )
+                city = location.get("city") if isinstance(location.get("city"), str) else None
+                region = location.get("state") if isinstance(location.get("state"), str) else None
+                country = location.get("country") if isinstance(location.get("country"), str) else None
+                country_code = location.get("countryCode") if isinstance(location.get("countryCode"), str) else None
+                card.update({
+                    # Legacy Swipe card + local safety-filter compatibility.
+                    "job_id": match["preferredJobId"],
+                    "city": city,
+                    "region": region,
+                    "country": country,
+                    "country_code": country_code.lower() if country_code else None,
+                    "location": ", ".join(part for part in (city, region, country) if part),
+                    "remote": str(card.get("workLocation") or "").upper() == "REMOTE",
+                    "company_logo": card.get("companyLogo"),
+                    "description": card.get("rawDescription") or card.get("summary") or "",
+                    "salary_min": card.get("salaryMin") or None,
+                    "salary_max": card.get("salaryMax") or None,
+                    "provider": card.get("source"),
+                    "ats_provider": (card.get("atsDetection") or {}).get("provider"),
+                })
                 card["match_score"] = round(float(match["relevanceScore"]) * 100)
                 card["application_mode"] = match["fulfillmentRoute"]
                 hydrated_jobs.append(card)
