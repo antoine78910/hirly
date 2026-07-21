@@ -46,9 +46,13 @@ export function normalizeLocationData(location, locationData) {
   });
 }
 
-export async function saveTargetPreferences({ role, location, locationData }) {
-  const trimmedRole = (role || "").trim();
-  if (!trimmedRole) {
+export async function saveTargetPreferences({ role, roles, sectorIds, industryIds, location, locationData }) {
+  const selectedRoles = [...new Set([
+    ...(Array.isArray(roles) ? roles : []),
+    role,
+  ].map((value) => String(value || "").trim()).filter(Boolean))].slice(0, 3);
+  const primaryRole = selectedRoles[0] || "";
+  if (!primaryRole) {
     toast.error("Please enter a job title");
     return null;
   }
@@ -62,11 +66,13 @@ export async function saveTargetPreferences({ role, location, locationData }) {
   const locationLabel = normalizedLocationData?.location_label || trimmedLocation;
 
   const payload = {
-    target_role: trimmedRole,
-    target_roles: [trimmedRole],
+    target_role: primaryRole,
+    target_roles: selectedRoles,
     target_location: locationLabel,
     target_location_data: normalizedLocationData,
   };
+  if (Array.isArray(sectorIds)) payload.sector_ids = [...new Set(sectorIds)];
+  if (Array.isArray(industryIds)) payload.industry_ids = [...new Set(industryIds)];
 
   try {
     await api.put("/profile/preferences", payload);
@@ -76,7 +82,10 @@ export async function saveTargetPreferences({ role, location, locationData }) {
   }
 
   return {
-    role: trimmedRole,
+    role: primaryRole,
+    roles: selectedRoles,
+    sectorIds: Array.isArray(sectorIds) ? payload.sector_ids : undefined,
+    industryIds: Array.isArray(industryIds) ? payload.industry_ids : undefined,
     location: locationLabel || "Anywhere",
     locationData: normalizedLocationData,
   };

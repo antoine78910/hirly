@@ -67,6 +67,7 @@ export default function DesktopSwipeFeed({
   onFiltersChange,
   onFiltersOpenChange,
   onTargetSave,
+  onTargetPreferencesOpen,
   targetLocationData = null,
   targetSaving = false,
   onPass,
@@ -419,6 +420,14 @@ export default function DesktopSwipeFeed({
                   testId="desktop-target-location"
                 />
               </div>
+              <button
+                type="button"
+                onClick={onTargetPreferencesOpen}
+                className={`shrink-0 rounded-xl border px-3 py-2.5 text-sm font-semibold transition-colors ${theme.select}`}
+                data-testid="desktop-target-preferences"
+              >
+                {lang === "fr" ? "Préférences" : "Preferences"}
+              </button>
             </div>
           </div>
         </div>

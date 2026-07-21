@@ -7,31 +7,70 @@ import PlacesAutocomplete from "./PlacesAutocomplete";
 import { useAppLocale } from "../context/AppLocaleContext";
 import { normalizeLocationData } from "../lib/targetPreferences";
 import { isResolvedLocation } from "../lib/locationSearch";
+import { MATCHING_INDUSTRIES, MATCHING_SECTORS } from "../lib/matchingFacets";
+
+function FacetPicker({ label, options, values, onChange }) {
+  const toggle = (value) => onChange((current) => current.includes(value)
+    ? current.filter((entry) => entry !== value)
+    : [...current, value]);
+
+  return (
+    <div className="space-y-2">
+      <p className="text-sm font-semibold text-zinc-800">{label}</p>
+      <div className="flex flex-wrap gap-2">
+        {options.map(([value, text]) => (
+          <button
+            key={value}
+            type="button"
+            onClick={() => toggle(value)}
+            className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${values.includes(value)
+              ? "border-violet-500 bg-violet-50 text-violet-700"
+              : "border-zinc-200 text-zinc-600 hover:border-zinc-300"}`}
+          >
+            {text}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export default function TargetSearchSheet({
   open,
   initialRole = "",
+  initialRoles = [],
+  initialSectorIds = [],
+  initialIndustryIds = [],
   initialLocation = "",
   initialLocationData = null,
   onClose,
   onSave,
 }) {
   const { lang } = useAppLocale();
-  const [targetRole, setTargetRole] = useState("");
+  const [roleDraft, setRoleDraft] = useState("");
+  const [targetRoles, setTargetRoles] = useState([]);
+  const [sectorIds, setSectorIds] = useState([]);
+  const [industryIds, setIndustryIds] = useState([]);
   const [targetLocation, setTargetLocation] = useState("");
   const [targetLocationData, setTargetLocationData] = useState(null);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!open) return;
-    setTargetRole(initialRole);
+    const roles = Array.isArray(initialRoles) && initialRoles.length
+      ? initialRoles
+      : [initialRole];
+    setTargetRoles([...new Set(roles.map((role) => String(role || "").trim()).filter(Boolean))].slice(0, 3));
+    setRoleDraft("");
+    setSectorIds(Array.isArray(initialSectorIds) ? initialSectorIds : []);
+    setIndustryIds(Array.isArray(initialIndustryIds) ? initialIndustryIds : []);
     setTargetLocation(initialLocation);
     setTargetLocationData(initialLocationData);
-  }, [open, initialRole, initialLocation, initialLocationData]);
+  }, [open, initialRole, initialRoles, initialSectorIds, initialIndustryIds, initialLocation, initialLocationData]);
 
   const save = async () => {
-    const trimmedRole = (targetRole || "").trim();
-    if (!trimmedRole) {
+    const roles = [...new Set([...targetRoles, ...(roleDraft.trim() ? [roleDraft.trim()] : [])])].slice(0, 3);
+    if (!roles.length) {
       toast.error(lang === "fr" ? "Saisissez un métier" : "Enter a job title");
       return;
     }
@@ -45,7 +84,10 @@ export default function TargetSearchSheet({
       }
       const locationLabel = normalizedData?.location_label || trimmedLocation || "Anywhere";
       const ok = await onSave?.({
-        role: trimmedRole,
+        role: roles[0],
+        roles,
+        sectorIds,
+        industryIds,
         location: locationLabel,
         locationData: normalizedData,
       });
@@ -93,12 +135,51 @@ export default function TargetSearchSheet({
 
               <div className="max-h-[calc(88dvh-9rem)] space-y-5 overflow-y-auto py-5">
                 <RolePicker
-                  value={targetRole}
-                  onChange={setTargetRole}
+                  value={roleDraft}
+                  onChange={setRoleDraft}
                   variant="light"
                   lang={lang}
                   inline
                   testId="target-search-role"
+                />
+                <div className="flex flex-wrap gap-2">
+                  {targetRoles.map((role) => (
+                    <button
+                      key={role}
+                      type="button"
+                      onClick={() => setTargetRoles((roles) => roles.filter((entry) => entry !== role))}
+                      className="inline-flex items-center gap-1 rounded-full bg-violet-100 px-3 py-1 text-sm text-violet-800"
+                    >
+                      {role}<X className="h-3.5 w-3.5" />
+                    </button>
+                  ))}
+                  {roleDraft.trim() && targetRoles.length < 3 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTargetRoles((roles) => [...new Set([...roles, roleDraft.trim()])].slice(0, 3));
+                        setRoleDraft("");
+                      }}
+                      className="rounded-full border border-zinc-200 px-3 py-1 text-sm text-zinc-700 hover:border-zinc-300"
+                    >
+                      + {lang === "fr" ? "Ajouter ce métier" : "Add this role"}
+                    </button>
+                  )}
+                </div>
+                <p className="text-xs text-zinc-500">
+                  {lang === "fr" ? "Ajoutez jusqu’à 3 métiers. Les offres correspondant à l’un d’eux seront classées ensemble." : "Add up to 3 roles. Jobs matching any role are ranked together."}
+                </p>
+                <FacetPicker
+                  label={lang === "fr" ? "Secteurs" : "Sectors"}
+                  options={MATCHING_SECTORS}
+                  values={sectorIds}
+                  onChange={setSectorIds}
+                />
+                <FacetPicker
+                  label={lang === "fr" ? "Industries" : "Industries"}
+                  options={MATCHING_INDUSTRIES}
+                  values={industryIds}
+                  onChange={setIndustryIds}
                 />
                 <PlacesAutocomplete
                   label={lang === "fr" ? "Où cherchez-vous ?" : "Where are you searching?"}

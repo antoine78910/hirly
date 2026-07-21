@@ -9,6 +9,10 @@ const desktopSource = readFileSync(
   resolve(sourceRoot, "components/swipe/DesktopSwipeFeed.jsx"),
   "utf8",
 );
+const targetSearchSheetSource = readFileSync(
+  resolve(sourceRoot, "components/TargetSearchSheet.jsx"),
+  "utf8",
+);
 
 describe("Swipe Feed v2 adoption boundary", () => {
   it("gates initial navigation and fences stale responses", () => {
@@ -47,6 +51,17 @@ describe("Swipe Feed v2 adoption boundary", () => {
     expect(swipeSource).toContain('feedView.kind === "loading"');
     expect(swipeSource).toContain('feedView.kind === "projection_lag"');
     expect(desktopSource).toContain("resolveSwipeFeedViewState({");
+    expect(swipeSource).toContain("jobsRef.current.length === 0");
+  });
+
+  it("lets Swipe edit all matching preferences, not only a single role", () => {
+    expect(targetSearchSheetSource).toContain("initialRoles = []");
+    expect(targetSearchSheetSource).toContain("initialSectorIds = []");
+    expect(targetSearchSheetSource).toContain("initialIndustryIds = []");
+    expect(targetSearchSheetSource).toContain("MATCHING_SECTORS");
+    expect(targetSearchSheetSource).toContain("MATCHING_INDUSTRIES");
+    expect(swipeSource).toContain("initialRoles={profile?.target_roles || [target.role]}");
+    expect(desktopSource).toContain("desktop-target-preferences");
   });
 
   it("uses the rollout flag only as a frontend observation", () => {

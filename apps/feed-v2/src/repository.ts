@@ -55,6 +55,13 @@ WITH profile AS (
   CROSS JOIN profile
   CROSS JOIN LATERAL (
     SELECT CASE
+      -- An explicit Swipe search refines the saved profile; it must not erase
+      -- the candidate's other selected roles. This keeps a multi-role profile
+      -- (for example Fullstack + Backend + Frontend) OR-matched while users
+      -- adjust location/radius or type a primary role in the Swipe header.
+      WHEN effective_query.role IS NOT NULL
+        AND cardinality(profile.target_role_labels_normalized) > 0
+        THEN array_append(profile.target_role_labels_normalized, effective_query.role)
       WHEN effective_query.role IS NOT NULL THEN ARRAY[effective_query.role]
       WHEN cardinality(profile.target_role_labels_normalized) > 0
         THEN profile.target_role_labels_normalized
@@ -149,8 +156,11 @@ WITH profile AS (
       OR (
         effective_query.query_fingerprint <> 'candidate-profile'
         AND (
-          effective_query.role IS NULL
-          OR document.search_vector @@ websearch_to_tsquery('simple', effective_query.role)
+          cardinality(role_terms.labels) = 0
+          OR EXISTS (
+            SELECT 1 FROM unnest(role_terms.labels) AS role_label
+            WHERE document.search_vector @@ websearch_to_tsquery('simple', role_label)
+          )
           OR EXISTS (
             SELECT 1 FROM unnest(role_terms.tokens) AS token
             WHERE document.search_vector @@ to_tsquery('simple', token || ':*')
@@ -159,13 +169,11 @@ WITH profile AS (
       )
     )
     AND (
-      effective_query.query_fingerprint <> 'candidate-profile'
-      OR cardinality(profile.sector_ids) = 0
+      cardinality(profile.sector_ids) = 0
       OR document.sector_ids && profile.sector_ids
     )
     AND (
-      effective_query.query_fingerprint <> 'candidate-profile'
-      OR cardinality(profile.industry_ids) = 0
+      cardinality(profile.industry_ids) = 0
       OR document.industry_ids && profile.industry_ids
     )
     AND (

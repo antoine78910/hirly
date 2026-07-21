@@ -1204,7 +1204,10 @@ export default function Swipe() {
       toast.error(typeof detail === "string" ? detail : t("toasts.loadJobsError"));
     } finally {
       if (requestFence.isCurrent()) {
-        if (!stackPrefetch && !silentRefresh) setLoading(false);
+        // A prefetch can begin while a card is still visible, then become the
+        // only request after the user swipes that final card. In that case the
+        // empty stack must remain a loading state, not an empty-feed state.
+        if ((!stackPrefetch && !silentRefresh) || jobsRef.current.length === 0) setLoading(false);
         fetchingRef.current = false;
         if (feedAbortRef.current === controller) feedAbortRef.current = null;
       }
@@ -1234,8 +1237,12 @@ export default function Swipe() {
     return () => window.removeEventListener(DEMO_SETTINGS_CHANGED, onDemoSettings);
   }, [loadFeed, loadProfile, applyFinanceDemoTarget]);
 
-  const saveTargetSearch = useCallback(async ({ role, location, locationData }) => {
-    const trimmedRole = (role || "").trim();
+  const saveTargetSearch = useCallback(async ({ role, roles, sectorIds, industryIds, location, locationData }) => {
+    const selectedRoles = [...new Set([
+      ...(Array.isArray(roles) ? roles : []),
+      role,
+    ].map((value) => String(value || "").trim()).filter(Boolean))].slice(0, 3);
+    const trimmedRole = selectedRoles[0] || "";
     if (!trimmedRole) {
       toast.error(t("toasts.enterJobTitle") || (lang === "fr" ? "Saisissez un métier" : "Enter a job title"));
       return false;
@@ -1248,6 +1255,9 @@ export default function Swipe() {
 
       await saveTargetPreferences({
         role: trimmedRole,
+        roles: selectedRoles,
+        sectorIds,
+        industryIds,
         location: locationLabel,
         locationData: normalizedLocationData,
       });
@@ -1257,6 +1267,24 @@ export default function Swipe() {
       targetRef.current = nextTarget;
       setTargetLocationData(normalizedLocationData);
       targetLocationDataRef.current = normalizedLocationData;
+      setProfile((current) => current ? {
+        ...current,
+        target_role: trimmedRole,
+        target_roles: selectedRoles,
+        ...(Array.isArray(sectorIds) ? { sector_ids: sectorIds } : {}),
+        ...(Array.isArray(industryIds) ? { industry_ids: industryIds } : {}),
+        target_location: locationLabel,
+        target_location_data: normalizedLocationData,
+      } : current);
+      profileRef.current = profileRef.current ? {
+        ...profileRef.current,
+        target_role: trimmedRole,
+        target_roles: selectedRoles,
+        ...(Array.isArray(sectorIds) ? { sector_ids: sectorIds } : {}),
+        ...(Array.isArray(industryIds) ? { industry_ids: industryIds } : {}),
+        target_location: locationLabel,
+        target_location_data: normalizedLocationData,
+      } : profileRef.current;
 
       const nextFilters = filtersForTargetSearch(filtersRef.current);
       filtersRef.current = nextFilters;
@@ -1538,6 +1566,7 @@ export default function Swipe() {
     cacheJobForDemo(job);
     recordSwipedJobId(job.job_id, user?.user_id);
     const remainingAfterSwipe = jobs.length - 1;
+    jobsRef.current = jobs.slice(1);
     setJobs((prev) => prev.slice(1));
     if (remainingAfterSwipe <= FEED_PREFETCH_THRESHOLD && !fetchingRef.current) {
       loadFeed(false, filtersRef.current, "after_swipe_low_stack");
@@ -1643,6 +1672,7 @@ export default function Swipe() {
   const dismissJob = useCallback((jobId) => {
     recordSwipedJobId(jobId, user?.user_id);
     const remainingAfterDismiss = jobs.length - 1;
+    jobsRef.current = jobs.filter((job) => job.job_id !== jobId);
     setJobs((prev) => prev.filter((j) => j.job_id !== jobId));
     if (isFinanceDemoEnabled()) {
       performFinanceDemoSwipe({ job_id: jobId, direction: "left" });
@@ -1739,6 +1769,7 @@ export default function Swipe() {
           onFiltersChange={applyFilters}
           onFiltersOpenChange={setDesktopFiltersOpen}
           onTargetSave={saveTargetSearch}
+          onTargetPreferencesOpen={() => setTargetSheetOpen(true)}
           targetLocationData={targetLocationData}
           targetSaving={targetSaving}
           onPass={() => handleSwipe("skip")}
@@ -1937,6 +1968,9 @@ export default function Swipe() {
       <TargetSearchSheet
         open={targetSheetOpen}
         initialRole={target.role}
+        initialRoles={profile?.target_roles || [target.role]}
+        initialSectorIds={profile?.sector_ids || []}
+        initialIndustryIds={profile?.industry_ids || []}
         initialLocation={target.location}
         initialLocationData={targetLocationData}
         onClose={() => setTargetSheetOpen(false)}
