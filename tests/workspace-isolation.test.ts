@@ -26,6 +26,16 @@ function workspacePatterns(packageJson: PackageJson): string[] {
 }
 
 describe("root Bun workspace isolation", () => {
+  test("configures the root Bun installer for the private package registry", () => {
+    expect(readFileSync(join(repoRoot, ".npmrc"), "utf8").trim()).toBe(
+      [
+        "registry=https://registry.npmjs.org/",
+        "@lssm-tech:registry=https://npm.pkg.github.com/",
+        "//npm.pkg.github.com/:_authToken=${CONTRACTSPEC_NPM_TOKEN}",
+      ].join("\n"),
+    );
+  });
+
   test("only apps and packages participate in the root workspace", () => {
     const rootPackage = readJson<PackageJson>("package.json");
     const patterns = workspacePatterns(rootPackage);
@@ -108,7 +118,12 @@ describe("legacy frontend install and deployment contract", () => {
     expect(frontendLock.packages?.[""]?.name).toBe("frontend");
     expect(frontendLock.packages?.[""]?.version).toBe("0.1.0");
     expect(readFileSync(join(repoRoot, "frontend/.npmrc"), "utf8").trim()).toBe(
-      "legacy-peer-deps=true",
+      [
+        "legacy-peer-deps=true",
+        "registry=https://registry.npmjs.org/",
+        "@lssm-tech:registry=https://npm.pkg.github.com/",
+        "//npm.pkg.github.com/:_authToken=${CONTRACTSPEC_NPM_TOKEN}",
+      ].join("\n"),
     );
   });
 

@@ -234,6 +234,9 @@ Before any external action:
 - `bun run build`
 - build the worker Docker image from the repository root
 - verify the image runs as a non-root user and contains no `.env` or credentials
+- before a Railway worker release, verify its builder can mount
+  `CONTRACTSPEC_NPM_TOKEN` as a BuildKit secret; block the release if that
+  secret-mount path is unavailable. Never substitute a Docker build argument.
 - configure Railway `drainingSeconds` above `WORKER_SHUTDOWN_MS` so SIGKILL is
   not the normal drain path
 - run migration, lease-race, restart, scheduler, HTTP authorization, and shutdown

@@ -1,6 +1,7 @@
+# syntax=docker/dockerfile:1.7
 FROM oven/bun:1.3.14 AS build
 WORKDIR /app
-COPY package.json bun.lock bunfig.toml tsconfig.base.json ./
+COPY package.json bun.lock bunfig.toml tsconfig.base.json .npmrc ./
 COPY apps/worker/package.json apps/worker/package.json
 COPY apps/job-ingestion-audit/package.json apps/job-ingestion-audit/package.json
 COPY apps/analytics-backfill/package.json apps/analytics-backfill/package.json
@@ -18,7 +19,7 @@ COPY packages/ingestion/package.json packages/ingestion/package.json
 COPY packages/matching/package.json packages/matching/package.json
 COPY packages/matching-oracle/package.json packages/matching-oracle/package.json
 COPY packages/observability/package.json packages/observability/package.json
-RUN bun install --frozen-lockfile
+RUN --mount=type=secret,id=CONTRACTSPEC_NPM_TOKEN,env=CONTRACTSPEC_NPM_TOKEN,required=true bun install --frozen-lockfile
 COPY apps/worker apps/worker
 COPY packages packages
 RUN bun run --cwd apps/worker build

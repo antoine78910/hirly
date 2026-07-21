@@ -17,6 +17,7 @@ jobs:
   bun-workspaces:
     name: Bun workspaces
     runs-on: ubuntu-latest
+    environment: production
     services:
       postgres:
         image: postgres:16-alpine
@@ -35,6 +36,7 @@ jobs:
       # This is a connection template only. The hardened release verifier creates
       # and later drops one unique empty database per destructive PostgreSQL suite.
       G015_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/hirly_test
+      CONTRACTSPEC_NPM_TOKEN: ${{ secrets.CONTRACTSPEC_NPM_TOKEN }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -68,9 +70,12 @@ jobs:
   legacy-frontend:
     name: Legacy frontend smoke build
     runs-on: ubuntu-latest
+    environment: production
     defaults:
       run:
         working-directory: frontend
+    env:
+      CONTRACTSPEC_NPM_TOKEN: ${{ secrets.CONTRACTSPEC_NPM_TOKEN }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -204,6 +209,13 @@ jobs:
           test -n "$VERCEL_ORG_ID"
           test -n "$VERCEL_PROJECT_ID"
           test -n "$VERCEL_FRONTEND_URL"
+      - name: Require Vercel production package token metadata
+        run: |
+          if ! npx --yes vercel@56.4.0 env ls production --token "$VERCEL_TOKEN" \
+            | grep --quiet --fixed-strings 'CONTRACTSPEC_NPM_TOKEN'; then
+            echo "::error::Vercel Production is missing CONTRACTSPEC_NPM_TOKEN metadata."
+            exit 1
+          fi
       - name: Create a staged production deployment
         id: deploy
         run: |

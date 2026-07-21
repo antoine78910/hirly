@@ -10,6 +10,13 @@ const workerDockerfile = readFileSync(
   resolve(import.meta.dir, "../apps/worker/Dockerfile"),
   "utf8",
 );
+const workerOperations = readFileSync(
+  resolve(import.meta.dir, "../apps/worker/OPERATIONS.md"),
+  "utf8",
+);
+const workerPackage = JSON.parse(
+  readFileSync(resolve(import.meta.dir, "../apps/worker/package.json"), "utf8"),
+) as { scripts?: Record<string, string> };
 
 describe("main production release workflow", () => {
   test("copies every app manifest required by the frozen worker install", () => {
@@ -45,6 +52,24 @@ describe("main production release workflow", () => {
     );
   });
 
+  test("preflights Vercel Production package-token metadata before deployment", () => {
+    const preflightIndex = workflow.indexOf(
+      "Require Vercel production package token metadata",
+    );
+    const deployIndex = workflow.indexOf("Create a staged production deployment");
+    const preflight = workflow.slice(preflightIndex, deployIndex);
+
+    expect(preflightIndex).toBeGreaterThan(-1);
+    expect(preflightIndex).toBeLessThan(deployIndex);
+    expect(preflight).toContain("vercel@56.4.0 env ls production");
+    expect(preflight).not.toContain("env ls production --yes");
+    expect(preflight).toContain(
+      "grep --quiet --fixed-strings 'CONTRACTSPEC_NPM_TOKEN'",
+    );
+    expect(preflight).not.toContain("env pull");
+    expect(preflight).not.toContain("CONTRACTSPEC_NPM_TOKEN=");
+  });
+
   test("keeps production credentials in GitHub secrets", () => {
     const productionRelease = workflow.slice(
       workflow.indexOf("  production-migrations:"),
@@ -56,5 +81,58 @@ describe("main production release workflow", () => {
     expect(workflow).toContain("RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}");
     expect(workflow).toContain("VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}");
     expect(productionRelease).not.toMatch(/postgres(?:ql)?:\/\/[^$\s]+/);
+  });
+
+  test("maps the package token into every CI dependency installer job", () => {
+    const bunWorkspaces = workflow.slice(
+      workflow.indexOf("  bun-workspaces:"),
+      workflow.indexOf("  legacy-frontend:"),
+    );
+    const legacyFrontend = workflow.slice(
+      workflow.indexOf("  legacy-frontend:"),
+      workflow.indexOf("  stack-policy:"),
+    );
+    const secretMapping =
+      "CONTRACTSPEC_NPM_TOKEN: ${{ secrets.CONTRACTSPEC_NPM_TOKEN }}";
+
+    expect(bunWorkspaces).toContain(secretMapping);
+    expect(legacyFrontend).toContain(secretMapping);
+  });
+
+  test("uses a BuildKit secret for the worker dependency install", () => {
+    expect(workerDockerfile.startsWith("# syntax=docker/dockerfile:1.7\n")).toBe(
+      true,
+    );
+    expect(workerDockerfile).toContain(
+      "COPY package.json bun.lock bunfig.toml tsconfig.base.json .npmrc ./",
+    );
+    expect(workerDockerfile).toContain(
+      "RUN --mount=type=secret,id=CONTRACTSPEC_NPM_TOKEN,env=CONTRACTSPEC_NPM_TOKEN,required=true bun install --frozen-lockfile",
+    );
+    expect(workerDockerfile).not.toMatch(/^(?:ARG|ENV)\s+CONTRACTSPEC_NPM_TOKEN/m);
+
+    const finalStage = workerDockerfile.slice(
+      workerDockerfile.indexOf("FROM oven/bun:1.3.14-slim"),
+    );
+    expect(finalStage).not.toContain("CONTRACTSPEC_NPM_TOKEN");
+    expect(finalStage).not.toMatch(/\b\.npmrc\b/);
+  });
+
+  test("forwards the local Docker token as a BuildKit secret, never a build arg", () => {
+    const command = workerPackage.scripts?.["docker:build"];
+
+    expect(command).toContain("DOCKER_BUILDKIT=1 docker build");
+    expect(command).toContain(
+      "--secret id=CONTRACTSPEC_NPM_TOKEN,env=CONTRACTSPEC_NPM_TOKEN",
+    );
+    expect(command).not.toContain("--build-arg");
+  });
+
+  test("blocks a Railway worker release without BuildKit secret support", () => {
+    expect(workerOperations).toContain(
+      "CONTRACTSPEC_NPM_TOKEN` as a BuildKit secret",
+    );
+    expect(workerOperations).toContain("block the release");
+    expect(workerOperations).toContain("Never substitute a Docker build argument.");
   });
 });
