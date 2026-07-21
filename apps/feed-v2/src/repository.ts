@@ -1,6 +1,7 @@
 import type {
   FeedCandidate,
   FeedCursorPosition,
+  FeedEffectiveQuery,
   FeedReadRepository,
   FeedReadSnapshot,
 } from "@hirly/feed-v2";
@@ -11,10 +12,34 @@ WITH profile AS (
 ), action_meta AS (
   SELECT coalesce(max(candidate_version), 0)::text AS action_watermark
   FROM public.read_candidate_actions($1)
+), effective_query AS (
+  SELECT
+    $5::text AS query_fingerprint,
+    NULLIF($6::text, '') AS role,
+    $7::text[] AS country_codes,
+    $8::text[] AS work_modes,
+    $9::text[] AS contract_families,
+    $10::double precision[] AS latitudes,
+    $11::double precision[] AS longitudes,
+    $12::text[] AS free_text_locations,
+    $13::integer AS radius_km,
+    $14::boolean AS include_unknown_location
+), coordinate_locations AS (
+  SELECT location.latitude, location.longitude
+  FROM effective_query
+  CROSS JOIN LATERAL unnest(
+    effective_query.latitudes,
+    effective_query.longitudes
+  ) AS location(latitude, longitude)
+  WHERE location.latitude IS NOT NULL AND location.longitude IS NOT NULL
 ), inventory_meta AS (
-  SELECT coalesce(max(projected_at), '-infinity'::timestamptz)::text AS snapshot_version
-  FROM public.job_search_documents
-  WHERE lifecycle_status = 'active'
+  SELECT concat(
+    coalesce(max(document.projected_at), '-infinity'::timestamptz)::text,
+    '#', max(effective_query.query_fingerprint)
+  ) AS snapshot_version
+  FROM public.job_search_documents AS document
+  CROSS JOIN effective_query
+  WHERE document.lifecycle_status = 'active'
 ), scored AS (
   SELECT
     document.canonical_group_id::text AS canonical_group_id,
@@ -39,9 +64,63 @@ WITH profile AS (
     ) AS lifecycle_eligible
   FROM public.job_search_documents AS document
   CROSS JOIN profile
+  CROSS JOIN effective_query
   WHERE document.lifecycle_status = 'active'
-    AND document.role_family_codes && profile.role_family_ids
-    AND document.last_seen_at >= clock_timestamp() - make_interval(days => profile.freshness_window_days)
+    AND (
+      (
+        effective_query.query_fingerprint = 'candidate-profile'
+        AND document.role_family_codes && profile.role_family_ids
+      )
+      OR (
+        effective_query.query_fingerprint <> 'candidate-profile'
+        AND (
+          effective_query.role IS NULL
+          OR document.search_vector @@ websearch_to_tsquery('simple', effective_query.role)
+        )
+      )
+    )
+    AND (
+      effective_query.query_fingerprint = 'candidate-profile'
+      OR cardinality(effective_query.country_codes) = 0
+      OR document.country_codes && effective_query.country_codes
+      OR (effective_query.include_unknown_location AND document.location_unknown)
+    )
+    AND (
+      effective_query.query_fingerprint = 'candidate-profile'
+      OR (
+        NOT EXISTS (SELECT 1 FROM coordinate_locations)
+        AND cardinality(effective_query.free_text_locations) = 0
+      )
+      OR EXISTS (
+        SELECT 1
+        FROM coordinate_locations AS location
+        WHERE document.latitude IS NOT NULL
+          AND document.longitude IS NOT NULL
+          AND 6371.0 * acos(LEAST(1.0, GREATEST(-1.0,
+            sin(radians(document.latitude)) * sin(radians(location.latitude))
+            + cos(radians(document.latitude)) * cos(radians(location.latitude))
+            * cos(radians(document.longitude - location.longitude))
+          ))) <= effective_query.radius_km
+      )
+      OR EXISTS (
+        SELECT 1
+        FROM unnest(effective_query.free_text_locations) AS location_name
+        WHERE document.search_text ILIKE '%' || location_name || '%'
+      )
+      OR (effective_query.include_unknown_location AND document.location_unknown)
+    )
+    AND (
+      effective_query.query_fingerprint = 'candidate-profile'
+      OR cardinality(effective_query.work_modes) = 0
+      OR document.work_modes && effective_query.work_modes
+    )
+    AND (
+      effective_query.query_fingerprint = 'candidate-profile'
+      OR cardinality(effective_query.contract_families) = 0
+      OR document.contract_families && effective_query.contract_families
+    )
+    AND document.last_seen_at >=
+      clock_timestamp() - make_interval(days => profile.freshness_window_days)
 ), paged AS (
   SELECT * FROM scored
   WHERE ($2::double precision IS NULL OR relevance_score < $2
@@ -50,13 +129,16 @@ WITH profile AS (
   LIMIT $4
 )
 SELECT
-  profile.version::text AS profile_version,
+  concat(profile.version::text, '#', effective_query.query_fingerprint)
+    AS profile_version,
   action_meta.action_watermark,
   inventory_meta.snapshot_version,
+  effective_query.query_fingerprint,
   paged.*
 FROM profile
 CROSS JOIN action_meta
 CROSS JOIN inventory_meta
+CROSS JOIN effective_query
 LEFT JOIN paged ON true
 ORDER BY paged.relevance_score DESC, paged.canonical_group_id ASC;
 `.trim();
@@ -65,6 +147,7 @@ interface FeedReadRow {
   profile_version: string;
   action_watermark: string;
   snapshot_version: string;
+  query_fingerprint: string;
   canonical_group_id: string | null;
   preferred_job_id: string | null;
   job_version: string | null;
@@ -77,7 +160,53 @@ interface FeedReadRow {
 }
 
 export interface FeedReadSqlClient {
-  unsafe(query: string, parameters: readonly unknown[]): Promise<readonly FeedReadRow[]>;
+  unsafe(
+    query: string,
+    parameters: readonly unknown[],
+  ): Promise<readonly FeedReadRow[]>;
+}
+
+function queryParameters(query: FeedEffectiveQuery | null): readonly unknown[] {
+  if (!query) {
+    return [
+      "candidate-profile",
+      null,
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      1,
+      false,
+    ];
+  }
+  const countryCodes = [
+    query.countryCode,
+    ...query.locations.map((location) => location.countryCode),
+  ].filter((value): value is string => value !== null);
+  const locations = query.locations.flatMap((location) =>
+    location.latitude === null || location.longitude === null
+      ? []
+      : [{ latitude: location.latitude, longitude: location.longitude }],
+  );
+  return [
+    query.fingerprint,
+    query.role,
+    [...new Set(countryCodes)].sort(),
+    query.workModes,
+    [...new Set(query.jobTypes.flatMap((value) => {
+      const normalized = value.toLowerCase().replaceAll("_", "-");
+      return normalized === "full-time"
+        ? ["full-time", "permanent"]
+        : [normalized];
+    }))].sort(),
+    locations.map((location) => location.latitude),
+    locations.map((location) => location.longitude),
+    query.freeTextLocations,
+    query.radiusKm,
+    query.includeUnknownLocation,
+  ];
 }
 
 export class PostgresFeedReadRepository implements FeedReadRepository {
@@ -85,32 +214,50 @@ export class PostgresFeedReadRepository implements FeedReadRepository {
 
   async readIndexedCandidates(input: {
     candidateId: string;
+    effectiveQuery: FeedEffectiveQuery | null;
     limit: number;
     after: FeedCursorPosition | null;
   }): Promise<FeedReadSnapshot> {
-    if (!input.candidateId || input.candidateId.length > 256) throw new Error("invalid_candidate_scope");
+    if (!input.candidateId || input.candidateId.length > 256) {
+      throw new Error("invalid_candidate_scope");
+    }
     const limit = Math.max(1, Math.min(Math.trunc(input.limit), 1_000));
+    const queryFingerprint =
+      input.effectiveQuery?.fingerprint ?? "candidate-profile";
     const rows = await this.sql.unsafe(FEED_V2_INDEXED_READ_SQL, [
       input.candidateId,
       input.after?.relevanceScore ?? null,
       input.after?.canonicalGroupId ?? null,
       limit + 1,
+      ...queryParameters(input.effectiveQuery),
     ]);
     const metadata = rows[0];
     if (!metadata) {
       return {
-        snapshotVersion: "unavailable",
-        profileVersion: "unavailable",
+        snapshotVersion: `unavailable#${queryFingerprint}`,
+        profileVersion: `unavailable#${queryFingerprint}`,
         actionWatermark: "0",
+        queryFingerprint,
         profileReady: false,
         inventoryState: "matching_pending",
         candidates: [],
         hasMore: false,
       };
     }
+    if (metadata.query_fingerprint !== queryFingerprint) {
+      throw new Error("query_identity_mismatch");
+    }
     const candidates = rows.flatMap((row): FeedCandidate[] => {
-      if (row.canonical_group_id === null || row.preferred_job_id === null || row.job_version === null
-        || row.company_key === null || row.relevance_score === null || row.fulfillment_route === null) return [];
+      if (
+        row.canonical_group_id === null ||
+        row.preferred_job_id === null ||
+        row.job_version === null ||
+        row.company_key === null ||
+        row.relevance_score === null ||
+        row.fulfillment_route === null
+      ) {
+        return [];
+      }
       return [{
         canonicalGroupId: row.canonical_group_id,
         preferredJobId: row.preferred_job_id,
@@ -127,6 +274,7 @@ export class PostgresFeedReadRepository implements FeedReadRepository {
       snapshotVersion: metadata.snapshot_version,
       profileVersion: metadata.profile_version,
       actionWatermark: metadata.action_watermark,
+      queryFingerprint: metadata.query_fingerprint,
       profileReady: true,
       inventoryState: candidates.length === 0 ? "inventory_gap" : "ready",
       candidates: candidates.slice(0, limit),

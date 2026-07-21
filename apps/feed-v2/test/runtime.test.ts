@@ -90,8 +90,9 @@ describe("Feed v2 runtime adapters", () => {
       async unsafe(query, parameters) {
         calls.push({ query, parameters });
         return [{
-          profile_version: "7", action_watermark: "9", snapshot_version: "inventory-1",
-          canonical_group_id: "group-1", preferred_job_id: "job-1", job_version: "3",
+          profile_version: "7#candidate-profile", action_watermark: "9",
+          snapshot_version: "inventory-1#candidate-profile",
+          query_fingerprint: "candidate-profile", canonical_group_id: "group-1", preferred_job_id: "job-1", job_version: "3",
           company_key: "company-1", relevance_score: 0.9, fulfillment_route: "manual",
           action_excluded: false, policy_eligible: true, lifecycle_eligible: true,
         }];
@@ -99,15 +100,90 @@ describe("Feed v2 runtime adapters", () => {
     });
     const snapshot = await repository.readIndexedCandidates({
       candidateId: "candidate-1",
+      effectiveQuery: null,
       limit: 12,
       after: { relevanceScore: 0.8, canonicalGroupId: "group-0" },
     });
     expect(snapshot.candidates).toHaveLength(1);
-    expect(calls).toEqual([{ query: FEED_V2_INDEXED_READ_SQL, parameters: ["candidate-1", 0.8, "group-0", 13] }]);
+    expect(calls).toEqual([{ query: FEED_V2_INDEXED_READ_SQL, parameters: [
+      "candidate-1", 0.8, "group-0", 13, "candidate-profile", null,
+      [], [], [], [], [], [], 1, false,
+    ] }]);
     expect(FEED_V2_INDEXED_READ_SQL).toContain("read_candidate_search_profile($1)");
     expect(FEED_V2_INDEXED_READ_SQL).toContain("candidate_group_is_excluded($1");
     expect(FEED_V2_INDEXED_READ_SQL).toContain("ORDER BY relevance_score DESC, canonical_group_id ASC");
     expect(FEED_V2_INDEXED_READ_SQL).not.toMatch(/\b(?:INSERT|UPDATE|DELETE|TRUNCATE)\b/i);
     expect(FEED_V2_INDEXED_READ_SQL).not.toMatch(/provider_registry|worker_tasks|projection_reconciliation_tasks/i);
   });
+  test("executes signed role, radius, country, work-mode, and contract filters as parameters", async () => {
+    const effectiveQuery = createFeedEffectiveQuery({
+      version: FEED_EFFECTIVE_QUERY_VERSION,
+      role: "Fullstack Engineer",
+      radiusKm: 52,
+      locations: [{
+        label: "Paris, France",
+        country: "France",
+        countryCode: "FR",
+        placeId: null,
+        latitude: 48.8566,
+        longitude: 2.3522,
+      }],
+      countryCode: "FR",
+      workModes: ["hybrid", "remote"],
+      jobTypes: ["full_time"],
+      experienceLevels: [],
+      freeTextLocations: ["Paris"],
+      minimumSalary: 0,
+      postedWithin: null,
+      onlyCompanies: [],
+      hiddenCompanies: [],
+      onlyIndustries: [],
+      hiddenIndustries: [],
+      includeUnknownLocation: false,
+      includeUnknownSalary: true,
+      includeNonAutoApply: true,
+      onlyMyCountry: false,
+    });
+    const calls: Array<{ query: string; parameters: readonly unknown[] }> = [];
+    const repository = new PostgresFeedReadRepository({
+      async unsafe(query, parameters) {
+        calls.push({ query, parameters });
+        return [{
+          profile_version: `7#${effectiveQuery.fingerprint}`,
+          action_watermark: "9",
+          snapshot_version: `inventory-1#${effectiveQuery.fingerprint}`,
+          query_fingerprint: effectiveQuery.fingerprint,
+          canonical_group_id: "group-1",
+          preferred_job_id: "job-1",
+          job_version: "3",
+          company_key: "company-1",
+          relevance_score: 0.9,
+          fulfillment_route: "manual" as const,
+          action_excluded: false,
+          policy_eligible: true,
+          lifecycle_eligible: true,
+        }];
+      },
+    });
+    const result = await repository.readIndexedCandidates({
+      candidateId: "candidate-1",
+      effectiveQuery,
+      limit: 12,
+      after: null,
+    });
+    expect(result.queryFingerprint).toBe(effectiveQuery.fingerprint);
+    expect(result.snapshotVersion).toEndWith(`#${effectiveQuery.fingerprint}`);
+    expect(result.profileVersion).toEndWith(`#${effectiveQuery.fingerprint}`);
+    expect(calls[0]?.parameters).toEqual([
+      "candidate-1", null, null, 13, effectiveQuery.fingerprint,
+      "Fullstack Engineer", ["FR"], ["hybrid", "remote"], ["full-time", "permanent"],
+      [48.8566], [2.3522],
+      ["Paris"], 52, false,
+    ]);
+    expect(FEED_V2_INDEXED_READ_SQL).toContain("websearch_to_tsquery");
+    expect(FEED_V2_INDEXED_READ_SQL).toContain("unnest(");
+    expect(FEED_V2_INDEXED_READ_SQL).toContain("document.work_modes &&");
+    expect(FEED_V2_INDEXED_READ_SQL).toContain("document.contract_families &&");
+  });
+
 });
