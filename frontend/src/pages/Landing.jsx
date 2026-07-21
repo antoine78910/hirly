@@ -16,6 +16,7 @@ import LandingReviews from "../components/landing/LandingReviews";
 import LandingHeroRotatingWord from "../components/landing/LandingHeroRotatingWord";
 import LandingHeroSwipeDemo from "../components/landing/LandingHeroSwipeDemo";
 import LandingTrustLogos from "../components/landing/LandingTrustLogos";
+import LandingLanguageSelector from "../components/landing/LandingLanguageSelector";
 import {
   openJobSeekerDestination,
   resolveJobSeekerEntryDestination,
@@ -45,7 +46,7 @@ export default function Landing() {
   const redirectParam = searchParams.get("redirect");
   const landingContractType = resolveLandingContractFromLocation(location.pathname, searchParams);
   const landingContractSlug = getLandingContractSlug(landingContractType);
-  const { lang, setLang } = useAppLocale();
+  const { lang } = useAppLocale();
   const heroHeadline = getLandingHeroHeadline(lang, landingContractType);
   const heroCta = getLandingHeroCta(lang, landingContractType);
   const heroSubtitle = getLandingHeroSubtitle(lang);
@@ -145,12 +146,7 @@ export default function Landing() {
             <span>{BRAND.NAME}</span>
           </a>
           <div className="flex items-center gap-3">
-            <button
-              onClick={() => setLang(lang === "fr" ? "en" : "fr")}
-              className="text-xs font-semibold px-3 py-1 rounded-full border border-zinc-200 text-zinc-600 hover:border-linkedin hover:text-linkedin transition-colors"
-            >
-              {lang === "fr" ? "EN" : "FR"}
-            </button>
+            <LandingLanguageSelector />
             {loading ? (
               <div className="h-9 w-28 animate-pulse rounded-full bg-zinc-100" aria-hidden />
             ) : user ? (

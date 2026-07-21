@@ -299,6 +299,231 @@ const FAQ_FR = [
   },
 ];
 
+const FAQ_DE = [
+  {
+    id: "what-is",
+    question: "1. Was ist Hirly?",
+    answer: [
+      { type: "p", bold: "Hirly ist für Jobsuchende gemacht, die keine Zeit mit wiederholten Bewerbungsaufgaben verbringen möchten." },
+      { type: "p", text: "Nachdem du dein Profil eingerichtet hast, kannst du dich mit einem Wisch oder Klick bewerben. Hirly personalisiert deine Unterlagen, reicht die Bewerbung ein und verfolgt alles automatisch — aus einer einfachen Aktion wird ein vollständiger Bewerbungsprozess." },
+    ],
+  },
+  {
+    id: "how-works",
+    question: "2. Wie funktioniert Hirly?",
+    answer: [
+      { type: "li", parts: [{ text: "Du " }, { bold: "richtest dein Profil einmal ein" }, { text: " — mit deiner Erfahrung, deinen Fähigkeiten und Präferenzen." }] },
+      { type: "li", parts: [{ text: "Wenn du bei einer Stelle swipest, kannst du dich sofort bewerben oder " }, { bold: "geführte, stellenbezogene Fragen" }, { text: " beantworten, die Fähigkeiten und Erfahrungen sichtbar machen, von denen du vielleicht nicht einmal weißt, dass du sie aufgebaut hast." }] },
+      { type: "li", text: "Hirly nutzt diese Informationen, um deinen Lebenslauf und dein Anschreiben zu personalisieren, Bewerbungsfragen auszufüllen und alles für die Einreichung vorzubereiten." },
+      { type: "li", parts: [{ text: "Du " }, { bold: "prüfst, bearbeitest und bewirbst dich" }, { text: " mit einem Wisch oder Klick. Hirly reicht die Bewerbung ein und verfolgt sie für dich." }] },
+    ],
+  },
+  {
+    id: "swipe-apply",
+    question: "3. Wie funktioniert Swipe to Apply / Quick Apply?",
+    answer: [
+      { type: "p", text: "Ganz einfach." },
+      { type: "p", parts: [{ bold: "Wische nach rechts oder tippe auf Bewerben" }, { text: " bei einer Stelle, die dich interessiert, und Hirly übernimmt den Rest. Mit deinem Profil und deinen geführten Angaben personalisiert Hirly deinen Lebenslauf und dein Anschreiben für diese Rolle und bereitet die Bewerbung zur Einreichung vor. Das ist alles." }] },
+    ],
+  },
+  {
+    id: "customize",
+    question: "4. Kann ich meine Bewerbungen anpassen?",
+    answer: [
+      { type: "p", text: "Ja." },
+      { type: "p", parts: [{ text: "Vor der Bewerbung kannst du " }, { bold: "alles prüfen und bearbeiten" }, { text: " — deinen Lebenslauf, dein Anschreiben, Ton und Formulierungen. Hirly hilft dir, schneller voranzukommen, aber du behältst die " }, { bold: "volle Kontrolle" }, { text: " darüber, was eingereicht wird." }] },
+    ],
+  },
+  {
+    id: "job-listings",
+    question: "5. Woher bezieht Hirly Stellenanzeigen?",
+    answer: [
+      { type: "p", parts: [{ text: "Hirly bezieht Stellenanzeigen von " }, { bold: "verifizierten Karriereseiten von Unternehmen" }, { text: ", Jobbörsen und Partnernetzwerken — alle werden täglich aktualisiert." }] },
+      { type: "p", text: "Direkt in Hirly kannst du branchen-, orts- und arbeitsformübergreifend suchen (remote, hybrid oder vor Ort)." },
+    ],
+  },
+  {
+    id: "employers-know",
+    question: "6. Wissen Arbeitgeber, dass ich Hirly genutzt habe?",
+    answer: [
+      { type: "p", text: "Nein." },
+      { type: "p", parts: [{ text: "Hirly erstellt für jede Bewerbung rollenbezogene Lebensläufe und Anschreiben. Arbeitgeber erhalten von dir eine " }, { bold: "sorgfältige, professionelle Bewerbung" }, { text: ", die auf die Stelle zugeschnitten ist." }] },
+    ],
+  },
+  {
+    id: "ats-friendly",
+    question: "7. Sind die von Hirly erstellten Lebensläufe und Anschreiben ATS-freundlich?",
+    answer: [
+      { type: "p", text: "Ja." },
+      { type: "p", parts: [{ text: "Hirly formatiert alles so, dass Arbeitgeber deine Bewerbung problemlos lesen können. " }, { bold: "Du kannst sicher sein: Deine Bewerbung wirkt professionell, sorgfältig und ist bereit für die Prüfung." }] },
+    ],
+  },
+  {
+    id: "technical-issue",
+    question: "8. Was soll ich bei einem technischen Problem tun?",
+    answer: [
+      { type: "p", parts: [{ text: "Du kannst Probleme direkt über " }, { bold: "Einstellungen → Feedback" }, { text: " in der App melden oder uns eine E-Mail an " }, { link: SUPPORT_LINK.link, href: SUPPORT_LINK.href }, { text: "." }] },
+      { type: "p", text: "Unser Team antwortet in der Regel innerhalb von 24 Stunden." },
+    ],
+  },
+];
+
+const FAQ_ES = [
+  {
+    id: "what-is",
+    question: "1. ¿Qué es Hirly?",
+    answer: [
+      { type: "p", bold: "Hirly está pensado para quienes buscan empleo y no quieren dedicar tiempo a tareas repetitivas de solicitud." },
+      { type: "p", text: "Después de configurar tu perfil, puedes postularte con un gesto o clic. Hirly personaliza tus documentos, envía la solicitud y hace seguimiento de todo automáticamente; así, una acción sencilla se convierte en un proceso de solicitud completo." },
+    ],
+  },
+  {
+    id: "how-works",
+    question: "2. ¿Cómo funciona Hirly?",
+    answer: [
+      { type: "li", parts: [{ text: "Tú " }, { bold: "configuras tu perfil una sola vez" }, { text: " con tu experiencia, habilidades y preferencias." }] },
+      { type: "li", parts: [{ text: "Cuando deslizas una oferta, puedes postularte al instante o responder " }, { bold: "preguntas guiadas y específicas para el puesto" }, { text: " que revelan habilidades y experiencias que quizá ni siquiera sabías que habías desarrollado." }] },
+      { type: "li", text: "Hirly usa esa información para personalizar tu currículum y carta de presentación, completar las preguntas de la solicitud y prepararlo todo para el envío." },
+      { type: "li", parts: [{ text: "Tú " }, { bold: "revisas, editas y te postulas" }, { text: " con un gesto o clic. Hirly lo enviará y hará seguimiento por ti." }] },
+    ],
+  },
+  {
+    id: "swipe-apply",
+    question: "3. ¿Cómo funciona Swipe to Apply / Quick Apply?",
+    answer: [
+      { type: "p", text: "Es muy sencillo." },
+      { type: "p", parts: [{ bold: "Desliza hacia la derecha o toca Postularme" }, { text: " en una oferta que te interese y Hirly se encarga del resto. Con tu perfil y las respuestas guiadas, Hirly personaliza tu currículum y carta de presentación para ese puesto y prepara la solicitud para enviarla. Eso es todo." }] },
+    ],
+  },
+  {
+    id: "customize",
+    question: "4. ¿Puedo personalizar mis solicitudes?",
+    answer: [
+      { type: "p", text: "Sí." },
+      { type: "p", parts: [{ text: "Antes de postularte, puedes " }, { bold: "revisar y editarlo todo" }, { text: " — tu currículum, carta de presentación, tono y redacción. Hirly te ayuda a avanzar más rápido, pero tienes el " }, { bold: "control total" }, { text: " sobre lo que se envía." }] },
+    ],
+  },
+  {
+    id: "job-listings",
+    question: "5. ¿De dónde obtiene Hirly las ofertas de empleo?",
+    answer: [
+      { type: "p", parts: [{ text: "Hirly recopila ofertas de " }, { bold: "sitios de empleo verificados de empresas" }, { text: ", bolsas de empleo y redes de socios, todo actualizado a diario." }] },
+      { type: "p", text: "Puedes buscar por sectores, ubicaciones y modalidades de trabajo (remoto, híbrido o presencial) directamente en Hirly." },
+    ],
+  },
+  {
+    id: "employers-know",
+    question: "6. ¿Sabrán los empleadores que usé Hirly?",
+    answer: [
+      { type: "p", text: "No." },
+      { type: "p", parts: [{ text: "Hirly prepara currículums y cartas de presentación específicos para cada puesto. Lo que reciben los empleadores es una " }, { bold: "solicitud cuidada y profesional" }, { text: " adaptada al puesto." }] },
+    ],
+  },
+  {
+    id: "ats-friendly",
+    question: "7. ¿Los currículums y cartas de presentación de Hirly son compatibles con ATS?",
+    answer: [
+      { type: "p", text: "Sí." },
+      { type: "p", parts: [{ text: "Hirly da formato a todo para que los empleadores puedan leer fácilmente tu solicitud. " }, { bold: "Puedes estar tranquilo: tu solicitud se ve cuidada, profesional y lista para revisarse." }] },
+    ],
+  },
+  {
+    id: "technical-issue",
+    question: "8. ¿Qué debo hacer si tengo un problema técnico?",
+    answer: [
+      { type: "p", parts: [{ text: "Puedes informar de cualquier problema directamente desde " }, { bold: "Ajustes → Comentarios" }, { text: " en la aplicación o escribirnos a " }, { link: SUPPORT_LINK.link, href: SUPPORT_LINK.href }, { text: "." }] },
+      { type: "p", text: "Nuestro equipo suele responder en un plazo de 24 horas." },
+    ],
+  },
+];
+
+const FAQ_IT = [
+  {
+    id: "what-is",
+    question: "1. Che cos'è Hirly?",
+    answer: [
+      { type: "p", bold: "Hirly è pensato per chi cerca lavoro e non vuole perdere tempo con attività di candidatura ripetitive." },
+      { type: "p", text: "Dopo aver configurato il tuo profilo, puoi candidarti con uno swipe o un clic. Hirly personalizza i tuoi documenti, invia la candidatura e tiene traccia di tutto automaticamente: un'azione semplice diventa un processo di candidatura completo." },
+    ],
+  },
+  {
+    id: "how-works",
+    question: "2. Come funziona Hirly?",
+    answer: [
+      { type: "li", parts: [{ text: "Tu " }, { bold: "configuri il tuo profilo una sola volta" }, { text: " con esperienza, competenze e preferenze." }] },
+      { type: "li", parts: [{ text: "Quando fai swipe su un'offerta, puoi candidarti subito o rispondere a " }, { bold: "domande guidate e specifiche per il ruolo" }, { text: " che mettono in luce competenze ed esperienze che potresti non renderti nemmeno conto di aver sviluppato." }] },
+      { type: "li", text: "Hirly usa queste informazioni per personalizzare curriculum e lettera di presentazione, compilare le domande di candidatura e preparare tutto per l'invio." },
+      { type: "li", parts: [{ text: "Tu " }, { bold: "rivedi, modifichi e ti candidi" }, { text: " con uno swipe o un clic. Hirly invierà la candidatura e ne terrà traccia per te." }] },
+    ],
+  },
+  {
+    id: "swipe-apply",
+    question: "3. Come funziona Swipe to Apply / Quick Apply?",
+    answer: [
+      { type: "p", text: "È semplice." },
+      { type: "p", parts: [{ bold: "Fai swipe a destra o tocca Candidati" }, { text: " su un'offerta che ti interessa e Hirly fa il resto. Usando il tuo profilo e le risposte guidate, Hirly personalizza curriculum e lettera di presentazione per quel ruolo e prepara la candidatura per l'invio. Tutto qui." }] },
+    ],
+  },
+  {
+    id: "customize",
+    question: "4. Posso personalizzare le mie candidature?",
+    answer: [
+      { type: "p", text: "Sì." },
+      { type: "p", parts: [{ text: "Prima di candidarti, puoi " }, { bold: "rivedere e modificare tutto" }, { text: " — curriculum, lettera di presentazione, tono e formulazioni. Hirly ti aiuta a fare prima, ma mantieni il " }, { bold: "controllo totale" }, { text: " su ciò che viene inviato." }] },
+    ],
+  },
+  {
+    id: "job-listings",
+    question: "5. Dove trova Hirly gli annunci di lavoro?",
+    answer: [
+      { type: "p", parts: [{ text: "Hirly raccoglie annunci da " }, { bold: "siti di carriera aziendali verificati" }, { text: ", portali di lavoro e reti di partner, tutti aggiornati ogni giorno." }] },
+      { type: "p", text: "Puoi cercare per settore, località e modalità di lavoro (da remoto, ibrido o in sede) direttamente in Hirly." },
+    ],
+  },
+  {
+    id: "employers-know",
+    question: "6. I datori di lavoro sapranno che ho usato Hirly?",
+    answer: [
+      { type: "p", text: "No." },
+      { type: "p", parts: [{ text: "Hirly prepara curriculum e lettere di presentazione specifici per ogni ruolo. Ciò che i datori di lavoro ricevono da te è una " }, { bold: "candidatura curata e professionale" }, { text: " su misura per il ruolo." }] },
+    ],
+  },
+  {
+    id: "ats-friendly",
+    question: "7. I curriculum e le lettere di presentazione generati da Hirly sono compatibili con gli ATS?",
+    answer: [
+      { type: "p", text: "Sì." },
+      { type: "p", parts: [{ text: "Hirly formatta tutto perché la tua candidatura possa essere letta facilmente dai datori di lavoro. " }, { bold: "Puoi stare tranquillo: la tua candidatura è curata, professionale e pronta per essere esaminata." }] },
+    ],
+  },
+  {
+    id: "technical-issue",
+    question: "8. Cosa devo fare se riscontro un problema tecnico?",
+    answer: [
+      { type: "p", parts: [{ text: "Puoi segnalare qualsiasi problema direttamente tramite " }, { bold: "Impostazioni → Feedback" }, { text: " nell'app oppure scriverci a " }, { link: SUPPORT_LINK.link, href: SUPPORT_LINK.href }, { text: "." }] },
+      { type: "p", text: "Il nostro team risponde di solito entro 24 ore." },
+    ],
+  },
+];
+
 export function getLandingFaq(lang) {
-  return lang === "fr" ? FAQ_FR : FAQ_EN;
+  const locale = normalizeLandingFaqLocale(lang);
+  if (locale === "fr") return FAQ_FR;
+  if (locale === "de") return FAQ_DE;
+  if (locale === "es") return FAQ_ES;
+  if (locale === "it") return FAQ_IT;
+  return FAQ_EN;
+}
+
+export function getLandingFaqHeading(lang) {
+  const locale = normalizeLandingFaqLocale(lang);
+  if (locale === "fr") return "Questions fréquentes";
+  if (locale === "de") return "Häufig gestellte Fragen";
+  if (locale === "es") return "Preguntas frecuentes";
+  if (locale === "it") return "Domande frequenti";
+  return "Frequently asked questions";
+}
+
+function normalizeLandingFaqLocale(lang) {
+  return String(lang || "").trim().toLowerCase().split("-")[0];
 }

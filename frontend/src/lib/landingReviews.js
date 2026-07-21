@@ -1,5 +1,7 @@
 export function getLandingReviewsCopy(lang) {
-  if (lang === "fr") {
+  const locale = normalizeLandingReviewsLocale(lang);
+
+  if (locale === "fr") {
     return {
       badge: "Vrais avis. Vraies personnes.",
       title: "De vrais résultats, de vrais candidats.",
@@ -8,6 +10,9 @@ export function getLandingReviewsCopy(lang) {
         "Ce que disent les candidats qui utilisent Hirly — sans filtre, juste des retours honnêtes.",
     };
   }
+  if (locale === "de") return getGermanReviewsCopy();
+  if (locale === "es") return getSpanishReviewsCopy();
+  if (locale === "it") return getItalianReviewsCopy();
   return {
     badge: "Real feedback. Real people.",
     title: "Real results from real candidates.",
@@ -17,12 +22,49 @@ export function getLandingReviewsCopy(lang) {
 }
 
 export function getLandingReviewColumns(lang) {
-  return lang === "fr" ? getFrenchReviewColumns() : getEnglishReviewColumns();
+  const locale = normalizeLandingReviewsLocale(lang);
+
+  if (locale === "fr") return getFrenchReviewColumns();
+  if (locale === "de") return getGermanReviewColumns();
+  if (locale === "es") return getSpanishReviewColumns();
+  if (locale === "it") return getItalianReviewColumns();
+  return getEnglishReviewColumns();
 }
 
 export function getLandingReviewsAll(lang) {
   const [leftColumn, rightColumn] = getLandingReviewColumns(lang);
   return [...leftColumn, ...rightColumn];
+}
+
+function normalizeLandingReviewsLocale(lang) {
+  return String(lang || "").trim().toLowerCase().split("-")[0];
+}
+
+function getGermanReviewsCopy() {
+  return {
+    badge: "Echte Bewertungen. Echte Menschen.",
+    title: "Echte Ergebnisse von echten Bewerber:innen.",
+    titleAccent: "Mit Hirly haben sie schneller einen Job gefunden.",
+    subtitle: "Das sagen Bewerber:innen über Hirly — ehrlich, ungefiltert und aus eigener Erfahrung.",
+  };
+}
+
+function getSpanishReviewsCopy() {
+  return {
+    badge: "Opiniones reales. Personas reales.",
+    title: "Resultados reales de candidatos reales.",
+    titleAccent: "Encontraron trabajo más rápido con Hirly.",
+    subtitle: "Lo que cuentan los candidatos que usan Hirly: opiniones sinceras y sin filtros.",
+  };
+}
+
+function getItalianReviewsCopy() {
+  return {
+    badge: "Recensioni vere. Persone vere.",
+    title: "Risultati veri da candidati veri.",
+    titleAccent: "Con Hirly hanno trovato lavoro più velocemente.",
+    subtitle: "Cosa dicono i candidati che usano Hirly: esperienze sincere, senza filtri.",
+  };
 }
 
 function getFrenchReviewColumns() {
@@ -128,6 +170,26 @@ function getFrenchReviewColumns() {
         },
       ],
     ];
+}
+
+function getGermanReviewColumns() {
+  return getEnglishReviewColumnsWithVerifiedLabel("Verifizierte:r Nutzer:in");
+}
+
+function getSpanishReviewColumns() {
+  return getEnglishReviewColumnsWithVerifiedLabel("Usuario verificado");
+}
+
+function getItalianReviewColumns() {
+  return getEnglishReviewColumnsWithVerifiedLabel("Utente verificato");
+}
+
+function getEnglishReviewColumnsWithVerifiedLabel(verifiedUserLabel) {
+  return getEnglishReviewColumns().map((column) =>
+    column.map((review) =>
+      review.id === "verified" ? { ...review, name: verifiedUserLabel } : review
+    )
+  );
 }
 
 function getEnglishReviewColumns() {

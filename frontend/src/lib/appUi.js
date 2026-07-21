@@ -2111,7 +2111,9 @@ export const APP_UI = {
 
 export function appT(lang, key, vars = {}) {
   const parts = key.split(".");
-  let cur = APP_UI[lang] || APP_UI.en;
+  // Product copy must always resolve from the selected locale's own catalog.
+  // In particular, DE/ES/IT must never silently fall back to EN or FR.
+  let cur = isAppLanguage(lang) ? APP_UI[lang] : undefined;
   for (const part of parts) {
     cur = cur?.[part];
   }

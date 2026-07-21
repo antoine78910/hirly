@@ -1,7 +1,18 @@
-export const TRAINING_LOCALES = ["en", "fr"];
+/**
+ * Locale prefixes recognized by the training router.  This is deliberately
+ * wider than TRAINING_CONTENT_LOCALES: a recognized, not-yet-translated
+ * locale must render an explicit unavailable state instead of falling back to
+ * French.
+ */
+export const TRAINING_LOCALES = ["en", "fr", "de", "es", "it"];
+export const TRAINING_CONTENT_LOCALES = ["en", "fr"];
 
 export function isTrainingLocale(value) {
   return TRAINING_LOCALES.includes(value);
+}
+
+export function hasTrainingContent(value) {
+  return TRAINING_CONTENT_LOCALES.includes(value);
 }
 
 export function isTrainingRoute(pathname) {
@@ -12,7 +23,7 @@ export function isTrainingRoute(pathname) {
 }
 
 export function parseTrainingLocale(pathname) {
-  const match = pathname.match(/^\/(en|fr)\/training(?:\/|$)/);
+  const match = pathname.match(/^\/(en|fr|de|es|it)\/training(?:\/|$)/);
   return match ? match[1] : null;
 }
 
@@ -47,9 +58,10 @@ export function trainingModulePath(locale, courseId, moduleId, sectionId) {
 }
 
 export function replaceTrainingLocale(pathname, search, nextLocale) {
-  const loc = isTrainingLocale(nextLocale) ? nextLocale : "fr";
-  if (pathname.match(/^\/(en|fr)\/training/)) {
-    return pathname.replace(/^\/(en|fr)/, `/${loc}`) + (search || "");
+  if (!isTrainingLocale(nextLocale)) return null;
+  const loc = nextLocale;
+  if (pathname.match(/^\/(en|fr|de|es|it)\/training(?:\/|$)/)) {
+    return pathname.replace(/^\/(en|fr|de|es|it)/, `/${loc}`) + (search || "");
   }
   if (pathname === "/training") return trainingPath(loc) + (search || "");
   const courseMatch = pathname.match(/^\/training\/([^/]+)$/);

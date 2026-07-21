@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ChevronDown } from "lucide-react";
-import { getLandingFaq } from "../../lib/landingFaq";
+import { getLandingFaq, getLandingFaqHeading } from "../../lib/landingFaq";
 
 function FaqPart({ part }) {
   if (part.bold) return <strong>{part.bold}</strong>;
@@ -99,7 +99,7 @@ export default function LandingFaq({ lang }) {
   return (
     <section className="mx-auto max-w-3xl px-6 pb-20" data-testid="landing-faq">
       <h2 className="mb-8 text-center font-display text-3xl font-black tracking-tighter text-zinc-900 sm:text-4xl">
-        {lang === "fr" ? "Questions fréquentes" : "Frequently asked questions"}
+        {getLandingFaqHeading(lang)}
       </h2>
       <div className="rounded-[14px] border border-zinc-200/80 bg-white p-3 shadow-sm sm:p-4">
         <ul className="flex flex-col gap-2">

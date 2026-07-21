@@ -1,10 +1,12 @@
 import { useEffect } from "react";
 
 /**
- * Updates document.title, meta description, canonical, and injects JSON-LD.
+ * Updates document.title, meta description, canonical, alternate locale links, and JSON-LD.
+ * `canonical` accepts an internal pathname (legacy callers) or an absolute HTTPS URL;
+ * alternate hrefs are always supplied as absolute URLs by publicLocaleRoutes.
  * Cleans up on unmount.
  */
-export default function SEOHead({ title, description, keywords, canonical, jsonLd }) {
+export default function SEOHead({ title, description, keywords, canonical, alternates, jsonLd }) {
   useEffect(() => {
     const prev = document.title;
     document.title = title;
@@ -37,12 +39,26 @@ export default function SEOHead({ title, description, keywords, canonical, jsonL
       document.head.appendChild(link);
     }
     const prev = link.getAttribute("href");
-    link.setAttribute("href", `https://tryhirly.com${canonical}`);
+    link.setAttribute("href", canonical.startsWith("http") ? canonical : `https://tryhirly.com${canonical}`);
     return () => {
       if (created) link.remove();
       else link.setAttribute("href", prev ?? "");
     };
   }, [canonical]);
+
+  useEffect(() => {
+    if (!alternates?.length) return undefined;
+    const links = alternates.map(({ hrefLang, href }) => {
+      const link = document.createElement("link");
+      link.setAttribute("rel", "alternate");
+      link.setAttribute("hreflang", hrefLang);
+      link.setAttribute("href", href);
+      link.setAttribute("data-hirly-seo-alternate", "true");
+      document.head.appendChild(link);
+      return link;
+    });
+    return () => links.forEach((link) => link.remove());
+  }, [alternates]);
 
   useEffect(() => {
     if (!keywords) return;

@@ -14,6 +14,7 @@ const COPY = {
     description:
       "We've improved Hirly since you opened the app. Refresh now to get the latest fixes and features.",
     action: "OK, refresh Hirly",
+    cancel: "Not now",
   },
   fr: {
     eyebrow: "Une nouvelle version de Hirly est disponible",
@@ -21,6 +22,7 @@ const COPY = {
     description:
       "Hirly a été amélioré depuis l'ouverture de l'application. Actualisez maintenant pour bénéficier des derniers correctifs et fonctionnalités.",
     action: "OK, actualiser Hirly",
+    cancel: "Pas maintenant",
   },
 } as const;
 
@@ -53,6 +55,10 @@ export default function FrontendVersionChecker({
     }
   }, [checkForUpdate]);
 
+  const closeUpdateDialog = useCallback(() => {
+    setUpdateAvailable(false);
+  }, []);
+
   useEffect(() => {
     void check();
     const interval = window.setInterval(() => void check(), intervalMs);
@@ -74,7 +80,12 @@ export default function FrontendVersionChecker({
   const copy = COPY[lang === "fr" ? "fr" : "en"];
 
   return (
-    <AlertDialog.Root open={updateAvailable}>
+    <AlertDialog.Root
+      open={updateAvailable}
+      onOpenChange={(open) => {
+        if (!open) closeUpdateDialog();
+      }}
+    >
       <AlertDialog.Portal>
         <AlertDialog.Overlay className="fixed inset-0 z-50 bg-black/80 data-[state=open]:animate-in data-[state=open]:fade-in-0" />
         <AlertDialog.Content
@@ -99,7 +110,7 @@ export default function FrontendVersionChecker({
             </div>
           </div>
 
-          <div className="flex px-6 py-5 sm:justify-center">
+          <div className="flex flex-col gap-3 px-6 py-5 sm:flex-row sm:justify-center">
             <AlertDialog.Action
               className="gradient-linkedin inline-flex h-11 w-full items-center justify-center gap-2 rounded-full px-6 text-sm font-bold text-white shadow-sm transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2 sm:w-auto sm:min-w-[220px]"
               data-testid="frontend-update-refresh"
@@ -108,6 +119,13 @@ export default function FrontendVersionChecker({
               <RefreshCw aria-hidden="true" className="h-4 w-4" />
               {copy.action}
             </AlertDialog.Action>
+            <AlertDialog.Cancel
+              className="inline-flex h-11 w-full items-center justify-center rounded-full px-6 text-sm font-bold text-slate-600 transition-colors hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2 sm:w-auto"
+              data-testid="frontend-update-cancel"
+              onClick={closeUpdateDialog}
+            >
+              {copy.cancel}
+            </AlertDialog.Cancel>
           </div>
         </AlertDialog.Content>
       </AlertDialog.Portal>

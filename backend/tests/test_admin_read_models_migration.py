@@ -10,6 +10,9 @@ SERIALIZATION_UP = (
 SERIALIZATION_DOWN = (
     ROOT / "db/migrations/20260721002200_admin_user_rebuild_serialization.down.sql"
 )
+PRODUCTION_SERIALIZATION_UP = (
+    ROOT.parent / "supabase/migrations/20260721004000_admin_user_rebuild_serialization.sql"
+)
 SEMANTIC_FIXTURE = ROOT / "tests/sql/admin_read_model_semantic_parity_fixture.sql"
 SERVER = ROOT / "server.py"
 
@@ -202,6 +205,18 @@ def test_user_projection_rebuilds_are_serialized_per_user():
     assert "REVOKE ALL ON FUNCTION public.admin_rebuild_users(text[])" in sql
     assert "DROP FUNCTION public.admin_rebuild_users(text[])" in down
     assert "RENAME TO admin_rebuild_users" in down
+
+
+def test_user_projection_serialization_is_in_the_production_migration_stream():
+    sql = PRODUCTION_SERIALIZATION_UP.read_text()
+
+    assert "to_regprocedure('public.admin_rebuild_users_unlocked(text[])')" in sql
+    assert "RENAME TO admin_rebuild_users_unlocked" in sql
+    assert "CREATE OR REPLACE FUNCTION public.admin_rebuild_users(p_user_ids text[])" in sql
+    assert "pg_advisory_xact_lock" in sql
+    assert "ORDER BY requested.user_id" in sql
+    assert "admin_rebuild_users_unlocked(p_user_ids)" in sql
+    assert "REVOKE ALL ON FUNCTION public.admin_rebuild_users(text[]) FROM PUBLIC" in sql
 
 
 def test_readiness_requires_two_clean_reconciliations_with_an_intervening_write():

@@ -29,6 +29,15 @@ describe("app UI locales", () => {
     }
   });
 
+  test("uses only explicit locale catalogs and rejects unsupported locales", () => {
+    expect(appT("de", "common.back")).toBe("Zurück");
+    expect(appT("es", "common.back")).toBe("Atrás");
+    expect(appT("it", "common.back")).toBe("Indietro");
+
+    expect(appT("pt", "common.back")).toBe("common.back");
+    expect(appT(undefined, "common.back")).toBe("common.back");
+  });
+
   test("accepts stored DE, ES, and IT preferences", () => {
     for (const locale of ["de", "es", "it"]) {
       localStorage.setItem("hirly_app_lang", locale);

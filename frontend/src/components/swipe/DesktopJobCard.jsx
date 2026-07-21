@@ -21,7 +21,7 @@ import {
 } from "../../lib/jobDisplayUtils";
 import JobRomeProfile from "./JobRomeProfile";
 import JobOfferDetails from "./JobOfferDetails";
-import JobCardHighlights, { JobCardMatchBadge } from "./JobCardHighlights";
+import { JobCardMatchBadge } from "./JobCardHighlights";
 import { translateLocationLabel } from "../../lib/localizedDisplay";
 
 function formatPosted(iso, t) {
@@ -163,8 +163,6 @@ export default function DesktopJobCard({ job, theme, t, lang }) {
             ))}
           </div>
         ) : null}
-
-        <JobCardHighlights job={job} t={t} lang={lang} theme={theme} max={3} />
 
         <JobOfferDetails job={job} t={t} lang={lang} theme={theme} />
 

@@ -3,15 +3,15 @@ import { trainingT } from "../lib/trainingUi";
 
 const TrainingLocaleContext = createContext(null);
 
-/** Training academy is French-only. */
-export function TrainingLocaleProvider({ children }) {
-  const lang = "fr";
+/** Locale is supplied by the route; only catalog-backed locales may mount this provider. */
+export function TrainingLocaleProvider({ children, locale = "fr" }) {
+  const lang = locale;
 
   const setLang = useCallback(() => {}, []);
 
-  const t = useCallback((key, vars) => trainingT(lang, key, vars), []);
+  const t = useCallback((key, vars) => trainingT(lang, key, vars), [lang]);
 
-  const value = useMemo(() => ({ lang, setLang, t }), [setLang, t]);
+  const value = useMemo(() => ({ lang, setLang, t }), [lang, setLang, t]);
 
   return (
     <TrainingLocaleContext.Provider value={value}>

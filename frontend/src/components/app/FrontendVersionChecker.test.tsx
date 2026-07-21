@@ -55,6 +55,7 @@ describe("FrontendVersionChecker", () => {
 
     expect(document.body.textContent).toContain("Une nouvelle version de Hirly");
     expect(document.body.textContent).toContain("OK, actualiser Hirly");
+    expect(document.body.textContent).toContain("Pas maintenant");
     expect(onRefresh).not.toHaveBeenCalled();
 
     const button = document.querySelector(
@@ -62,6 +63,63 @@ describe("FrontendVersionChecker", () => {
     ) as HTMLButtonElement;
     act(() => button.click());
     expect(onRefresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("lets a user dismiss the update for this session without checking or reopening again", async () => {
+    const checkForUpdate = jest.fn().mockResolvedValue(true);
+    await act(async () => {
+      root.render(
+        <FrontendVersionChecker
+          checkForUpdate={checkForUpdate}
+          intervalMs={1000}
+        />,
+      );
+    });
+
+    const cancel = document.querySelector(
+      "[data-testid='frontend-update-cancel']",
+    ) as HTMLButtonElement;
+    act(() => cancel.click());
+
+    expect(document.querySelector("[data-testid='frontend-update-dialog']")).toBeNull();
+
+    await act(async () => {
+      jest.advanceTimersByTime(1000);
+      window.dispatchEvent(new Event("focus"));
+      window.dispatchEvent(new Event("online"));
+      document.dispatchEvent(new Event("visibilitychange"));
+      await Promise.resolve();
+    });
+
+    expect(checkForUpdate).toHaveBeenCalledTimes(1);
+    expect(document.querySelector("[data-testid='frontend-update-dialog']")).toBeNull();
+  });
+
+  it("lets a user dismiss the update with Escape without checking or reopening again", async () => {
+    const checkForUpdate = jest.fn().mockResolvedValue(true);
+    await act(async () => {
+      root.render(
+        <FrontendVersionChecker
+          checkForUpdate={checkForUpdate}
+          intervalMs={1000}
+        />,
+      );
+    });
+
+    act(() => {
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    });
+
+    expect(document.querySelector("[data-testid='frontend-update-dialog']")).toBeNull();
+
+    await act(async () => {
+      jest.advanceTimersByTime(1000);
+      window.dispatchEvent(new Event("focus"));
+      await Promise.resolve();
+    });
+
+    expect(checkForUpdate).toHaveBeenCalledTimes(1);
+    expect(document.querySelector("[data-testid='frontend-update-dialog']")).toBeNull();
   });
 
   it("checks again on the polling interval without requiring navigation", async () => {

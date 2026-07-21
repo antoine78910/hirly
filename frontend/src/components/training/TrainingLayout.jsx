@@ -1,23 +1,16 @@
-import { Navigate, useLocation, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { TrainingLocaleProvider } from "../../context/TrainingLocaleContext";
-import { isTrainingLocale, trainingPath } from "../../lib/trainingRoutes";
+import { hasTrainingContent, isTrainingLocale } from "../../lib/trainingRoutes";
+import TrainingLocaleUnavailable from "./TrainingLocaleUnavailable";
 
 export default function TrainingLayout({ children }) {
   const { locale } = useParams();
-  const location = useLocation();
-
-  if (locale === "en") {
-    return (
-      <Navigate
-        to={`${location.pathname.replace(/^\/en\//, "/fr/")}${location.search}`}
-        replace
-      />
-    );
-  }
 
   if (!isTrainingLocale(locale)) {
-    return <Navigate to={trainingPath("fr")} replace />;
+    return <TrainingLocaleUnavailable />;
   }
 
-  return <TrainingLocaleProvider>{children}</TrainingLocaleProvider>;
+  if (!hasTrainingContent(locale)) return <TrainingLocaleUnavailable />;
+
+  return <TrainingLocaleProvider locale={locale}>{children}</TrainingLocaleProvider>;
 }

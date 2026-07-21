@@ -123,6 +123,104 @@ export const PROFILE_SETUP_PHASES_FR = [
 ];
 
 /** Personalized “Welcome” cards shown after CV upload, before phone mockup steps. */
+const ONBOARDING_WELCOME_COPY = {
+  fr: {
+    primaryRole: "vos postes cibles",
+    industryHint: "les meilleures entreprises",
+    items: [
+      {
+        title: "Boostez votre carrière",
+        body: ({ salaryLabel }) => `Nous vous aiderons à cibler des équipes en pleine croissance et des postes alignés avec votre objectif de ${salaryLabel}+.` ,
+      },
+      {
+        title: "Candidatez à la vitesse de la lumière",
+        body: ({ primaryRole }) => `Notre agent IA automatise les candidatures pour ${primaryRole} — fini le copier-coller.`,
+      },
+      {
+        title: "Décrochez votre prochaine victoire",
+        body: ({ industryHint, interviewsPerWeek }) => `Swipez sur les offres ${industryHint}. Nous gérons la paperasse pendant que vous visez ${interviewsPerWeek} entretiens par semaine.`,
+      },
+    ],
+  },
+  en: {
+    primaryRole: "your target roles",
+    industryHint: "top companies",
+    items: [
+      {
+        title: "Scale Your Career Fast",
+        body: ({ salaryLabel }) => `We'll help you target high-growth teams and roles aligned with your ${salaryLabel}+ salary goal.`,
+      },
+      {
+        title: "Apply at Light Speed",
+        body: ({ primaryRole }) => `Our AI agent automates tailored applications for ${primaryRole} — no more copy-pasting the same answers.`,
+      },
+      {
+        title: "Land Your Next Win",
+        body: ({ industryHint, interviewsPerWeek }) => `Swipe right on ${industryHint} matches. We handle the paperwork while you focus on landing ${interviewsPerWeek} interviews per week.`,
+      },
+    ],
+  },
+  de: {
+    primaryRole: "deine Zielpositionen",
+    industryHint: "Top-Unternehmen",
+    items: [
+      {
+        title: "Bring deine Karriere voran",
+        body: ({ salaryLabel }) => `Wir helfen dir, wachstumsstarke Teams und Positionen zu finden, die zu deinem Gehaltsziel von ${salaryLabel}+ passen.`,
+      },
+      {
+        title: "Bewirb dich in Lichtgeschwindigkeit",
+        body: ({ primaryRole }) => `Unser KI-Agent automatisiert maßgeschneiderte Bewerbungen für ${primaryRole} — kein Copy-and-Paste mehr.`,
+      },
+      {
+        title: "Sichere dir deinen nächsten Erfolg",
+        body: ({ industryHint, interviewsPerWeek }) => `Swipe durch passende Stellen bei ${industryHint}. Wir übernehmen den Papierkram, während du ${interviewsPerWeek} Vorstellungsgespräche pro Woche ansteuerst.`,
+      },
+    ],
+  },
+  es: {
+    primaryRole: "tus puestos objetivo",
+    industryHint: "las mejores empresas",
+    items: [
+      {
+        title: "Impulsa tu carrera",
+        body: ({ salaryLabel }) => `Te ayudaremos a encontrar equipos en crecimiento y puestos acordes con tu objetivo salarial de ${salaryLabel}+.`,
+      },
+      {
+        title: "Solicita empleo a toda velocidad",
+        body: ({ primaryRole }) => `Nuestro agente de IA automatiza las solicitudes personalizadas para ${primaryRole}; se acabó copiar y pegar las mismas respuestas.`,
+      },
+      {
+        title: "Consigue tu próximo logro",
+        body: ({ industryHint, interviewsPerWeek }) => `Desliza entre ofertas de ${industryHint}. Nosotros nos ocupamos del papeleo mientras buscas conseguir ${interviewsPerWeek} entrevistas por semana.`,
+      },
+    ],
+  },
+  it: {
+    primaryRole: "i tuoi ruoli ideali",
+    industryHint: "le migliori aziende",
+    items: [
+      {
+        title: "Fai crescere la tua carriera",
+        body: ({ salaryLabel }) => `Ti aiuteremo a puntare a team in crescita e ruoli in linea con il tuo obiettivo di stipendio di ${salaryLabel}+.`,
+      },
+      {
+        title: "Candidati alla velocità della luce",
+        body: ({ primaryRole }) => `Il nostro agente IA automatizza le candidature su misura per ${primaryRole}: niente più copia e incolla.`,
+      },
+      {
+        title: "Conquista il tuo prossimo traguardo",
+        body: ({ industryHint, interviewsPerWeek }) => `Scorri le offerte di ${industryHint}. Noi gestiamo la burocrazia mentre punti a ${interviewsPerWeek} colloqui a settimana.`,
+      },
+    ],
+  },
+};
+
+function onboardingCopyLocale(lang) {
+  const locale = typeof lang === "string" ? lang.toLowerCase().split("-")[0] : "";
+  return ONBOARDING_WELCOME_COPY[locale] ? locale : "en";
+}
+
 export function buildProfileWelcomeItems({
   salaryMin,
   selectedRoles = [],
@@ -131,56 +229,32 @@ export function buildProfileWelcomeItems({
   interviewsPerWeek = 4,
   lang = "fr",
 }) {
-  const salaryLabel = formatSalary(salaryMin, lang);
-  const primaryRole = selectedRoles[0] || (lang === "fr" ? "vos postes cibles" : "your target roles");
+  const locale = onboardingCopyLocale(lang);
+  const copy = ONBOARDING_WELCOME_COPY[locale];
+  const salaryLabel = formatSalary(salaryMin, locale);
+  const primaryRole = selectedRoles[0] || copy.primaryRole;
   const categoryLabels = categories
     .map((id) => categoryOptions.find((c) => c.id === id)?.label)
     .filter(Boolean);
   const industryHint = categoryLabels.length
     ? categoryLabels.slice(0, 2).join(" & ")
-    : (lang === "fr" ? "les meilleures entreprises" : "top companies");
+    : copy.industryHint;
 
-  if (lang === "fr") {
-    return [
-      {
-        title: "Boostez votre carrière",
-        body: `Nous vous aiderons à cibler des équipes en pleine croissance et des postes alignés avec votre objectif de ${salaryLabel}+.`,
-      },
-      {
-        title: "Candidatez à la vitesse de la lumière",
-        body: `Notre agent IA automatise les candidatures pour ${primaryRole} — fini le copier-coller.`,
-      },
-      {
-        title: "Décrochez votre prochaine victoire",
-        body: `Swipez sur les offres ${industryHint}. Nous gérons la paperasse pendant que vous visez ${interviewsPerWeek} entretiens par semaine.`,
-      },
-    ];
-  }
-
-  return [
-    {
-      title: "Scale Your Career Fast",
-      body: `We'll help you target high-growth teams and roles aligned with your ${salaryLabel}+ salary goal.`,
-    },
-    {
-      title: "Apply at Light Speed",
-      body: `Our AI agent automates tailored applications for ${primaryRole} — no more copy-pasting the same answers.`,
-    },
-    {
-      title: "Land Your Next Win",
-      body: `Swipe right on ${industryHint} matches. We handle the paperwork while you focus on landing ${interviewsPerWeek} interviews per week.`,
-    },
-  ];
+  const values = { salaryLabel, primaryRole, industryHint, interviewsPerWeek };
+  return copy.items.map(({ title, body }) => ({ title, body: body(values) }));
 }
 
 /** Hero tagline — final pricing showcase step only (once, in page content). */
 export const ONBOARDING_VALUE_TAGLINE = {
   fr: "2× plus d'entretiens. 5× moins d'efforts.",
   en: "2× more interviews. 5× less effort.",
+  de: "2× mehr Vorstellungsgespräche. 5× weniger Aufwand.",
+  es: "2× más entrevistas. 5× menos esfuerzo.",
+  it: "2× più colloqui. 5× meno impegno.",
 };
 
 export function getOnboardingValueTagline(lang = "fr") {
-  return ONBOARDING_VALUE_TAGLINE[lang === "fr" ? "fr" : "en"];
+  return ONBOARDING_VALUE_TAGLINE[onboardingCopyLocale(lang)];
 }
 
 /** Steps from profile welcome through pricing (preview / dev shortcuts). */
