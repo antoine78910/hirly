@@ -72,7 +72,9 @@ export async function runCli(
   }
   if (command.type === "enqueue-sprout") {
     await dependencies.store.assertProviderRunnable("sprout");
-    assertProviderTransportActive("sprout");
+    // Sprout's live HTTP transport is constructed per task from the
+    // activation record and runtime credentials; the static provider module
+    // intentionally remains disabled-authenticated-api for safety.
     const input = enqueueRunSchema.parse({
       kind: "provider_ingestion",
       provider: "sprout",
