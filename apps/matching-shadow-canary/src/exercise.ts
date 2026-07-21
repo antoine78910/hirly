@@ -93,12 +93,22 @@ function rate(count: number, total: number): number {
   return total === 0 ? 0 : Number((count / total).toFixed(6));
 }
 
-function parityRatio(legacy: OnlineMatchResponse, onlineV2: OnlineMatchResponse): number {
+function parityRatio(
+  legacy: OnlineMatchResponse,
+  onlineV2: OnlineMatchResponse,
+  onlineV2Domain: readonly OnlineV2DomainRecord[],
+): number {
   const legacyIds = new Set(legacy.results.map((result) => result.canonicalGroupId));
   const v2Ids = new Set(onlineV2.results.map((result) => result.canonicalGroupId));
-  const union = new Set([...legacyIds, ...v2Ids]);
+  const eligibleDomainIds = new Set(
+    onlineV2Domain
+      .filter((record) => record.eligible)
+      .map((record) => record.canonicalGroupId),
+  );
+  const union = new Set([...legacyIds, ...v2Ids, ...eligibleDomainIds]);
   if (union.size === 0) return 1;
-  const intersection = [...legacyIds].filter((id) => v2Ids.has(id)).length;
+  const intersection = [...legacyIds]
+    .filter((id) => v2Ids.has(id) && eligibleDomainIds.has(id)).length;
   return Number((intersection / union.size).toFixed(6));
 }
 
@@ -173,7 +183,7 @@ export function executeFrozenShadowCanary(
     && candidate.countryCode === input.context.countryCode
     && candidate.roleFamilyId === input.context.roleFamilyId);
   const supply = injected.supplyGates.find((gate) => input.controls.requiredSupplyGates.includes(gate.gateId));
-  const eligibleSetParity = parityRatio(input.legacy, injected.onlineV2);
+  const eligibleSetParity = parityRatio(input.legacy, injected.onlineV2, injected.onlineV2Domain);
   const latencyDeltaMs = injected.onlineV2LatencyMs - input.legacyLatencyMs;
   const legacyErrorRate = rate(input.legacyErrorCount, input.requestCount);
   const onlineV2ErrorRate = rate(injected.onlineV2ErrorCount, input.requestCount);
