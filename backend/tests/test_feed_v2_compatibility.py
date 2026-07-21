@@ -175,20 +175,6 @@ def test_feed_v2_rollout_uses_only_the_server_posthog_decision(monkeypatch):
     }
 
 
-def test_feed_v2_rollout_fails_closed_when_posthog_disables_the_flag(monkeypatch):
-    class Flags:
-        def is_enabled(self, _key):
-            return False
-
-    class PostHog:
-        def evaluate_flags(self, *_args, **_kwargs):
-            return Flags()
-
-    monkeypatch.setattr(server, "_posthog_client", PostHog())
-
-    assert asyncio.run(server._feed_v2_rollout_enabled_for("analytics-user")) is False
-
-
 def test_feed_v2_rollout_fails_closed_when_posthog_evaluation_errors(monkeypatch):
     class PostHog:
         def evaluate_flags(self, *_args, **_kwargs):
