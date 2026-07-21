@@ -778,7 +778,8 @@ class BrowserApplyDriver(ApplyDriver):
         locator_root: Optional[Any] = None,
     ) -> None:
         preview = "(file)" if step.action == "upload" else "[redacted]"
-        loc = await self._first_locator(locator_root or page, step.locators)
+        lookup_root = locator_root if locator_root is not None else page
+        loc = await self._first_locator(lookup_root, step.locators)
         if loc is None:
             evidence.raw.setdefault("unmatched_steps", []).append(step.action)
             await self._log_step(evidence, action=step.action, locators=step.locators,
@@ -835,7 +836,8 @@ class BrowserApplyDriver(ApplyDriver):
         *,
         locator_root: Optional[Any] = None,
     ) -> None:
-        loc = await self._first_locator(locator_root or page, [_SUBMIT_SELECTOR])
+        lookup_root = locator_root if locator_root is not None else page
+        loc = await self._first_locator(lookup_root, [_SUBMIT_SELECTOR])
         if loc is None:
             evidence.raw["submit"] = "button_not_found"
             await self._log_step(evidence, action="submit", locators=[_SUBMIT_SELECTOR],
