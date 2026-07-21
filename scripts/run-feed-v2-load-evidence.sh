@@ -17,6 +17,7 @@ sleep 1
 
 url="postgres://postgres:postgres@127.0.0.1:${port}/${database}"
 psql "$url" -v ON_ERROR_STOP=1 -f backend/db/migrations/20260721002400_candidate_matching_common_schema.sql >/dev/null
+psql "$url" -v ON_ERROR_STOP=1 -f backend/db/migrations/20260721003000_feed_v2_active_recency_indexes.sql >/dev/null
 FEED_V2_EVIDENCE_DATABASE_URL="$url" \
 FEED_V2_EVIDENCE_GENERATED_AT="${FEED_V2_EVIDENCE_GENERATED_AT:-2026-07-21T08:00:00.000Z}" \
 FEED_V2_EVIDENCE_BASELINE_CONCURRENCY="${FEED_V2_EVIDENCE_BASELINE_CONCURRENCY:-16}" \
