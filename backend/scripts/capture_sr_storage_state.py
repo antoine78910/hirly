@@ -175,14 +175,11 @@ async def main() -> None:
         hint_path.write_text(compact, encoding="utf-8")
         print(f"Also wrote compact JSON -> {hint_path}")
         print()
-        bundled = ROOT / "apply_agent" / "data" / "sr_storage_state.json"
-        bundled.write_text(OUT_PATH.read_text(encoding="utf-8"), encoding="utf-8")
-        print(f"Copied into deployed bundle -> {bundled}")
         print()
-        print("Next: commit + push (sticky SID lives in runtime_browser_config.py).")
-        print("  git add apply_agent/data/sr_storage_state.json apply_agent/runtime_browser_config.py")
-        print("  git commit && git push")
-        print("Railway no longer needs BROWSER_STORAGE_STATE_JSON / STICKY_SID in the dashboard.")
+        print("Next: update the approved runtime secret store.")
+        print("  BROWSER_STORAGE_STATE_JSON=<contents of sr-storage-state.railway.txt>")
+        print("  BROWSER_PROXY_STICKY_SID=<current capture SID>")
+        print("Never copy browser storage state or proxy credentials into tracked files.")
 
         await context.close()
         await browser.close()

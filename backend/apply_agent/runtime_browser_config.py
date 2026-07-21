@@ -1,63 +1,81 @@
-"""Committed SmartRecruiters browser runtime defaults (sticky SID + cookies).
+"""Validate browser runtime secrets supplied by the environment.
 
-These ship with the deploy so Railway does not need BROWSER_PROXY_STICKY_SID /
-BROWSER_STORAGE_STATE_JSON in the dashboard. Update the bundled JSON by
-recapturing locally, copying into ``data/sr_storage_state.json``, then push.
-
-NOTE: cookies are session secrets. Prefer a private repo; rotate SID after leaks.
+Browser proxy credentials, sticky-session identifiers, and browser storage state
+must come from an operator-controlled environment or secret store. This module
+intentionally contains no production defaults and never copies secrets into the
+process environment.
 """
 from __future__ import annotations
 
 import json
 import os
-from pathlib import Path
-
-# Sticky PrivateProxy session shared by capture + production headed runs.
-RUNTIME_STICKY_ENABLED = True
-RUNTIME_STICKY_SID = 201
-RUNTIME_STICKY_TTL_MINUTES = 60
-
-# Always use a real Chromium window (Xvfb on Railway). Set True only to debug.
-RUNTIME_HEADLESS = False
-
-# Fallback when Railway/local BROWSER_PROXY is unset (same pack as local capture).
-RUNTIME_BROWSER_PROXY = "jw7ib-fr:fw9fvvdy:edge1-us.privateproxy.me:8888"
-
-_DATA_DIR = Path(__file__).resolve().parent / "data"
-BUNDLED_STORAGE_STATE_PATH = _DATA_DIR / "sr_storage_state.json"
+from collections.abc import Mapping
+from typing import Any
 
 
-def bundled_storage_state_json() -> str:
-    if not BUNDLED_STORAGE_STATE_PATH.exists():
+def _present(source: Mapping[str, str], name: str) -> bool:
+    return bool((source.get(name) or "").strip())
+
+
+def browser_storage_state_json(source: Mapping[str, str] | None = None) -> str:
+    """Return validated inline storage-state JSON, or an empty string.
+
+    File-backed state remains supported through ``BROWSER_STORAGE_STATE`` and is
+    loaded by the browser layer. Supplying both forms is ambiguous and fails
+    closed before a browser is launched.
+    """
+    env = os.environ if source is None else source
+    inline = (env.get("BROWSER_STORAGE_STATE_JSON") or "").strip()
+    path = (env.get("BROWSER_STORAGE_STATE") or "").strip()
+    if inline and path:
+        raise RuntimeError(
+            "configure only one of BROWSER_STORAGE_STATE_JSON or BROWSER_STORAGE_STATE"
+        )
+    if not inline:
         return ""
-    raw = BUNDLED_STORAGE_STATE_PATH.read_text(encoding="utf-8").strip()
-    if not raw:
-        return ""
-    # Normalize to compact single-line JSON for env injection.
     try:
-        return json.dumps(json.loads(raw), ensure_ascii=False, separators=(",", ":"))
-    except Exception:
-        return raw
+        parsed: Any = json.loads(inline)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError("BROWSER_STORAGE_STATE_JSON must be valid JSON") from exc
+    if not isinstance(parsed, dict):
+        raise RuntimeError("BROWSER_STORAGE_STATE_JSON must contain a JSON object")
+    cookies = parsed.get("cookies", [])
+    origins = parsed.get("origins", [])
+    if not isinstance(cookies, list) or not isinstance(origins, list):
+        raise RuntimeError(
+            "BROWSER_STORAGE_STATE_JSON cookies and origins must be arrays"
+        )
+    return inline
+
+
+def validate_runtime_browser_environment(
+    source: Mapping[str, str] | None = None,
+) -> None:
+    """Fail closed on partial or ambiguous secret-backed browser settings."""
+    env = os.environ if source is None else source
+    browser_storage_state_json(env)
+
+    sticky_enabled = (env.get("BROWSER_PROXY_STICKY") or "").strip().lower()
+    if sticky_enabled in {"1", "true", "yes", "on"} and not _present(
+        env, "BROWSER_PROXY_STICKY_SID"
+    ):
+        raise RuntimeError(
+            "BROWSER_PROXY_STICKY requires BROWSER_PROXY_STICKY_SID from secret storage"
+        )
+    if _present(env, "BROWSER_PROXY_STICKY_SID") and not _present(
+        env, "BROWSER_PROXY"
+    ):
+        raise RuntimeError(
+            "BROWSER_PROXY_STICKY_SID requires BROWSER_PROXY from secret storage"
+        )
 
 
 def apply_runtime_browser_defaults(*, force: bool = True) -> None:
-    """Inject sticky SID + bundled cookies + headed mode into os.environ.
+    """Compatibility shim: validate environment-only configuration.
 
-    force=True (default): code wins over Railway/env so a push updates prod.
+    ``force`` is retained for callers from the previous API. It has no effect;
+    this function never injects or overrides credentials, cookies, sticky IDs,
+    or headed/headless settings.
     """
-    if force or not (os.environ.get("BROWSER_PROXY") or "").strip():
-        if RUNTIME_BROWSER_PROXY:
-            os.environ["BROWSER_PROXY"] = RUNTIME_BROWSER_PROXY
-
-    if RUNTIME_STICKY_ENABLED:
-        os.environ["BROWSER_PROXY_STICKY"] = "1"
-        os.environ["BROWSER_PROXY_STICKY_SID"] = str(RUNTIME_STICKY_SID)
-        os.environ["BROWSER_PROXY_STICKY_TTL"] = str(RUNTIME_STICKY_TTL_MINUTES)
-
-    if force:
-        os.environ["BROWSER_HEADLESS"] = "1" if RUNTIME_HEADLESS else "0"
-
-    bundled = bundled_storage_state_json()
-    if bundled and (force or not (os.environ.get("BROWSER_STORAGE_STATE_JSON") or "").strip()):
-        os.environ["BROWSER_STORAGE_STATE_JSON"] = bundled
-        os.environ.pop("BROWSER_STORAGE_STATE", None)
+    del force
+    validate_runtime_browser_environment()

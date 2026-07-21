@@ -14,9 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from apply_agent.browser_env import load_browser_secrets, rotate_sticky_sid
-from apply_agent.browser import browser_proxy_settings
-from apply_agent.runtime_browser_config import BUNDLED_STORAGE_STATE_PATH
+from apply_agent.browser_env import load_browser_secrets, rotate_sticky_sid  # noqa: E402
 
 
 def main() -> None:
@@ -26,15 +24,12 @@ def main() -> None:
     else:
         sid = random.randint(1, 1000)
     rotate_sticky_sid(sid)
-    load_browser_secrets(override=True)
-    proxy = browser_proxy_settings() or {}
-    print("Updated apply_agent/runtime_browser_config.py RUNTIME_STICKY_SID")
-    print(f"BROWSER_PROXY_STICKY_SID={sid}")
-    print(f"sticky username={proxy.get('username')}")
-    print("Recapture, then copy JSON to:", BUNDLED_STORAGE_STATE_PATH)
+    print("Rotated the in-process sticky browser session identifier.")
+    print("Persist the new identifier in the approved runtime secret store.")
+    print("Recapture browser storage state after the secret-store update:")
     print("  python scripts/capture_sr_storage_state.py")
-    print("  copy sr-storage-state.json -> apply_agent/data/sr_storage_state.json")
-    print("  git add + push")
+    print("Store the generated state in BROWSER_STORAGE_STATE_JSON or an approved")
+    print("BROWSER_STORAGE_STATE secret-mounted path; never commit it.")
 
 
 if __name__ == "__main__":
