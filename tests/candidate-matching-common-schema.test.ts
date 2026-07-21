@@ -1,10 +1,9 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+import { createDatabase, type Database } from "../packages/db/src";
 
 const read = (path: string): string =>
   readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
-const repoRoot = fileURLToPath(new URL("..", import.meta.url));
 const primaryUp = read(
   "backend/db/migrations/20260721002300_candidate_projection_primary.sql",
 );
@@ -80,13 +79,9 @@ describe("candidate matching common migration contracts", () => {
 const databaseUrl = process.env.CANDIDATE_MATCHING_MIGRATION_TEST_DATABASE_URL;
 const describePostgres = databaseUrl ? describe : describe.skip;
 
-type SqlResult = {
-  exitCode: number;
-  stdout: string;
-  stderr: string;
-};
-
-async function psql(sql: string): Promise<SqlResult> {
+async function withDisposableDatabase<T>(
+  callback: (sql: Database) => Promise<T>,
+): Promise<T> {
   if (!databaseUrl) {
     throw new Error("CANDIDATE_MATCHING_MIGRATION_TEST_DATABASE_URL is required");
   }
@@ -99,6 +94,7 @@ async function psql(sql: string): Promise<SqlResult> {
         public.candidate_action_projection,
         public.candidate_search_profiles,
         public.candidate_projection_tombstones,
+        public.candidate_action_group_aliases,
         public.candidate_projection_outbox,
         public.candidate_deletion_tombstones,
         public.candidate_serving_controls,
@@ -131,53 +127,6 @@ async function psql(sql: string): Promise<SqlResult> {
         job_id text PRIMARY KEY, data jsonb NOT NULL DEFAULT '{}'::jsonb
       );
       INSERT INTO public.jobs VALUES ('canonical-job-preserved', '{}');
-    `).then(({ exitCode, stderr }) => {
-      expect(exitCode, stderr).toBe(0);
-    });
-    await applyFile("backend/db/migrations/20260721002300_candidate_projection_primary.sql");
-    await applyFile("backend/db/migrations/20260721002400_candidate_matching_common_schema.sql");
-  });
-
-  afterAll(async () => {
-    if (!databaseUrl) return;
-    await applyFile("backend/db/migrations/20260721002400_candidate_matching_common_schema.down.sql").catch(
-      () => undefined,
-    );
-    await applyFile("backend/db/migrations/20260721002300_candidate_projection_primary.down.sql").catch(
-      () => undefined,
-    );
-    await psql(`
-      DROP TABLE IF EXISTS public.applications;
-      DROP TABLE IF EXISTS public.swipes;
-      DROP TABLE IF EXISTS public.profiles;
-      DROP TABLE IF EXISTS public.users;
-      DROP TABLE IF EXISTS public.jobs;
-    `).catch(() => undefined);
-  });
-
-  test("emits profile upserts only after a producer is enabled", async () => {
-    await expect(
-      psql(`INSERT INTO public.profiles (user_id) VALUES ('candidate-a');`),
-    ).resolves.toMatchObject({ exitCode: 0 });
-    let result = await psql(
-      `SELECT count(*)::integer AS count FROM public.candidate_projection_outbox;`,
-    );
-    expect(result.exitCode, result.stderr).toBe(0);
-    expect(result.stdout).toBe("0");
-    result = await psql(`
-      UPDATE public.candidate_projection_producer_flags
-      SET enabled = true
-      WHERE entity_family = 'profiles';
-      UPDATE public.profiles
-      SET data = '{"role":"engineer"}'
-      WHERE user_id = 'candidate-a';
-      SELECT candidate_version || '|' || entity_family || '|' || entity_id || '|' || operation
-      FROM public.candidate_projection_outbox
-      WHERE candidate_id = 'candidate-a'
-      ORDER BY created_at;
-      SELECT count(*)::integer
-      FROM information_schema.columns
-      WHERE table_name = 'candidate_projection_outbox' AND column_name = 'payload';
     `);
     await sql.unsafe(primaryUp);
     await sql.unsafe(inventoryUp);
@@ -189,23 +138,7 @@ async function psql(sql: string): Promise<SqlResult> {
   }
 }
 
-  test("fails closed on direct user delete and keeps the RPC tombstone dominant", async () => {
-    await expect(
-      psql(`INSERT INTO public.users (user_id, email) VALUES ('candidate-b', 'b@example.com');`),
-    ).resolves.toMatchObject({ exitCode: 0 });
-    await expect(
-      psql(`
-        UPDATE public.candidate_projection_producer_flags
-        SET enabled = true
-        WHERE entity_family = 'users';
-      `),
-    ).resolves.toMatchObject({ exitCode: 0 });
-    const directDelete = await psql(
-      `DELETE FROM public.users WHERE user_id = 'candidate-b';`,
-    );
-    expect(directDelete.exitCode).not.toBe(0);
-    expect(directDelete.stderr).toContain("user deletion must use begin_candidate_deletion first");
-
+describePostgres("candidate matching migrations on disposable PostgreSQL", () => {
   test.serial(
     "commits one fail-closed deletion tombstone before cleanup",
     { timeout: 30_000 },
@@ -309,35 +242,19 @@ async function psql(sql: string): Promise<SqlResult> {
           /job_search_documents_(features|retrieval)_idx/,
         );
 
-  test("uses the common retrieval indexes and rollback preserves canonical jobs", async () => {
-    const plan = await psql(`
-      BEGIN;
-      SET LOCAL enable_seqscan = off;
-      EXPLAIN (FORMAT TEXT)
-      SELECT canonical_group_id
-      FROM public.job_search_documents
-      WHERE lifecycle_status = 'active'
-        AND source_eligible AND policy_eligible
-        AND country_codes && ARRAY['FR']::text[]
-        AND role_family_codes && ARRAY['software-engineering']::text[];
-      ROLLBACK;
-    `);
-    expect(plan.exitCode, plan.stderr).toBe(0);
-    expect(plan.stdout).toMatch(/job_search_documents_(features|retrieval)_idx/);
-
-    await applyFile("backend/db/migrations/20260721002400_candidate_matching_common_schema.down.sql");
-    await applyFile("backend/db/migrations/20260721002300_candidate_projection_primary.down.sql");
-    const preserved = await psql(`
-      SELECT
-        to_regclass('public.jobs')::text AS jobs,
-        to_regclass('public.users')::text AS users,
-        to_regclass('public.candidate_search_profiles')::text AS projection;
-    `);
-    expect(preserved.exitCode, preserved.stderr).toBe(0);
-    expect(preserved.stdout).toContain("jobs");
-    expect(preserved.stdout).toContain("users");
-    expect(preserved.stdout).toContain("|");
-    await applyFile("backend/db/migrations/20260721002300_candidate_projection_primary.sql");
-    await applyFile("backend/db/migrations/20260721002400_candidate_matching_common_schema.sql");
-  });
+        await sql.unsafe(inventoryDown);
+        await sql.unsafe(primaryDown);
+        const [preserved] = await sql<
+          { jobs: string; users: string; projection: string | null }[]
+        >`
+          SELECT
+            to_regclass('public.jobs')::text AS jobs,
+            to_regclass('public.users')::text AS users,
+            to_regclass('public.candidate_search_profiles')::text AS projection
+        `;
+        expect(preserved).toEqual({ jobs: "jobs", users: "users", projection: null });
+        await sql.unsafe(primaryUp);
+        await sql.unsafe(inventoryUp);
+      }),
+  );
 });
