@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import * as matchingContracts from "../src/matching";
+import * as matchingContracts from "../src";
 import {
   MATCHING_CONTRACT_VERSION,
   candidateActionProjectionSchema,
@@ -12,7 +12,7 @@ import {
   onlineMatchResponseSchema,
   projectionTaskKindSchema,
   projectionTaskSchema,
-} from "../src/matching";
+} from "../src";
 
 const now = "2026-07-21T04:00:00+00:00";
 const groupId = "11111111-1111-4111-8111-111111111111";
