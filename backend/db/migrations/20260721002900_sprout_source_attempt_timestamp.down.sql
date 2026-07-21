@@ -403,5 +403,6 @@ BEGIN
     'checkpoint', p_checkpoint_out
   );
 END
+$$;
 
 COMMIT;
