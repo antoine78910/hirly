@@ -32,6 +32,26 @@ WITH profile AS (
     effective_query.longitudes
   ) AS location(latitude, longitude)
   WHERE location.latitude IS NOT NULL AND location.longitude IS NOT NULL
+), role_terms AS (
+  -- Role filtering is intentionally token-based rather than an exact-title
+  -- comparison: "Fullstack Engineer" must also surface "Senior Fullstack
+  -- Developer". Ranking below still prefers the closer match.
+  SELECT
+    role.value AS role,
+    coalesce(
+      array_agg(DISTINCT token ORDER BY token) FILTER (WHERE char_length(token) >= 3),
+      ARRAY[]::text[]
+    ) AS tokens
+  FROM effective_query
+  CROSS JOIN profile
+  CROSS JOIN LATERAL (
+    SELECT coalesce(effective_query.role, profile.target_role_label_normalized) AS value
+  ) AS role
+  LEFT JOIN LATERAL regexp_split_to_table(
+    lower(coalesce(role.value, '')),
+    '[^[:alnum:]]+'
+  ) AS token ON true
+  GROUP BY role.value
 ), recency_candidates AS MATERIALIZED (
   SELECT document.*
   FROM public.job_search_documents AS document
@@ -55,8 +75,20 @@ WITH profile AS (
     document.job_version::text AS job_version,
     document.canonical_group_id::text AS company_key,
     round((
-      0.40
-      + CASE WHEN document.skill_codes && profile.skill_ids THEN 0.25 ELSE 0 END
+      0.10
+      -- A role phrase/all-term match ranks above a single compatible token;
+      -- partial matches remain eligible instead of disappearing from inventory.
+      + CASE
+        WHEN role_terms.role IS NULL THEN 0.20
+        WHEN lower(document.search_text) LIKE '%' || lower(role_terms.role) || '%' THEN 0.35
+        WHEN document.search_vector @@ websearch_to_tsquery('simple', role_terms.role) THEN 0.25
+        WHEN EXISTS (
+          SELECT 1 FROM unnest(role_terms.tokens) AS token
+          WHERE document.search_vector @@ to_tsquery('simple', token || ':*')
+        ) THEN 0.10
+        ELSE 0
+      END
+      + CASE WHEN document.skill_codes && profile.skill_ids THEN 0.20 ELSE 0 END
       + CASE WHEN document.country_codes && profile.country_codes THEN 0.15 ELSE 0 END
       + CASE WHEN document.contract_families && profile.contract_types THEN 0.10 ELSE 0 END
       + CASE WHEN document.work_modes && profile.work_modes THEN 0.10 ELSE 0 END
@@ -73,17 +105,31 @@ WITH profile AS (
   FROM recency_candidates AS document
   CROSS JOIN profile
   CROSS JOIN effective_query
+  CROSS JOIN role_terms
   WHERE document.lifecycle_status = 'active'
     AND (
       (
         effective_query.query_fingerprint = 'candidate-profile'
-        AND document.role_family_codes && profile.role_family_ids
+        AND (
+          document.role_family_codes && profile.role_family_ids
+          OR document.search_vector @@ websearch_to_tsquery(
+            'simple', profile.target_role_label_normalized
+          )
+          OR EXISTS (
+            SELECT 1 FROM unnest(role_terms.tokens) AS token
+            WHERE document.search_vector @@ to_tsquery('simple', token || ':*')
+          )
+        )
       )
       OR (
         effective_query.query_fingerprint <> 'candidate-profile'
         AND (
           effective_query.role IS NULL
           OR document.search_vector @@ websearch_to_tsquery('simple', effective_query.role)
+          OR EXISTS (
+            SELECT 1 FROM unnest(role_terms.tokens) AS token
+            WHERE document.search_vector @@ to_tsquery('simple', token || ':*')
+          )
         )
       )
     )

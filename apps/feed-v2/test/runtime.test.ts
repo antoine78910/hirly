@@ -181,6 +181,9 @@ describe("Feed v2 runtime adapters", () => {
       ["Paris", "Paris, France"], 52, false,
     ]);
     expect(FEED_V2_INDEXED_READ_SQL).toContain("websearch_to_tsquery");
+    expect(FEED_V2_INDEXED_READ_SQL).toContain("role_terms AS");
+    expect(FEED_V2_INDEXED_READ_SQL).toContain("to_tsquery('simple', token || ':*')");
+    expect(FEED_V2_INDEXED_READ_SQL).toContain("lower(document.search_text) LIKE");
     expect(FEED_V2_INDEXED_READ_SQL).toContain("unnest(");
     expect(FEED_V2_INDEXED_READ_SQL).toContain("document.work_modes &&");
     expect(FEED_V2_INDEXED_READ_SQL).toContain("document.contract_families &&");
