@@ -128,6 +128,10 @@ _ROUTE_FIELDS = (
     "country", "policy_version",
 )
 
+_REVIEWED_ROUTE_TRANSPORTS = {
+    "greenhouse": frozenset({"hosted_candidate_form"}),
+}
+
 
 def _parse_expiry(value: Any) -> Optional[datetime]:
     try:
@@ -196,6 +200,9 @@ def submission_policy_failure(
         return "submission_route_incomplete"
     if normalize_provider(route.get("provider")) != provider:
         return "submission_route_provider_mismatch"
+    reviewed = _REVIEWED_ROUTE_TRANSPORTS.get(provider)
+    if reviewed is not None and str(route.get("transport")) not in reviewed:
+        return "submission_route_transport_denied"
     if policy.get("enabled") is not True or policy.get("revoked") is True:
         return "submission_policy_inactive"
     if any(str(policy.get(key) or "") != str(route.get(key) or "") for key in _ROUTE_FIELDS):

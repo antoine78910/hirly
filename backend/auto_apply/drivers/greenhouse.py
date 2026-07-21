@@ -13,6 +13,7 @@ ApplicationBlueprint (and therefore the same blueprint signature).
 from __future__ import annotations
 
 from typing import Any, Dict, List
+from urllib.parse import urlparse
 
 from application_blueprint import (
     ApplicationBlueprint, FieldType, FieldValidation, NormalizedField,
@@ -107,12 +108,34 @@ def _blueprint_from_questions(payload: Dict[str, Any]) -> ApplicationBlueprint:
     )
 
 
+def _trusted_greenhouse_url(value: Any) -> bool:
+    if not isinstance(value, str):
+        return False
+    try:
+        parsed = urlparse(value)
+        hostname = (parsed.hostname or "").lower().rstrip(".")
+        port = parsed.port
+    except ValueError:
+        return False
+    return bool(
+        parsed.scheme == "https"
+        and hostname
+        and parsed.username is None
+        and parsed.password is None
+        and port in (None, 443)
+        and any(
+            hostname == suffix or hostname.endswith(f".{suffix}")
+            for suffix in ("greenhouse.io", "greenhouse.com")
+        )
+    )
+
+
 def _job_http_url(job: Dict[str, Any], *keys: str) -> str:
     data = job.get("data") if isinstance(job.get("data"), dict) else {}
     for source in (job, data):
         for key in keys:
             value = source.get(key)
-            if isinstance(value, str) and value.startswith(("http://", "https://")):
+            if _trusted_greenhouse_url(value):
                 return value
     return ""
 
