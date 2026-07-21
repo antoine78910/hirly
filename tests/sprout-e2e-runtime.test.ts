@@ -303,6 +303,7 @@ describe("Sprout source commit pipeline", () => {
 
   test("runs one initial canary page through the production task handler", async () => {
     const commits: unknown[] = [];
+    const enqueued: unknown[] = [];
     const logLines: string[] = [];
     let released = 0;
     const store = {
@@ -320,7 +321,7 @@ describe("Sprout source commit pipeline", () => {
       async finishProviderWork() { return true; },
       async releaseProviderWork() { released += 1; return true; },
       async writeJobsAndComplete() { throw new Error("legacy writer must not run"); },
-      async getSproutSourceRuntime() {
+      async getSproutSourceRuntime(_sourceId: string, mode: "canary" | "backfill" | "incremental") {
         return {
           sourceId,
           policyId,
@@ -329,16 +330,27 @@ describe("Sprout source commit pipeline", () => {
           approvedPageSize: 2,
           checkpoint: initialSproutCheckpoint({ approvedPageSize: 2 }),
           policyEvidenceRef: "reviewed-policy",
-          canaryEvidence: {
-            status: "pending" as const,
-            evidenceRef: null,
-            pagesCommitted: 0 as const,
-            identityReadBack: false,
-            rawSnapshotLinked: false,
-            occurrenceLinked: false,
-            checkpointReadBack: false,
-            singleWriterVerified: false,
-          },
+          canaryEvidence: mode === "canary"
+            ? {
+              status: "pending" as const,
+              evidenceRef: null,
+              pagesCommitted: 0 as const,
+              identityReadBack: false,
+              rawSnapshotLinked: false,
+              occurrenceLinked: false,
+              checkpointReadBack: false,
+              singleWriterVerified: false,
+            }
+            : {
+              status: "passed" as const,
+              evidenceRef: "canary-readback",
+              pagesCommitted: 1 as const,
+              identityReadBack: true,
+              rawSnapshotLinked: true,
+              occurrenceLinked: true,
+              checkpointReadBack: true,
+              singleWriterVerified: true,
+            },
           rollbackEvidence: {
             status: "passed" as const,
             evidenceRef: "rollback-drill",
@@ -362,6 +374,11 @@ describe("Sprout source commit pipeline", () => {
           checkpoint: parsed.checkpointOut,
         };
       },
+      async enqueue(input: unknown) {
+        enqueued.push(input);
+        return "77777777-7777-4777-8777-777777777777";
+      },
+      async attachCareerSource() {},
     } as unknown as RuntimeStore;
     const handler = createTaskHandlers(
       store,
@@ -459,5 +476,46 @@ describe("Sprout source commit pipeline", () => {
     expect(JSON.stringify(failedLines)).not.toContain("private-auth");
     expect(JSON.stringify(failedLines)).not.toContain("private-cookie");
     expect(JSON.stringify(failedLines)).not.toContain("private-refresh");
+
+    const fallbackLines: string[] = [];
+    const fallbackHandler = createTaskHandlers(
+      store,
+      createJsonLogger((line) => fallbackLines.push(line)),
+      undefined,
+      {
+        sproutAllowedOrigins: ["https://api.sprout.invalid"],
+        sproutSecretResolver: {
+          async resolve() {
+            return {
+              accessToken: "fixture-access-token",
+              refreshToken: "fixture-refresh-token",
+            };
+          },
+        },
+        sproutFetch: (async () => Response.json({
+          message: "Jobs fetched successfully",
+          jobs: [],
+          count: 3,
+          next: "?offset=0&limit=2",
+          previous: null,
+        })) as typeof fetch,
+        providerClaimHeartbeatMs: 10_000,
+      },
+    )["provider.fetch_page"]!;
+    await expect(
+      fallbackHandler(task("backfill"), new AbortController().signal),
+    ).resolves.toEqual({ taskCompleted: true });
+    expect(enqueued).toHaveLength(1);
+    expect(enqueued[0]).toMatchObject({
+      tasks: [{
+        payload: {
+          filterVariant: "country_only",
+          emptyInsertStreak: 0,
+        },
+      }],
+    });
+    expect(fallbackLines.map((line) => JSON.parse(line).event)).toContain(
+      "sprout.filter_fallback",
+    );
   });
 });

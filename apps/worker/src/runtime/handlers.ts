@@ -383,12 +383,19 @@ export function createTaskHandlers(
               maxResponseBytes: payload.maxResponseBytes,
               includeQualifiedRadius: payload.filterVariant === "qualified_radius",
             });
-            if (!result.complete && payload.mode !== "canary") {
+            const switchToCountryOnly =
+              result.complete &&
+              result.fetched === 0 &&
+              payload.mode !== "canary" &&
+              payload.filterVariant === "qualified_radius";
+            if ((!result.complete || switchToCountryOnly) && payload.mode !== "canary") {
               const nextOffset = result.checkpoint.offset;
-              const nextEmptyInsertStreak = result.inserted === 0
+              const nextEmptyInsertStreak = switchToCountryOnly
+                ? 0
+                : result.inserted === 0
                 ? payload.emptyInsertStreak + 1
                 : 0;
-              const rotateFilters = nextEmptyInsertStreak >= 2;
+              const rotateFilters = switchToCountryOnly || nextEmptyInsertStreak >= 2;
               const nextPayload = {
                 ...payload,
                 filterVariant: rotateFilters
@@ -398,6 +405,20 @@ export function createTaskHandlers(
                   : payload.filterVariant,
                 emptyInsertStreak: rotateFilters ? 0 : nextEmptyInsertStreak,
               };
+              if (switchToCountryOnly) {
+                emitSproutOperation(logger, task, {
+                  event: "sprout.filter_fallback",
+                  severity: "info",
+                  outcome: "queued",
+                  details: {
+                    from: payload.filterVariant,
+                    to: nextPayload.filterVariant,
+                    checkpointOffset: nextOffset,
+                    reason: "empty_terminal_page_before_reported_total",
+                    observedTotal: result.checkpoint.observedTotal,
+                  },
+                });
+              }
               const nextRunId = await store.enqueue(enqueueRunSchema.parse({
                 kind: "provider_ingestion",
                 provider: "sprout",
