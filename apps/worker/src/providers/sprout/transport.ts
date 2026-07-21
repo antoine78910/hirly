@@ -4,7 +4,10 @@ import { parseSproutResponse, type SproutRawJob } from "./schema";
 import type { SproutRuntimePage, SproutRuntimeTransport } from "./runtime";
 
 export interface SproutSecretResolver {
-  resolve(reference: string, signal: AbortSignal): Promise<string>;
+  resolve(
+    reference: string,
+    signal: AbortSignal,
+  ): Promise<{ accessToken: string; refreshToken: string }>;
 }
 
 export interface SproutHttpTransportOptions {
@@ -131,8 +134,21 @@ export class SproutHttpTransport implements SproutRuntimeTransport<SproutRawJob>
     signal: AbortSignal,
   ): Promise<SproutRuntimePage<SproutRawJob>> {
     signal.throwIfAborted();
-    const token = (await this.options.secrets.resolve(input.credentialRef, signal)).trim();
-    if (!token || token.length > 16_384) {
+    let resolved: { accessToken: string; refreshToken: string };
+    try {
+      resolved = await this.options.secrets.resolve(input.credentialRef, signal);
+    } catch {
+      signal.throwIfAborted();
+      throw new IngestionError("authorization_blocked", "sprout_credential_unavailable");
+    }
+    const accessToken = resolved.accessToken.trim();
+    const refreshToken = resolved.refreshToken.trim();
+    if (
+      !accessToken ||
+      accessToken.length > 16_384 ||
+      !refreshToken ||
+      refreshToken.length > 16_384
+    ) {
       throw new IngestionError("authorization_blocked", "sprout_credential_unavailable");
     }
     const url = new URL(this.endpoint);
@@ -151,7 +167,11 @@ export class SproutHttpTransport implements SproutRuntimeTransport<SproutRawJob>
       try {
         response = await this.fetchImpl(url, {
           method: "GET",
-          headers: { accept: "application/json", authorization: `Bearer ${token}` },
+          headers: {
+            accept: "application/json",
+            authorization: `Bearer ${accessToken}`,
+            "x-refresh-token": refreshToken,
+          },
           redirect: "manual",
           credentials: "omit",
           referrerPolicy: "no-referrer",
