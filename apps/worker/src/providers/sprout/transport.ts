@@ -1,5 +1,5 @@
 import { IngestionError } from "@hirly/ingestion";
-import { buildSproutFranceQuery } from "./query";
+import { buildSproutCountryQuery } from "./query";
 import {
   parseSproutResponse,
   SproutResponseSchemaError,
@@ -186,7 +186,7 @@ export class SproutHttpTransport implements SproutRuntimeTransport<SproutRawJob>
 
   async fetchPage(
     input: {
-      countryCode: "FR";
+      countryCode: string;
       offset: number;
       pageSize: number;
       credentialRef: string;
@@ -215,11 +215,10 @@ export class SproutHttpTransport implements SproutRuntimeTransport<SproutRawJob>
       throw new IngestionError("authorization_blocked", "sprout_credential_unavailable");
     }
     const url = new URL(this.endpoint);
-    url.search = buildSproutFranceQuery({
+    url.search = buildSproutCountryQuery(input.countryCode, {
       offset: input.offset,
       limit: input.pageSize,
       includeUnknownWorkLocation: input.includeUnknownWorkLocation,
-      includeQualifiedRadius: input.includeQualifiedRadius,
     }).toString();
 
     for (let attempt = 0; attempt < this.maxAttempts; attempt += 1) {

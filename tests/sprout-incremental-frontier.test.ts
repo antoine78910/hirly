@@ -78,3 +78,19 @@ describe("Sprout incremental frontier cycles", () => {
     expect(scheduledRunMigration).toContain("AND career_source_id IS NULL");
   });
 });
+
+const globalFrontierMigration = readFileSync(
+  new URL(
+    "../backend/db/migrations/20260721003800_sprout_global_country_frontiers.sql",
+    import.meta.url,
+  ),
+  "utf8",
+);
+
+test("Sprout global frontier migration uses source-scoped countries and waits for the matching deploy", () => {
+  expect(globalFrontierMigration).toContain("('US'),('DE'),('GB'),('CA'),('AU'),('IN')");
+  expect(globalFrontierMigration).toContain("worker_private.career_source_runnable(p_source_id, upper(p_country_code), p_mode)");
+  expect(globalFrontierMigration).toContain("SET career_source_id=p_source_id");
+  expect(globalFrontierMigration).toContain("set_schedule_enabled");
+  expect(globalFrontierMigration).toContain("false, clock_timestamp()");
+});

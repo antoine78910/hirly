@@ -190,6 +190,8 @@ describe("shared contracts", () => {
   test("validates secret-reference-only Sprout runtime metadata", () => {
     const runtime = {
       sourceId: "11111111-1111-4111-8111-111111111111",
+      sourceKey: "sprout:france",
+      countryCode: "FR",
       policyId: "22222222-2222-4222-8222-222222222222",
       endpoint: "https://api.example.test/jobs",
       credentialRef: "secret://sprout/france-api",

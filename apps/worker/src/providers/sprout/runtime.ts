@@ -22,7 +22,7 @@ export interface SproutRuntimePage<RawJob> {
 export interface SproutRuntimeTransport<RawJob> {
   fetchPage(
     input: {
-      countryCode: "FR";
+      countryCode: string;
       offset: number;
       pageSize: number;
       credentialRef: string;
@@ -58,7 +58,7 @@ export async function runSproutPageTask<RawJob>(input: {
   checkpoint: SproutCheckpoint;
   transport: SproutRuntimeTransport<RawJob>;
   repository: SproutPageCommitRepository<RawJob>;
-  hasFranceLocation: (raw: RawJob) => boolean;
+  hasCountryLocation: (raw: RawJob, countryCode: string) => boolean;
   signal: AbortSignal;
   maxResponseBytes: number;
   includeQualifiedRadius?: boolean;
@@ -80,7 +80,7 @@ export async function runSproutPageTask<RawJob>(input: {
   input.signal.throwIfAborted();
   const page = await input.transport.fetchPage(
     {
-      countryCode: "FR",
+      countryCode: input.countryCode,
       offset: checkpointIn.offset,
       pageSize: checkpointIn.pageSize,
       credentialRef: activation.credentialRef,
@@ -105,9 +105,12 @@ export async function runSproutPageTask<RawJob>(input: {
   if (returnedItemCount > checkpointIn.pageSize) {
     throw new Error("sprout_runtime_page_size_exceeded");
   }
-  if (page.items.some((raw) => !input.hasFranceLocation(raw))) {
-    throw new Error("sprout_runtime_country_leak");
-  }
+  // The intentionally broad country query can include rows whose locations are
+  // unknown or cross-border. They advance pagination but never cross this
+  // source boundary into a canonical write.
+  const countryItems = page.items.filter((raw) =>
+    input.hasCountryLocation(raw, input.countryCode),
+  );
 
   const advanced = nextSproutCheckpoint({
     current: checkpointIn,
@@ -122,7 +125,7 @@ export async function runSproutPageTask<RawJob>(input: {
   const committed = await input.repository.commitPage({
     checkpointIn,
     checkpointOut,
-    items: page.items,
+    items: countryItems,
     complete: advanced.complete,
     fetchedAt: input.now?.() ?? new Date(),
   });

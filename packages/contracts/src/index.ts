@@ -610,6 +610,7 @@ export const sproutSourceRuntimeSchema = z
   .object({
     sourceId: z.uuid(),
     sourceKey: z.string().trim().min(1).max(512),
+    countryCode: z.string().regex(/^[A-Z]{2}$/),
     policyId: z.uuid(),
     endpoint: httpsBaseUrlSchema,
     credentialRef: z

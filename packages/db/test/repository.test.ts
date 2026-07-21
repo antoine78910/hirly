@@ -24,6 +24,7 @@ describe("database repository boundary", () => {
         {
           source_id: "11111111-1111-4111-8111-111111111111",
           source_key: "sprout:france",
+          country_code: "FR",
           policy_id: "22222222-2222-4222-8222-222222222222",
           endpoint: "https://api.example.test/jobs",
           credential_ref: "secret://sprout/france-api",

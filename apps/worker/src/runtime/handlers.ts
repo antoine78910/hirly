@@ -23,7 +23,7 @@ import {
   SproutHttpTransport,
   SproutSchemaDriftError,
   createSproutCommitRepository,
-  hasSproutFranceLocation,
+  hasSproutCountryLocation,
   runSproutPageTask,
   sproutCheckpointSchema,
   sproutTaskPayloadSchema,
@@ -106,14 +106,13 @@ export function sproutDiscoveryProfile(sourceKey: string): {
   filterVariant: "qualified_radius" | "country_only";
   includeUnknownWorkLocation: boolean;
 } {
-  switch (sourceKey) {
-    case "sprout:france":
-      return { filterVariant: "qualified_radius", includeUnknownWorkLocation: false };
-    case "sprout:france:country-only":
-      return { filterVariant: "country_only", includeUnknownWorkLocation: false };
-    default:
-      throw new IngestionError("integrity_error", "sprout_unknown_discovery_lane");
+  if (sourceKey === "sprout:france" || sourceKey === "sprout:france:country-only" || /^sprout:country:[A-Z]{2}$/.test(sourceKey)) {
+    // Country identity is the only query constraint. Unknown locations are
+    // requested too, then excluded before canonical write if they lack the
+    // lane's verified country code.
+    return { filterVariant: "country_only", includeUnknownWorkLocation: true };
   }
+  throw new IngestionError("integrity_error", "sprout_unknown_discovery_lane");
 }
 
 export function createTaskHandlers(
@@ -264,7 +263,7 @@ export function createTaskHandlers(
             const checkpoint = sproutCheckpointSchema.parse(runtime.checkpoint);
             const discoveryProfile = sproutDiscoveryProfile(runtime.sourceKey);
             sproutRequestDocument = {
-              countryCode: "FR",
+              countryCode: runtime.countryCode,
               mode: payload.mode,
               offset: checkpoint.offset,
               pageSize: checkpoint.pageSize,
@@ -323,7 +322,7 @@ export function createTaskHandlers(
             const repository = createSproutCommitRepository({
               sourceId: runtime.sourceId,
               policyId: runtime.policyId,
-              countryCode: "FR",
+              countryCode: runtime.countryCode,
               mode: payload.mode,
               async commit(commit) {
                 claimCompleting = true;
@@ -368,7 +367,7 @@ export function createTaskHandlers(
               outcome: "started",
               details: {
                 mode: payload.mode,
-                countryCode: "FR",
+                countryCode: runtime.countryCode,
                 sourceKey: runtime.sourceKey,
                 checkpointOffset: checkpoint.offset,
                 pageSize: checkpoint.pageSize,
@@ -407,7 +406,8 @@ export function createTaskHandlers(
                   ),
               },
               repository,
-              hasFranceLocation: hasSproutFranceLocation,
+              countryCode: runtime.countryCode,
+              hasCountryLocation: hasSproutCountryLocation,
               signal: claimAbort.signal,
               maxResponseBytes: payload.maxResponseBytes,
               includeQualifiedRadius: discoveryProfile.filterVariant === "qualified_radius",

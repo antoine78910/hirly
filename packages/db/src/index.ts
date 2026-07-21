@@ -455,6 +455,7 @@ export class WorkerRepository {
       {
         source_id: string;
         source_key: string;
+        country_code: string;
         policy_id: string;
         endpoint: string;
         credential_ref: string;
@@ -475,6 +476,7 @@ export class WorkerRepository {
     return sproutSourceRuntimeSchema.parse({
       sourceId: row.source_id,
       sourceKey: row.source_key,
+      countryCode: row.country_code,
       policyId: row.policy_id,
       endpoint: row.endpoint,
       credentialRef: row.credential_ref,

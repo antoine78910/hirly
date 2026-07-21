@@ -40,12 +40,12 @@ function task(mode: "canary" | "backfill" | "incremental" = "backfill") {
 describe("Sprout authenticated transport", () => {
   test("uses an immutable query profile for each checkpoint lane", () => {
     expect(sproutDiscoveryProfile("sprout:france")).toEqual({
-      filterVariant: "qualified_radius",
-      includeUnknownWorkLocation: false,
+      filterVariant: "country_only",
+      includeUnknownWorkLocation: true,
     });
     expect(sproutDiscoveryProfile("sprout:france:country-only")).toEqual({
       filterVariant: "country_only",
-      includeUnknownWorkLocation: false,
+      includeUnknownWorkLocation: true,
     });
     expect(() => sproutDiscoveryProfile("sprout:france:unapproved")).toThrow(
       "sprout_unknown_discovery_lane",
@@ -356,6 +356,7 @@ describe("Sprout source commit pipeline", () => {
         return {
           sourceId,
           sourceKey: "sprout:france",
+          countryCode: "FR",
           policyId,
           endpoint: "https://api.sprout.invalid/jobs",
           credentialRef: "secret://sprout/france-api",

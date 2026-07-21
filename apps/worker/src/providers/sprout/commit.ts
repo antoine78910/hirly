@@ -35,10 +35,12 @@ export function buildSproutCommitEntry(input: {
   policyId: string;
   fetchedAt: Date;
   now?: Date;
+  countryCode?: string;
 }): SourcePageCommit["entries"][number] {
   const normalized: NormalizedSproutJob = normalizeSproutJob(
     input.raw,
     input.now ?? input.fetchedAt,
+    input.countryCode ?? "FR",
   );
   const canonical = toCanonicalJob(normalized, input.now ?? input.fetchedAt);
   const selected = selectApplyUrl(normalized.applyUrls);
@@ -71,7 +73,7 @@ export function buildSproutCommitEntry(input: {
 export function createSproutCommitRepository(input: {
   sourceId: string;
   policyId: string;
-  countryCode: "FR";
+  countryCode: string;
   mode: "canary" | "backfill" | "incremental";
   commit(commit: SourcePageCommit): Promise<SourcePageCommitResult>;
 }) {
@@ -88,7 +90,7 @@ export function createSproutCommitRepository(input: {
       for (const raw of page.items) {
         try {
           entries.push(
-            buildSproutCommitEntry({ raw, policyId: input.policyId, fetchedAt: page.fetchedAt }),
+            buildSproutCommitEntry({ raw, policyId: input.policyId, fetchedAt: page.fetchedAt, countryCode: input.countryCode }),
           );
         } catch {
           // A malformed provider row must not prevent valid rows in the same

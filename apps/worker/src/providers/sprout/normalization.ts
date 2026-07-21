@@ -92,10 +92,11 @@ export function normalizeSproutLocation(
 
 function primaryLocation(
   locations: readonly NormalizedSproutLocation[],
+  targetCountryCode: string,
 ): NormalizedSproutLocation | null {
   return (
     [...locations]
-      .filter((location) => location.countryCode === "FR")
+      .filter((location) => location.countryCode === targetCountryCode)
       .sort((left, right) => {
         const leftScore = Number(Boolean(left.city)) + Number(Boolean(left.region));
         const rightScore = Number(Boolean(right.city)) + Number(Boolean(right.region));
@@ -104,11 +105,14 @@ function primaryLocation(
   );
 }
 
-export function hasSproutFranceLocation(rawValue: SproutRawJob): boolean {
+export function hasSproutCountryLocation(rawValue: SproutRawJob, targetCountryCode: string): boolean {
   const raw = sproutRawJobSchema.parse(rawValue);
-  return raw.locations.some(
-    (location) => normalizeSproutLocation(location).countryCode === "FR",
-  );
+  const countryCode = targetCountryCode.trim().toUpperCase();
+  return raw.locations.some((location) => normalizeSproutLocation(location).countryCode === countryCode);
+}
+
+export function hasSproutFranceLocation(rawValue: SproutRawJob): boolean {
+  return hasSproutCountryLocation(rawValue, "FR");
 }
 
 function requireApplyUrl(value: string | null | undefined): string {
@@ -178,10 +182,12 @@ function normalizedSalaryBounds(raw: SproutRawJob): {
 export function tryNormalizeSproutJob(
   rawValue: SproutRawJob,
   now = new Date(),
+  targetCountryCode = "FR",
 ): SproutNormalizationResult {
   const raw = sproutRawJobSchema.parse(rawValue);
   const locations = raw.locations.map(normalizeSproutLocation);
-  const primary = primaryLocation(locations);
+  const countryCode = targetCountryCode.trim().toUpperCase();
+  const primary = primaryLocation(locations, countryCode);
   if (!primary) {
     return { accepted: false, reason: "country_leak", externalId: raw.id };
   }
@@ -209,7 +215,7 @@ export function tryNormalizeSproutJob(
       title: raw.title,
       company: raw.company,
       location: primary.display,
-      countryCode: "FR",
+      countryCode,
       description: cleanText(raw.rawDescription) ?? cleanText(raw.summary) ?? "",
       contractType: firstJobType(raw.jobTypes),
       status: cleanText(raw.status),
