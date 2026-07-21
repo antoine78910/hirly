@@ -11,7 +11,8 @@
     "lint": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
-    "build": "tsc --noEmit"
+    "build": "tsc --noEmit",
+    "evidence:load": "bun src/load-evidence.ts"
   },
   "dependencies": {
     "@hirly/feed-v2": "workspace:*",
