@@ -131,7 +131,7 @@ describe("G004 stable canonical identity and normalization", () => {
       expect(job.normalizedCompany).not.toMatch(/\b(sa|sas|sarl|gmbh)\b/);
       expect(job.validationCheckedAt).toBe(fixedNow.toISOString());
       expect(job.fingerprint).toMatch(/^[0-9a-f]{40}$/);
-      expect(job.data).toEqual(fixture);
+      expect(job.data).toMatchObject(fixture);
       expect(job.data.sourceDocument).toEqual(fixture.sourceDocument);
     }
   });

@@ -348,7 +348,7 @@ describe("Sprout activation and bounded page runtime", () => {
     );
   });
 
-  test("does not commit or advance on country leak, body breach, or cursor drift", async () => {
+  test("filters country leaks and rejects body breaches while preserving cursor progress", async () => {
     for (const scenario of ["country", "bytes", "cursor"] as const) {
       let commits = 0;
       const promise = runSproutPageTask({
@@ -378,8 +378,10 @@ describe("Sprout activation and bounded page runtime", () => {
         signal: new AbortController().signal,
         maxResponseBytes: 1_000,
       });
-      if (scenario === "cursor") {
-        await expect(promise).resolves.toMatchObject({ checkpoint: { offset: 2 } });
+      if (scenario === "cursor" || scenario === "country") {
+        await expect(promise).resolves.toMatchObject({
+          checkpoint: { offset: scenario === "cursor" ? 2 : 1 },
+        });
         expect(commits).toBe(1);
       } else {
         await expect(promise).rejects.toThrow();

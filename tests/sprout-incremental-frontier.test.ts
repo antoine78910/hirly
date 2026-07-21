@@ -63,11 +63,10 @@ describe("Sprout incremental frontier cycles", () => {
     expect(migration).toContain("worker_private.set_schedule_enabled");
   });
 
-  test("enables incremental mode only for the approved passed-canary frontier lane", () => {
-    expect(activationMigration).toContain("source.source_key = 'sprout:france:country-only'");
-    expect(activationMigration).toContain("SET incremental_enabled = true");
-    expect(activationMigration).toContain("source.discovery_state = 'approved'");
-    expect(activationMigration).toContain("source.canary_evidence->>'status' = 'passed'");
+  test("leaves incremental mode operator-controlled after migration", () => {
+    expect(activationMigration).toContain("without activating a source");
+    expect(activationMigration).not.toContain("UPDATE public.career_sources");
+    expect(activationMigration).not.toContain("SET incremental_enabled = true");
   });
 
   test("binds a scheduled source-less run under the fenced source claim", () => {

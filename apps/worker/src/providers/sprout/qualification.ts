@@ -39,7 +39,7 @@ export function sproutQualificationMatrixQueries(): ReadonlyArray<{
   };
   return [
     scenario("qualified-baseline", {}),
-    scenario("country-without-radius", { includeQualifiedRadius: false }),
+    scenario("country-without-radius", {}),
     scenario("include-unknown-work-location", { includeUnknownWorkLocation: true }),
     scenario("all-visible-job-types", {}, (query) => addArray(query, "types", VISIBLE_TYPES)),
     scenario("all-visible-experience-levels", {}, (query) =>

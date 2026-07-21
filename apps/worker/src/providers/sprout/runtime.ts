@@ -56,9 +56,12 @@ export async function runSproutPageTask<RawJob>(input: {
   activation: SproutActivation;
   mode: "canary" | "backfill" | "incremental";
   checkpoint: SproutCheckpoint;
+  countryCode?: string;
   transport: SproutRuntimeTransport<RawJob>;
   repository: SproutPageCommitRepository<RawJob>;
-  hasCountryLocation: (raw: RawJob, countryCode: string) => boolean;
+  hasCountryLocation?: (raw: RawJob, countryCode: string) => boolean;
+  /** @deprecated Compatibility seam for the original FR-only runtime tests. */
+  hasFranceLocation?: (raw: RawJob) => boolean;
   signal: AbortSignal;
   maxResponseBytes: number;
   includeQualifiedRadius?: boolean;
@@ -67,6 +70,11 @@ export async function runSproutPageTask<RawJob>(input: {
 }): Promise<SproutPageTaskResult> {
   const activation = assertSproutActivationReady(input.activation, input.mode);
   const checkpointIn = sproutCheckpointSchema.parse(input.checkpoint);
+  const countryCode = input.countryCode ?? "FR";
+  const hasCountryLocation =
+    input.hasCountryLocation ??
+    ((raw: RawJob, candidateCountryCode: string) =>
+      candidateCountryCode === "FR" && input.hasFranceLocation?.(raw) === true);
   if (input.mode === "canary" && checkpointIn.offset !== 0) {
     throw new Error("sprout_canary_must_start_at_initial_checkpoint");
   }
@@ -80,7 +88,7 @@ export async function runSproutPageTask<RawJob>(input: {
   input.signal.throwIfAborted();
   const page = await input.transport.fetchPage(
     {
-      countryCode: input.countryCode,
+      countryCode,
       offset: checkpointIn.offset,
       pageSize: checkpointIn.pageSize,
       credentialRef: activation.credentialRef,
@@ -109,7 +117,7 @@ export async function runSproutPageTask<RawJob>(input: {
   // unknown or cross-border. They advance pagination but never cross this
   // source boundary into a canonical write.
   const countryItems = page.items.filter((raw) =>
-    input.hasCountryLocation(raw, input.countryCode),
+    hasCountryLocation(raw, countryCode),
   );
 
   const advanced = nextSproutCheckpoint({

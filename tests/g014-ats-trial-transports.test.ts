@@ -45,7 +45,7 @@ describe("G014 bounded ATS trial transports", () => {
     const calls: Array<{ url: string; init: RequestInit }> = [];
     const injectedFetch: AtsTrialFetch = async (url, init) => {
       calls.push({ url, init });
-      return jsonResponse({ jobs: [greenhouseJob] });
+      return jsonResponse({ jobs: [greenhouseJob], meta: { total: 1 } });
     };
     const transport = createGreenhouseTrialTransport({
       approvedTenantId: "vaulttec",

@@ -225,6 +225,11 @@ export function createTaskHandlers(
             "provider ownership claim lifecycle is unavailable",
           );
         }
+        const claimProviderWork = store.claimProviderWork;
+        const heartbeatProviderWork = store.heartbeatProviderWork;
+        const finishProviderWork = store.finishProviderWork;
+        const releaseProviderWork = store.releaseProviderWork;
+        const writeJobsAndComplete = store.writeJobsAndComplete;
         const leaseSeconds = Math.max(
           1,
           Math.ceil((task.leaseUntil.getTime() - Date.now()) / 1_000),
@@ -235,15 +240,15 @@ export function createTaskHandlers(
           providerOperationGates.set(provider, providerOperationGate);
         }
         return await providerOperationGate.run(async () => {
-        const providerClaim = await store.claimProviderWork(
+        const providerClaim = await claimProviderWork(
           task,
           provider,
           leaseSeconds,
         );
-        const heartbeatProviderWork = store.heartbeatProviderWork.bind(store);
-        const finishProviderWork = store.finishProviderWork.bind(store);
-        const releaseProviderWork = store.releaseProviderWork.bind(store);
-        const writeJobsAndComplete = store.writeJobsAndComplete.bind(store);
+        const heartbeatClaim = heartbeatProviderWork.bind(store);
+        const finishClaim = finishProviderWork.bind(store);
+        const releaseClaim = releaseProviderWork.bind(store);
+        const writeClaim = writeJobsAndComplete.bind(store);
         const claimAbort = new AbortController();
         const forwardAbort = () => claimAbort.abort(signal.reason);
         signal.addEventListener("abort", forwardAbort, { once: true });
@@ -263,7 +268,7 @@ export function createTaskHandlers(
           ) return;
           heartbeatPromise = (async () => {
             try {
-              const current = await heartbeatProviderWork(
+              const current = await heartbeatClaim(
                   task,
                   providerClaim,
                   leaseSeconds,
@@ -572,7 +577,7 @@ export function createTaskHandlers(
                 claimCompleting = true;
                 await heartbeatPromise;
                 if (heartbeatError) throw heartbeatError;
-                const current = await writeJobsAndComplete(
+                const current = await writeClaim(
                   task,
                   providerClaim,
                   jobs,
@@ -633,7 +638,7 @@ export function createTaskHandlers(
             claimCompleting = true;
             await heartbeatPromise;
             if (heartbeatError) throw heartbeatError;
-            if (!(await finishProviderWork(task, providerClaim))) {
+            if (!(await finishClaim(task, providerClaim))) {
               throw new IngestionError(
                 "integrity_error",
                 "lease lost before empty provider run completion",
@@ -648,7 +653,7 @@ export function createTaskHandlers(
           await heartbeatPromise;
           if (!claimCompleted) {
             try {
-              await releaseProviderWork(task, providerClaim);
+              await releaseClaim(task, providerClaim);
             } catch {
               // Claim expiry/reaping remains the crash-safe fallback. Cleanup
               // failure must not replace the provider's original error.
@@ -674,7 +679,10 @@ export function createTaskHandlers(
                 },
                 responseStatus: schemaDrift?.evidence.status ?? null,
                 responseBytes: schemaDrift?.evidence.responseBytes ?? null,
-                schemaDiagnostics: schemaDrift?.evidence.schemaDiagnostics ?? [],
+                schemaDiagnostics:
+                  schemaDrift?.evidence.schemaDiagnostics.map(
+                    ({ itemIndex, code, path }) => ({ itemIndex, code, path }),
+                  ) ?? [],
               });
             } catch {
               // Error-ledger failures must not hide the original ingestion failure.

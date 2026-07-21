@@ -40,7 +40,6 @@ export function buildSproutCommitEntry(input: {
   const normalized: NormalizedSproutJob = normalizeSproutJob(
     input.raw,
     input.now ?? input.fetchedAt,
-    input.countryCode ?? "FR",
   );
   const canonical = toCanonicalJob(normalized, input.now ?? input.fetchedAt);
   const selected = selectApplyUrl(normalized.applyUrls);

@@ -472,8 +472,8 @@ BEGIN
   UPDATE public.career_sources SET checkpoint=jsonb_build_object('version','sprout.offset.v1','offset',0,'pageSize',v_page_size,'observedTotal',NULL,'watermark',NULL), updated_at=clock_timestamp() WHERE id=p_source_id;
 END $$;
 
-INSERT INTO public.career_sources (provider, source_key, company_name, country_codes, base_url, access_type, policy_id, sync_frequency, checkpoint, country_kill_switches, credential_ref, approved_page_size, enabled, discovery_state, transport_enabled, incremental_enabled, backfill_enabled, canary_enabled, canary_evidence, rollback_evidence)
-SELECT source.provider, 'sprout:country:' || lane.code, source.company_name || ' (' || lane.code || ')', ARRAY[lane.code], source.base_url, source.access_type, source.policy_id, source.sync_frequency, jsonb_build_object('version','sprout.offset.v1','offset',0,'pageSize',source.approved_page_size,'observedTotal',NULL,'watermark',NULL), jsonb_build_object(lane.code,false), source.credential_ref, source.approved_page_size, true, 'approved', true, true, false, false, source.canary_evidence, source.rollback_evidence
+INSERT INTO public.career_sources (provider, source_key, company_name, country_codes, base_url, access_type, policy_id, sync_frequency, checkpoint, country_kill_switches, credential_ref, approved_page_size)
+SELECT source.provider, 'sprout:country:' || lane.code, source.company_name || ' (' || lane.code || ')', ARRAY[lane.code], source.base_url, source.access_type, source.policy_id, source.sync_frequency, jsonb_build_object('version','sprout.offset.v1','offset',0,'pageSize',source.approved_page_size,'observedTotal',NULL,'watermark',NULL), jsonb_build_object(lane.code,false), source.credential_ref, source.approved_page_size
 FROM public.career_sources source
 CROSS JOIN (VALUES ('US'),('DE'),('GB'),('CA'),('AU'),('IN')) AS lane(code)
 WHERE source.provider='sprout' AND source.source_key='sprout:france:country-only'

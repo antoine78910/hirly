@@ -4,9 +4,7 @@ BEGIN;
 INSERT INTO public.career_sources (
   provider, source_key, company_name, country_codes, base_url, access_type,
   policy_id, sync_frequency, checkpoint, country_kill_switches, credential_ref,
-  approved_page_size, enabled, discovery_state, transport_enabled,
-  incremental_enabled, backfill_enabled, canary_enabled, canary_evidence,
-  rollback_evidence
+  approved_page_size
 )
 SELECT
   source.provider,
@@ -24,15 +22,7 @@ SELECT
   ),
   source.country_kill_switches,
   source.credential_ref,
-  source.approved_page_size,
-  source.enabled,
-  source.discovery_state,
-  source.transport_enabled,
-  source.incremental_enabled,
-  source.backfill_enabled,
-  false,
-  jsonb_build_object('status','passed','evidenceRef',source.canary_evidence->>'evidenceRef','pagesCommitted',1,'identityReadBack',true,'rawSnapshotLinked',true,'occurrenceLinked',true,'checkpointReadBack',true,'singleWriterVerified',true),
-  source.rollback_evidence
+  source.approved_page_size
 FROM public.career_sources AS source
 CROSS JOIN (VALUES
   ('sprout:france:country-only'::text, 'country-only'::text)
