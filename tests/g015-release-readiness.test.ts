@@ -757,20 +757,42 @@ function approvedPolicy(evidence: unknown = ["evidence/policy.json"]) {
 async function writeActivationEvidence(
   evidenceRoot: string,
   kind: string,
-  scope: { provider: string; tenantId: string; countryCode: string; policyDigest: string; releaseHead: string },
+  scope: {
+    provider: string;
+    tenantId: string;
+    countryCode: string;
+    policyDigest: string;
+    releaseHead: string;
+    deployedArtifactDigest?: string;
+  },
+  semanticOverrides: Record<string, unknown> = {},
 ) {
   const artifact = await writeEvidence(
     evidenceRoot,
     `activation/artifacts/${kind}.json`,
     { kind, result: "passed" },
   );
+  const semantics = kind.endsWith("_review")
+    ? {
+        review: {
+          security: { verdict: "CLEAN", unresolvedFindings: 0 },
+          codeReview: { verdict: "APPROVE" },
+          architecture: { verdict: "CLEAR" },
+        },
+      }
+    : kind.endsWith("_ultraqa")
+      ? { ultraqa: { status: "passed" } }
+      : {};
   return writeEvidence(evidenceRoot, `activation/${kind}.json`, {
     schemaVersion: "job-supply-activation-evidence.v1",
     kind,
     status: "passed",
     ...scope,
+    deployedArtifactDigest: scope.deployedArtifactDigest ?? "b".repeat(64),
     observedAt: "2026-07-21T00:00:00.000Z",
     artifacts: [artifact],
+    ...semantics,
+    ...semanticOverrides,
   });
 }
 
@@ -845,8 +867,8 @@ async function passingManualPreflight(evidenceRoot: string, provider = "recruite
     schemaVersion: "job-supply-writer-ownership.v1",
     status: "observed",
     ...scope,
-    previousWriterRuntime: "python",
-    writerRuntime: "none",
+    previousWriterRuntime: "none",
+    writerRuntime: "typescript",
     throughNone: true,
     simultaneousCanonicalWriters: false,
     ownershipEpoch: 4,
@@ -855,6 +877,7 @@ async function passingManualPreflight(evidenceRoot: string, provider = "recruite
   return {
     evidenceRoot,
     provider,
+    currentVerdict: "inventory_active",
     targetVerdict: "inventory_manual",
     tenantId: "vaulttec",
     countryCode: "FR",
@@ -869,6 +892,12 @@ async function passingManualPreflight(evidenceRoot: string, provider = "recruite
     },
     shadowScorecard: await writeEvidence(evidenceRoot, "shadow/scorecard.json", shadowScorecard),
     writerOwnership,
+    transitionEvidence: await writeTransitionEvidence(
+      evidenceRoot,
+      "inventory_manual",
+      ["prior_state_receipt", "review", "ultraqa"],
+      scope,
+    ),
     manualDeepLink: {
       verified: true,
       environment: "production",
