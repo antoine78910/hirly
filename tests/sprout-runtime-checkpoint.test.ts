@@ -371,4 +371,45 @@ describe("Sprout activation and bounded page runtime", () => {
       }
     }
   });
+
+  test("advances past quarantined response listings without losing later valid pages", async () => {
+    const commits: Array<{ itemCount: number; offset: number }> = [];
+    const result = await runSproutPageTask({
+      activation: activeRegistration(),
+      mode: "backfill",
+      checkpoint: initialSproutCheckpoint({ approvedPageSize: 2 }),
+      transport: {
+        async fetchPage() {
+          return {
+            items: [
+              {
+                id: "valid",
+                company: "Example SAS",
+                title: "Engineer",
+                locations: [{ countryCode: "FR", country: "France" }],
+              },
+            ],
+            returnedItemCount: 2,
+            rejected: 1,
+            next: "?offset=2",
+            sourceReportedTotal: 3,
+            responseBytes: 128,
+            watermark: null,
+          };
+        },
+      },
+      repository: {
+        async commitPage(page) {
+          commits.push({ itemCount: page.items.length, offset: page.checkpointOut.offset });
+          return { committedCheckpoint: page.checkpointOut, inserted: 1, rejected: 0 };
+        },
+      },
+      hasFranceLocation: () => true,
+      signal: new AbortController().signal,
+      maxResponseBytes: 1_024,
+    });
+
+    expect(commits).toEqual([{ itemCount: 1, offset: 2 }]);
+    expect(result).toMatchObject({ fetched: 2, rejected: 1, checkpoint: { offset: 2 } });
+  });
 });

@@ -118,6 +118,44 @@ describe("Sprout authenticated transport", () => {
     expect(JSON.stringify(operations)).not.toContain("private-refresh");
   });
 
+  test("quarantines malformed listings and emits sanitized schema diagnostics", async () => {
+    const operations: unknown[] = [];
+    const transport = new SproutHttpTransport({
+      endpoint: "https://api.sprout.invalid/jobs",
+      allowedOrigins: ["https://api.sprout.invalid"],
+      maxResponseBytes: 1_000_000,
+      secrets: {
+        async resolve() {
+          return { accessToken: "private-access", refreshToken: "private-refresh" };
+        },
+      },
+      fetch: (async () => Response.json({
+        jobs: [{ id: 1, company: "Example", title: "Role", locations: [], unknown: "do-not-log" }],
+        count: 1,
+        next: null,
+        previous: null,
+      })) as typeof fetch,
+      onOperation(operation) { operations.push(operation); },
+    });
+
+    const page = await transport.fetchPage(
+      { countryCode: "FR", offset: 0, pageSize: 2, credentialRef: "secret://sprout/france-api" },
+      new AbortController().signal,
+    );
+
+    expect(page).toMatchObject({ items: [], returnedItemCount: 1, rejected: 1 });
+    expect(operations).toMatchObject([
+      {
+        type: "fetch_response",
+        itemCount: 0,
+        rejectedCount: 1,
+        schemaDiagnostics: [{ itemIndex: 0, code: "unrecognized_keys", path: "$" }],
+      },
+    ]);
+    expect(JSON.stringify(operations)).not.toContain("do-not-log");
+    expect(JSON.stringify(operations)).not.toContain("private-access");
+  });
+
   test("fails closed before fetch when either runtime credential is unavailable", async () => {
     let fetches = 0;
     const transport = new SproutHttpTransport({

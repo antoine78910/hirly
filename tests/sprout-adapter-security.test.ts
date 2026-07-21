@@ -189,15 +189,18 @@ describe("Sprout adapter security and inventory contract", () => {
     }
   });
 
-  test("fails closed on response schema drift", () => {
-    expect(() =>
-      parseSproutResponse({
-        jobs: [{ ...rawJob(), unexpectedSecret: "must-not-be-retained" }],
-        count: 1,
-        next: null,
-        previous: null,
-      }),
-    ).toThrow();
+  test("quarantines one schema-drifted listing with sanitized diagnostics", () => {
+    const parsed = parseSproutResponse({
+      jobs: [{ ...rawJob(), unexpectedSecret: "must-not-be-retained" }],
+      count: 1,
+      next: null,
+      previous: null,
+    });
+
+    expect(parsed).toMatchObject({ jobs: [], rejected: 1 });
+    expect(parsed.schemaDiagnostics).toEqual([
+      { itemIndex: 0, code: "unrecognized_keys", path: "$" },
+    ]);
   });
 
   test("accepts only the bounded observed Sprout drift and preserves it", () => {
@@ -254,14 +257,15 @@ describe("Sprout adapter security and inventory contract", () => {
       { ...raw, socMajorGroup: ["15-0000"] },
       { ...raw, locations: [{ ...raw.locations[0]!, stateCode: 75 }] },
     ]) {
-      expect(() =>
-        parseSproutResponse({
-          jobs: [incompatible],
-          count: 1,
-          next: null,
-          previous: null,
-        }),
-      ).toThrow();
+      const rejected = parseSproutResponse({
+        jobs: [incompatible],
+        count: 1,
+        next: null,
+        previous: null,
+      });
+      expect(rejected.jobs).toEqual([]);
+      expect(rejected.rejected).toBe(1);
+      expect(rejected.schemaDiagnostics[0]?.itemIndex).toBe(0);
     }
   });
 });

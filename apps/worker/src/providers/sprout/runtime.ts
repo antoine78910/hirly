@@ -13,6 +13,8 @@ export interface SproutRuntimePage<RawJob> {
   next: string | number | null;
   sourceReportedTotal: number;
   responseBytes: number;
+  returnedItemCount?: number;
+  rejected?: number;
   watermark: string | null;
   wrapperMismatch?: boolean;
 }
@@ -94,7 +96,11 @@ export async function runSproutPageTask<RawJob>(input: {
   ) {
     throw new Error("sprout_runtime_response_budget_exceeded");
   }
-  if (page.items.length > checkpointIn.pageSize) {
+  const returnedItemCount = page.returnedItemCount ?? page.items.length;
+  if (!Number.isSafeInteger(returnedItemCount) || returnedItemCount < page.items.length) {
+    throw new Error("sprout_runtime_invalid_returned_item_count");
+  }
+  if (returnedItemCount > checkpointIn.pageSize) {
     throw new Error("sprout_runtime_page_size_exceeded");
   }
   if (page.items.some((raw) => !input.hasFranceLocation(raw))) {
@@ -103,7 +109,7 @@ export async function runSproutPageTask<RawJob>(input: {
 
   const advanced = nextSproutCheckpoint({
     current: checkpointIn,
-    returnedItemCount: page.items.length,
+    returnedItemCount,
     sourceReportedTotal: page.sourceReportedTotal,
     next: page.next,
   });
@@ -126,12 +132,12 @@ export async function runSproutPageTask<RawJob>(input: {
   }
 
   return {
-    fetched: page.items.length,
+    fetched: returnedItemCount,
     responseBytes: page.responseBytes,
     complete: advanced.complete,
     checkpoint: committedCheckpoint,
     inserted: committed.inserted,
-    rejected: committed.rejected,
+    rejected: committed.rejected + (page.rejected ?? 0),
   };
 }
 

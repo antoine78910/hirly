@@ -1,6 +1,11 @@
 import { IngestionError } from "@hirly/ingestion";
 import { buildSproutFranceQuery } from "./query";
-import { parseSproutResponse, type SproutRawJob } from "./schema";
+import {
+  parseSproutResponse,
+  SproutResponseSchemaError,
+  type SproutRawJob,
+  type SproutSchemaDiagnostic,
+} from "./schema";
 import type { SproutRuntimePage, SproutRuntimeTransport } from "./runtime";
 
 export interface SproutSecretResolver {
@@ -35,7 +40,16 @@ export type SproutTransportOperation =
       status: number;
       responseBytes: number;
       itemCount: number;
+      rejectedCount: number;
+      schemaDiagnostics: readonly SproutSchemaDiagnostic[];
       durationMs: number;
+    }
+  | {
+      type: "schema_drift";
+      attempt: number;
+      status: number;
+      responseBytes: number;
+      schemaDiagnostics: readonly SproutSchemaDiagnostic[];
     }
   | {
       type: "retry_backoff";
@@ -280,7 +294,17 @@ export class SproutHttpTransport implements SproutRuntimeTransport<SproutRawJob>
       let parsed;
       try {
         parsed = parseSproutResponse(decoded);
-      } catch {
+      } catch (error) {
+        const diagnostics = error instanceof SproutResponseSchemaError
+          ? error.diagnostics
+          : [];
+        observe(this.options.onOperation, {
+          type: "schema_drift",
+          attempt: attempt + 1,
+          status: response.status,
+          responseBytes: body.byteLength,
+          schemaDiagnostics: diagnostics,
+        });
         throw new IngestionError("provider_permanent", "sprout_schema_drift");
       }
       observe(this.options.onOperation, {
@@ -289,10 +313,14 @@ export class SproutHttpTransport implements SproutRuntimeTransport<SproutRawJob>
         status: response.status,
         responseBytes: body.byteLength,
         itemCount: parsed.jobs.length,
+        rejectedCount: parsed.rejected,
+        schemaDiagnostics: parsed.schemaDiagnostics,
         durationMs: performance.now() - startedAt,
       });
       return {
         items: parsed.jobs,
+        returnedItemCount: parsed.jobs.length + parsed.rejected,
+        rejected: parsed.rejected,
         next: parsed.next,
         sourceReportedTotal: parsed.count,
         responseBytes: body.byteLength,

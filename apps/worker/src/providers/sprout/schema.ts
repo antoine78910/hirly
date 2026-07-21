@@ -148,8 +148,8 @@ export type SproutRawJob = z.output<typeof sproutRawJobSchema>;
 export const sproutResponseSchema = z
   .object({
     message: z.string().max(10_000).nullable().optional(),
-    jobs: z.array(sproutRawJobSchema).max(500),
-    results: z.array(sproutRawJobSchema).max(500).optional(),
+    jobs: z.array(z.unknown()).max(500),
+    results: z.array(z.unknown()).max(500).optional(),
     count: z.number().int().nonnegative(),
     next: z.string().max(4_096).nullable(),
     previous: z.string().max(4_096).nullable(),
@@ -173,22 +173,62 @@ function stableJson(value: unknown): string {
 
 export interface ParsedSproutResponse {
   jobs: SproutRawJob[];
+  rejected: number;
+  schemaDiagnostics: SproutSchemaDiagnostic[];
   count: number;
   next: string | null;
   previous: string | null;
   wrapperMismatch: boolean;
 }
 
+export interface SproutSchemaDiagnostic {
+  itemIndex: number | null;
+  code: string;
+  path: string;
+}
+
+export class SproutResponseSchemaError extends Error {
+  constructor(readonly diagnostics: readonly SproutSchemaDiagnostic[]) {
+    super("sprout_schema_drift");
+  }
+}
+
+function schemaDiagnostics(
+  error: z.ZodError,
+  itemIndex: number | null,
+): SproutSchemaDiagnostic[] {
+  return error.issues.slice(0, 5).map((issue) => ({
+    itemIndex,
+    code: issue.code,
+    path: issue.path.slice(0, 8).map(String).join(".") || "$",
+  }));
+}
+
 /** Consume the authoritative `jobs` collection exactly once. */
 export function parseSproutResponse(value: unknown): ParsedSproutResponse {
-  const response = sproutResponseSchema.parse(value);
+  const envelope = sproutResponseSchema.safeParse(value);
+  if (!envelope.success) {
+    throw new SproutResponseSchemaError(schemaDiagnostics(envelope.error, null));
+  }
+  const jobs: SproutRawJob[] = [];
+  const listingSchemaDiagnostics: SproutSchemaDiagnostic[] = [];
+  for (const [index, raw] of envelope.data.jobs.entries()) {
+    const job = sproutRawJobSchema.safeParse(raw);
+    if (job.success) {
+      jobs.push(job.data);
+      continue;
+    }
+    listingSchemaDiagnostics.push(...schemaDiagnostics(job.error, index));
+  }
   return {
-    jobs: response.jobs,
-    count: response.count,
-    next: response.next,
-    previous: response.previous,
+    jobs,
+    rejected: envelope.data.jobs.length - jobs.length,
+    schemaDiagnostics: listingSchemaDiagnostics,
+    count: envelope.data.count,
+    next: envelope.data.next,
+    previous: envelope.data.previous,
     wrapperMismatch:
-      response.results !== undefined &&
-      stableJson(response.jobs) !== stableJson(response.results),
+      envelope.data.results !== undefined &&
+      stableJson(envelope.data.jobs) !== stableJson(envelope.data.results),
   };
 }

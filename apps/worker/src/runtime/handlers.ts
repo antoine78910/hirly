@@ -259,6 +259,16 @@ export function createTaskHandlers(
                   });
                   return;
                 }
+                if (operation.type === "schema_drift") {
+                  emitSproutOperation(logger, task, {
+                    event: "sprout.schema_drift",
+                    severity: "error",
+                    outcome: "failed",
+                    reasonCode: "provider_permanent",
+                    details: operation,
+                  });
+                  return;
+                }
                 emitSproutOperation(logger, task, {
                   event: "sprout.retry_backoff",
                   severity: "warn",
@@ -360,7 +370,7 @@ export function createTaskHandlers(
               maxResponseBytes: payload.maxResponseBytes,
               includeQualifiedRadius: payload.filterVariant === "qualified_radius",
             });
-            if (!result.complete) {
+            if (!result.complete && payload.mode !== "canary") {
               const nextOffset = result.checkpoint.offset;
               const nextEmptyInsertStreak = result.inserted === 0
                 ? payload.emptyInsertStreak + 1
