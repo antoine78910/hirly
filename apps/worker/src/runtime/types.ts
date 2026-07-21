@@ -44,6 +44,11 @@ export interface RuntimeStore {
     providerClaim: ProviderWorkClaim,
     jobs: CanonicalJob[],
   ): Promise<boolean>;
+  getSproutSourceRuntime?(
+    sourceId: string,
+    mode: "backfill" | "incremental",
+  ): ReturnType<WorkerRepository["getSproutSourceRuntime"]>;
+  commitSproutSourcePage?: WorkerRepository["commitSproutSourcePage"];
 }
 
 export interface DueSchedule {

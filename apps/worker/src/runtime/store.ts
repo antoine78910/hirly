@@ -34,6 +34,21 @@ export class PostgresRuntimeStore implements RuntimeStore {
     return this.repository.writeJobsAndComplete(lease, providerClaim, jobs);
   }
 
+  getSproutSourceRuntime(
+    sourceId: string,
+    mode: "backfill" | "incremental",
+  ) {
+    return this.repository.getSproutSourceRuntime(sourceId, mode);
+  }
+
+  commitSproutSourcePage(
+    lease: Lease,
+    providerClaim: ProviderWorkClaim,
+    commit: Parameters<WorkerRepository["commitSproutSourcePage"]>[2],
+  ) {
+    return this.repository.commitSproutSourcePage(lease, providerClaim, commit);
+  }
+
   claimProviderWork(lease: Lease, provider: Provider, leaseSeconds: number) {
     return this.repository.claimProviderWork(lease, provider, leaseSeconds);
   }

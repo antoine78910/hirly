@@ -1,6 +1,12 @@
 -- Operational rollback refuses to remove an activated or evidence-bearing source.
 BEGIN;
 
+ALTER TABLE public.career_sources
+  DROP CONSTRAINT IF EXISTS career_sources_approved_page_size_guard,
+  DROP CONSTRAINT IF EXISTS career_sources_credential_ref_guard,
+  DROP COLUMN IF EXISTS approved_page_size,
+  DROP COLUMN IF EXISTS credential_ref;
+
 REVOKE ALL ON FUNCTION worker_private.commit_sprout_source_page(
   uuid, uuid, bigint, text, uuid, uuid, text, text, jsonb, jsonb, boolean, jsonb
 ) FROM hirly_inventory_worker;
