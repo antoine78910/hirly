@@ -7,7 +7,11 @@ import * as posthogBoundary from "../../lib/posthogClient";
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean })
   .IS_REACT_ACT_ENVIRONMENT = true;
 
-let mockCurrentUser: { user_id: string } | null = null;
+let mockCurrentUser: {
+  analytics_user_id: string;
+  email: string;
+  name: string;
+} | null = null;
 let mockPathname = "/";
 
 jest.mock("react-router-dom", () => ({
@@ -67,13 +71,16 @@ describe("PostHogLifecycle", () => {
 
   it("forwards stable identities and anonymous resets to the safe client boundary", () => {
     mockCurrentUser = {
-      user_id: "123e4567-e89b-12d3-a456-426614174000",
+      analytics_user_id: "123e4567-e89b-12d3-a456-426614174000",
+      email: "user@example.com",
+      name: "Ada Lovelace",
     };
     act(() => {
       root.render(<PostHogLifecycle />);
     });
     expect(mockIdentifyPostHogUser).toHaveBeenCalledWith(
       "123e4567-e89b-12d3-a456-426614174000",
+      { email: "user@example.com", name: "Ada Lovelace" },
     );
     expect(mockIdentifyPostHogUser.mock.invocationCallOrder[0]).toBeLessThan(
       mockCapturePostHogPageview.mock.invocationCallOrder[0],

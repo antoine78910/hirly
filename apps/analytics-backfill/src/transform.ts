@@ -8,9 +8,34 @@ import {
 import { createHash } from "node:crypto";
 
 export const ANALYTICS_BACKFILL_TRANSFORM_VERSION =
-  "hirly.analytics-backfill.v1" as const;
+  "hirly.analytics-backfill.v2" as const;
 
-export type LegacyAttribution = "unlinked" | "one_to_one" | "ambiguous";
+export type LegacyIdentityResolution =
+  | "canonical_uuid"
+  | "anonymous_unlinked"
+  | "anonymous_one_to_one"
+  | "anonymous_ambiguous"
+  | "known_user_unresolved"
+  | "known_user_ambiguous"
+  | "no_identity";
+
+const legacyIdentityResolutions = new Set<LegacyIdentityResolution>([
+  "canonical_uuid",
+  "anonymous_unlinked",
+  "anonymous_one_to_one",
+  "anonymous_ambiguous",
+  "known_user_unresolved",
+  "known_user_ambiguous",
+  "no_identity",
+]);
+
+const anonymousAttributionByResolution: Partial<
+  Record<LegacyIdentityResolution, "unlinked" | "one_to_one" | "ambiguous">
+> = {
+  anonymous_unlinked: "unlinked",
+  anonymous_one_to_one: "one_to_one",
+  anonymous_ambiguous: "ambiguous",
+};
 
 export interface LegacyAnalyticsRow {
   eventId: string;
@@ -19,8 +44,51 @@ export interface LegacyAnalyticsRow {
   exactBusinessTimestamp?: string | null;
   userId?: unknown;
   anonymousId?: string | null;
-  anonymousAttribution?: LegacyAttribution;
+  identityResolution?: LegacyIdentityResolution;
   properties: Record<string, unknown>;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+export function parseLegacyAnalyticsRows(value: unknown): LegacyAnalyticsRow[] {
+  if (!Array.isArray(value)) throw new Error("invalid_input:expected_array");
+  return value.map((entry, index) => {
+    if (!isRecord(entry)) throw new Error(`invalid_input_row:${index}:object`);
+    for (const field of ["eventId", "eventName", "createdAt"] as const) {
+      if (typeof entry[field] !== "string") {
+        throw new Error(`invalid_input_row:${index}:${field}`);
+      }
+    }
+    if (!isRecord(entry.properties)) {
+      throw new Error(`invalid_input_row:${index}:properties`);
+    }
+    if (
+      entry.exactBusinessTimestamp !== undefined &&
+      entry.exactBusinessTimestamp !== null &&
+      typeof entry.exactBusinessTimestamp !== "string"
+    ) {
+      throw new Error(`invalid_input_row:${index}:exactBusinessTimestamp`);
+    }
+    if (
+      entry.anonymousId !== undefined &&
+      entry.anonymousId !== null &&
+      typeof entry.anonymousId !== "string"
+    ) {
+      throw new Error(`invalid_input_row:${index}:anonymousId`);
+    }
+    if (
+      entry.identityResolution !== undefined &&
+      (typeof entry.identityResolution !== "string" ||
+        !legacyIdentityResolutions.has(
+          entry.identityResolution as LegacyIdentityResolution,
+        ))
+    ) {
+      throw new Error(`invalid_input_row:${index}:identityResolution`);
+    }
+    return entry as unknown as LegacyAnalyticsRow;
+  });
 }
 
 export type IdentityQuality =
@@ -78,15 +146,50 @@ function identity(row: LegacyAnalyticsRow): {
   distinctId: string | null;
   quality: IdentityQuality;
   personless: boolean;
-  invalidKnownIdentity: boolean;
+  quarantineReason: string | null;
 } {
+  if (!row.identityResolution) {
+    return {
+      distinctId: null,
+      quality: "unknown",
+      personless: false,
+      quarantineReason: "missing_identity_resolution",
+    };
+  }
+  if (
+    row.identityResolution === "known_user_unresolved" ||
+    row.identityResolution === "known_user_ambiguous"
+  ) {
+    return {
+      distinctId: null,
+      quality: "unknown",
+      personless: false,
+      quarantineReason: row.identityResolution,
+    };
+  }
+  if (row.identityResolution === "no_identity") {
+    return {
+      distinctId: null,
+      quality: "unknown",
+      personless: true,
+      quarantineReason: "missing_identity",
+    };
+  }
   const known = canonicalAnalyticsUserIdSchema.safeParse(row.userId);
-  if (known.success) {
+  if (row.identityResolution === "canonical_uuid" && known.success) {
     return {
       distinctId: known.data,
       quality: "identified_at_ingest",
       personless: false,
-      invalidKnownIdentity: false,
+      quarantineReason: null,
+    };
+  }
+  if (row.identityResolution === "canonical_uuid") {
+    return {
+      distinctId: null,
+      quality: "unknown",
+      personless: false,
+      quarantineReason: "invalid_known_identity",
     };
   }
   if (row.userId !== null && row.userId !== undefined) {
@@ -94,7 +197,16 @@ function identity(row: LegacyAnalyticsRow): {
       distinctId: null,
       quality: "unknown",
       personless: false,
-      invalidKnownIdentity: true,
+      quarantineReason: "identity_resolution_mismatch",
+    };
+  }
+  const attribution = anonymousAttributionByResolution[row.identityResolution];
+  if (!attribution) {
+    return {
+      distinctId: null,
+      quality: "unknown",
+      personless: false,
+      quarantineReason: "invalid_identity_resolution",
     };
   }
   if (!row.anonymousId?.trim()) {
@@ -102,17 +214,16 @@ function identity(row: LegacyAnalyticsRow): {
       distinctId: null,
       quality: "unknown",
       personless: true,
-      invalidKnownIdentity: false,
+      quarantineReason: "missing_identity",
     };
   }
-  const attribution = row.anonymousAttribution ?? "unlinked";
   return {
     // Anonymous history is deliberately namespaced and never aliased to a user,
     // including observed one-to-one mappings.
     distinctId: `legacy-anonymous:${stablePayloadHash(row.anonymousId).slice(0, 32)}`,
     quality: `legacy_anonymous_${attribution}`,
     personless: true,
-    invalidKnownIdentity: false,
+    quarantineReason: null,
   };
 }
 
@@ -150,15 +261,21 @@ export function transformLegacyAnalyticsRow(
   if (!row.eventId.trim()) return quarantine("missing_source_event_id");
   if (!sourceCreatedAt) return quarantine("invalid_source_created_at");
   if (!canonicalEventName) return quarantine("unknown_event");
-  if (resolvedIdentity.invalidKnownIdentity) {
-    return quarantine("invalid_known_identity");
+  if (resolvedIdentity.quarantineReason) {
+    return quarantine(resolvedIdentity.quarantineReason);
   }
   if (!resolvedIdentity.distinctId) return quarantine("missing_identity");
+  const definition = getAnalyticsEventDefinition(canonicalEventName);
+  if (!definition) return quarantine("unknown_event");
+  if (
+    timestampQuality !== "exact_business_timestamp" ||
+    !definition.canonicalTimeQualities.includes(timestampQuality)
+  ) {
+    return exclude("noncanonical_timestamp_quality");
+  }
   if (Object.keys(row.properties).some((key) => denylistedProperty.test(key))) {
     return quarantine("denylisted_property");
   }
-  const definition = getAnalyticsEventDefinition(canonicalEventName);
-  if (!definition) return quarantine("unknown_event");
   const sanitized = sanitizeAnalyticsProperties(
     canonicalEventName,
     row.properties,
@@ -173,13 +290,6 @@ export function transformLegacyAnalyticsRow(
       `missing_required_properties:${sanitized.missingRequiredProperties.join(",")}`,
     );
   }
-  if (
-    timestampQuality !== "exact_business_timestamp" ||
-    !definition.canonicalTimeQualities.includes(timestampQuality)
-  ) {
-    return exclude("noncanonical_timestamp_quality");
-  }
-
   const payload: TransformedPostHogEvent = {
     event: canonicalEventName,
     distinct_id: resolvedIdentity.distinctId,

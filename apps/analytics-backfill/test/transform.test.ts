@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   afterCheckpoint,
+  parseLegacyAnalyticsRows,
   transformLegacyAnalyticsRow,
   type LegacyAnalyticsRow,
 } from "../src/transform";
@@ -12,6 +13,7 @@ const exactRow: LegacyAnalyticsRow = {
   createdAt: "2025-01-02T00:00:00.000Z",
   exactBusinessTimestamp: "2025-01-01T12:00:00.000Z",
   userId: "11111111-1111-4111-8111-111111111111",
+  identityResolution: "canonical_uuid",
   properties: {},
 };
 
@@ -54,26 +56,97 @@ describe("analytics historical transform", () => {
     });
   });
 
+  test("classifies noncanonical time before irrelevant property defects", () => {
+    expect(
+      transformLegacyAnalyticsRow({
+        ...exactRow,
+        exactBusinessTimestamp: null,
+        properties: { email: "never-read@example.com" },
+      }),
+    ).toMatchObject({
+      status: "excluded",
+      reason: "noncanonical_timestamp_quality",
+    });
+  });
+
   test("never retrospectively merges anonymous mappings", () => {
-    for (const anonymousAttribution of [
-      "unlinked",
-      "one_to_one",
-      "ambiguous",
+    for (const identityResolution of [
+      "anonymous_unlinked",
+      "anonymous_one_to_one",
+      "anonymous_ambiguous",
     ] as const) {
       const transformed = transformLegacyAnalyticsRow({
         ...exactRow,
         userId: null,
         anonymousId: "shared-browser-id",
-        anonymousAttribution,
+        identityResolution,
       });
       expect(transformed.payload?.distinct_id).toMatch(/^legacy-anonymous:/);
       expect(transformed.payload?.properties).toMatchObject({
         $process_person_profile: false,
       });
       expect(transformed.identityQuality).toBe(
-        `legacy_anonymous_${anonymousAttribution}`,
+        `legacy_${identityResolution}`,
       );
     }
+  });
+
+  test("never falls back to anonymous identity for unresolved known users", () => {
+    for (const identityResolution of [
+      "known_user_unresolved",
+      "known_user_ambiguous",
+    ] as const) {
+      expect(
+        transformLegacyAnalyticsRow({
+          ...exactRow,
+          userId: null,
+          anonymousId: "must-not-be-used-as-fallback",
+          identityResolution,
+        }),
+      ).toMatchObject({
+        status: "quarantined",
+        reason: identityResolution,
+        identityQuality: "unknown",
+        payload: null,
+      });
+    }
+  });
+
+  test("requires explicit identity provenance after UUID containment", () => {
+    const { identityResolution: _, ...withoutResolution } = exactRow;
+    expect(transformLegacyAnalyticsRow(withoutResolution)).toMatchObject({
+      status: "quarantined",
+      reason: "missing_identity_resolution",
+      identityQuality: "unknown",
+      payload: null,
+    });
+  });
+
+  test("quarantines rows proven to have no identity", () => {
+    expect(
+      transformLegacyAnalyticsRow({
+        ...exactRow,
+        userId: null,
+        anonymousId: null,
+        identityResolution: "no_identity",
+      }),
+    ).toMatchObject({
+      status: "quarantined",
+      reason: "missing_identity",
+      payload: null,
+    });
+  });
+
+  test("validates the JSON boundary before transforming rows", () => {
+    expect(parseLegacyAnalyticsRows([exactRow])).toEqual([exactRow]);
+    expect(() =>
+      parseLegacyAnalyticsRows([
+        { ...exactRow, identityResolution: "guessed_from_anonymous_id" },
+      ]),
+    ).toThrow("invalid_input_row:0:identityResolution");
+    expect(() =>
+      parseLegacyAnalyticsRows([{ ...exactRow, properties: [] }]),
+    ).toThrow("invalid_input_row:0:properties");
   });
 
   test("quarantines denylisted, malformed, and unknown rows", () => {

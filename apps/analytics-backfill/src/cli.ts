@@ -1,6 +1,9 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { runBackfill } from "./runner";
-import type { BackfillCheckpoint, LegacyAnalyticsRow } from "./transform";
+import {
+  parseLegacyAnalyticsRows,
+  type BackfillCheckpoint,
+} from "./transform";
 
 function valueAfter(flag: string): string | null {
   const index = process.argv.indexOf(flag);
@@ -31,7 +34,9 @@ if (execute) {
   );
 }
 
-const rows = JSON.parse(await readFile(inputPath, "utf8")) as LegacyAnalyticsRow[];
+const rows = parseLegacyAnalyticsRows(
+  JSON.parse(await readFile(inputPath, "utf8")) as unknown,
+);
 const checkpoint = checkpointPath
   ? (JSON.parse(await readFile(checkpointPath, "utf8")) as BackfillCheckpoint)
   : null;

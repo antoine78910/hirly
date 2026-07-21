@@ -43,6 +43,45 @@ def _user(user_id="123e4567-e89b-12d3-a456-426614174000"):
     )
 
 
+def test_user_exposes_canonical_analytics_identity_without_storage_alias():
+    user = server.User(
+        user_id="user_internal_123",
+        supabase_user_id="123e4567-e89b-12d3-a456-426614174000",
+        email="analytics@example.com",
+        name="Analytics Fixture",
+    )
+
+    assert user.analytics_user_id == "123e4567-e89b-12d3-a456-426614174000"
+    assert user.model_dump()["analytics_user_id"] == user.analytics_user_id
+    assert "supabase_user_id" not in user.model_dump()
+
+
+def test_billing_identity_resolution_returns_canonical_auth_uuid(monkeypatch):
+    canonical_user_id = "123e4567-e89b-12d3-a456-426614174000"
+
+    class _Users:
+        async def find_one(self, query, projection):
+            assert query == {"user_id": "user_internal_123"}
+            assert projection == {"_id": 0, "supabase_user_id": 1}
+            return {"supabase_user_id": canonical_user_id}
+
+    monkeypatch.setattr(server, "db", type("Db", (), {"users": _Users()})())
+    resolved = asyncio.run(
+        server._resolve_posthog_user_id(
+            metadata={"user_id": "user_internal_123"},
+        )
+    )
+
+    assert resolved == canonical_user_id
+
+
+def test_billing_identity_resolution_rejects_malformed_metadata_without_raising():
+    assert asyncio.run(server._resolve_posthog_user_id(metadata="not-a-mapping")) is None
+    assert server._posthog_invoice_product_properties(
+        {"metadata": "not-a-mapping", "lines": {"data": []}}
+    ) == {}
+
+
 def test_analytics_batch_is_bounded_and_server_idempotent(monkeypatch):
     db = _Db()
     monkeypatch.setattr(server, "db", db)

@@ -21,6 +21,54 @@ let client: PostHog | null = null;
 let initialized = false;
 let lastCapturedPath: string | null = null;
 let identifiedUserId: string | null = null;
+let identifiedPersonPropertiesKey: string | null = null;
+
+export interface PostHogIdentityProfile {
+  email?: unknown;
+  name?: unknown;
+}
+
+export const buildPostHogPersonProperties = (
+  profile: PostHogIdentityProfile = {},
+): Properties => {
+  const properties: Properties = {};
+  if (typeof profile.email === "string") {
+    const email = profile.email.trim().toLowerCase();
+    if (
+      email.length <= 254 &&
+      /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+    ) {
+      properties.email = email;
+    }
+  }
+  if (typeof profile.name === "string") {
+    const parts = profile.name
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean);
+    const firstName = parts.shift()?.slice(0, 100);
+    const lastName = parts.join(" ").slice(0, 100);
+    if (firstName && !/[\u0000-\u001f\u007f]/.test(firstName)) {
+      properties.first_name = firstName;
+    }
+    if (lastName && !/[\u0000-\u001f\u007f]/.test(lastName)) {
+      properties.last_name = lastName;
+    }
+  }
+  return properties;
+};
+
+const sanitizeIdentifyPersonSet = (value: unknown): Properties | null => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const source = value as Record<string, unknown>;
+  const profile = buildPostHogPersonProperties({
+    email: source.email,
+    name: [source.first_name, source.last_name]
+      .filter((part): part is string => typeof part === "string")
+      .join(" "),
+  });
+  return Object.keys(profile).length > 0 ? profile : null;
+};
 
 export const stripUrlSecrets = (value: string): string => {
   try {
@@ -75,6 +123,7 @@ export const sanitizePostHogEvent = (event: CaptureResult | null): CaptureResult
   const sdkProperties: Properties = {};
   const callerProperties: Properties = {};
   for (const [key, value] of Object.entries(event.properties || {})) {
+    if (event.event === "$identify" && key === "$set") continue;
     if (TRUSTED_SDK_PROPERTY_KEYS.has(key)) {
       if (typeof value === "string") sdkProperties[key] = value.slice(0, MAX_STRING_LENGTH);
       else if (typeof value === "number" || typeof value === "boolean") sdkProperties[key] = value;
@@ -85,6 +134,10 @@ export const sanitizePostHogEvent = (event: CaptureResult | null): CaptureResult
   const properties = sanitizeAnalyticsProperties(callerProperties) as Properties | undefined;
   if (!properties) return null;
   Object.assign(properties, sdkProperties);
+  if (event.event === "$identify") {
+    const personSet = sanitizeIdentifyPersonSet(event.properties?.$set);
+    if (personSet) properties.$set = personSet;
+  }
   for (const key of ["$current_url", "$referrer", "$pathname", "current_url", "referrer", "url", "path"]) {
     if (typeof properties[key] === "string") properties[key] = stripUrlSecrets(properties[key] as string);
   }
@@ -176,14 +229,28 @@ export const capturePostHogPageview = (pathname: string): void => {
   });
 };
 
-export const identifyPostHogUser = (userId: string): void => {
-  if (!client || identifiedUserId === userId) return;
+export const identifyPostHogUser = (
+  userId: string,
+  profile: PostHogIdentityProfile = {},
+): void => {
+  if (!client) return;
+  if (!isCanonicalAnalyticsUserId(userId)) return;
+  const personProperties = buildPostHogPersonProperties(profile);
+  const personPropertiesKey = JSON.stringify(personProperties);
+  if (
+    identifiedUserId === userId &&
+    identifiedPersonPropertiesKey === personPropertiesKey
+  ) {
+    return;
+  }
   try {
-    client.reset();
-    identifiedUserId = null;
-    if (!isCanonicalAnalyticsUserId(userId)) return;
-    client.identify(userId);
+    // Preserve the current anonymous distinct ID on the first authentication so
+    // PostHog can merge pre-signup activity into the canonical auth UUID. Reset
+    // only when switching directly between two identified accounts.
+    if (identifiedUserId !== null && identifiedUserId !== userId) client.reset();
+    client.identify(userId, personProperties);
     identifiedUserId = userId;
+    identifiedPersonPropertiesKey = personPropertiesKey;
   } catch {}
 };
 
@@ -192,6 +259,7 @@ export const resetPostHog = (): void => {
   try {
     client.reset();
     identifiedUserId = null;
+    identifiedPersonPropertiesKey = null;
   } catch {}
 };
 
@@ -208,4 +276,5 @@ export const __resetPostHogForTests = (): void => {
   initialized = false;
   lastCapturedPath = null;
   identifiedUserId = null;
+  identifiedPersonPropertiesKey = null;
 };

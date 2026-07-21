@@ -14,6 +14,7 @@ jest.mock("posthog-js", () => ({
 import posthog from "posthog-js";
 import {
   __resetPostHogForTests,
+  buildPostHogPersonProperties,
   buildPostHogConfig,
   capturePostHogEvent,
   capturePostHogPageview,
@@ -169,7 +170,48 @@ describe("posthog client", () => {
     expect(event?.properties).not.toHaveProperty("accessToken");
   });
 
-  it("deduplicates strict-mode pageviews and isolates persisted identities before identify", () => {
+  it("allows approved person labels only on identify events", () => {
+    expect(
+      buildPostHogPersonProperties({
+        email: "  ADA@Example.com ",
+        name: "Ada Byron Lovelace",
+      }),
+    ).toEqual({
+      email: "ada@example.com",
+      first_name: "Ada",
+      last_name: "Byron Lovelace",
+    });
+
+    const identified = sanitizePostHogEvent({
+      event: "$identify",
+      properties: {
+        $anon_distinct_id: "anonymous-before-signup",
+        $set: {
+          email: "ada@example.com",
+          first_name: "Ada",
+          last_name: "Lovelace",
+          phone: "+33123456789",
+        },
+      },
+    } as never);
+    expect(identified?.properties).toMatchObject({
+      $anon_distinct_id: "anonymous-before-signup",
+      $set: {
+        email: "ada@example.com",
+        first_name: "Ada",
+        last_name: "Lovelace",
+      },
+    });
+    expect(identified?.properties?.$set).not.toHaveProperty("phone");
+
+    const normalEvent = sanitizePostHogEvent({
+      event: "checkout_started",
+      properties: { plan: "pro", email: "ada@example.com" },
+    } as never);
+    expect(normalEvent?.properties).toEqual({ plan: "pro" });
+  });
+
+  it("links anonymous activity on first identify and resets only for account switches", () => {
     process.env.REACT_APP_POSTHOG_TOKEN = "phc_test";
     process.env.REACT_APP_POSTHOG_HOST = "https://us.i.posthog.com";
     initializePostHog();
@@ -186,19 +228,31 @@ describe("posthog client", () => {
       undefined,
     );
 
-    identifyPostHogUser("123e4567-e89b-12d3-a456-426614174000");
+    identifyPostHogUser("123e4567-e89b-12d3-a456-426614174000", {
+      email: "ada@example.com",
+      name: "Ada Lovelace",
+    });
     expect(hasIdentifiedPostHogUser()).toBe(true);
-    identifyPostHogUser("123e4567-e89b-12d3-a456-426614174000");
+    identifyPostHogUser("123e4567-e89b-12d3-a456-426614174000", {
+      email: "ada@example.com",
+      name: "Ada Lovelace",
+    });
     identifyPostHogUser("123e4567-e89b-12d3-a456-426614174001");
     expect(mockIdentify).toHaveBeenCalledTimes(2);
-    expect(mockReset.mock.invocationCallOrder[0]).toBeLessThan(
-      mockIdentify.mock.invocationCallOrder[0],
+    expect(mockIdentify).toHaveBeenNthCalledWith(
+      1,
+      "123e4567-e89b-12d3-a456-426614174000",
+      { email: "ada@example.com", first_name: "Ada", last_name: "Lovelace" },
     );
-    expect(mockReset.mock.invocationCallOrder[1]).toBeLessThan(
+    expect(mockReset).toHaveBeenCalledTimes(1);
+    expect(mockIdentify.mock.invocationCallOrder[0]).toBeLessThan(
+      mockReset.mock.invocationCallOrder[0],
+    );
+    expect(mockReset.mock.invocationCallOrder[0]).toBeLessThan(
       mockIdentify.mock.invocationCallOrder[1],
     );
     resetPostHog();
-    expect(mockReset).toHaveBeenCalledTimes(3);
+    expect(mockReset).toHaveBeenCalledTimes(2);
     expect(hasIdentifiedPostHogUser()).toBe(false);
   });
 
@@ -210,24 +264,9 @@ describe("posthog client", () => {
     resetPostHog();
     identifyPostHogUser("not-a-canonical-user");
 
-    expect(mockReset).toHaveBeenCalledTimes(2);
+    expect(mockReset).toHaveBeenCalledTimes(1);
     expect(mockIdentify).not.toHaveBeenCalled();
     expect(hasIdentifiedPostHogUser()).toBe(false);
-  });
-
-  it("accepts only canonical lowercase UUID identities", () => {
-    expect(
-      isCanonicalAnalyticsUserId("123e4567-e89b-12d3-a456-426614174000"),
-    ).toBe(true);
-    for (const invalid of [
-      "",
-      "anonymous",
-      "user-a",
-      "123E4567-E89B-12D3-A456-426614174000",
-      "123e4567-e89b-02d3-a456-426614174000",
-    ]) {
-      expect(isCanonicalAnalyticsUserId(invalid)).toBe(false);
-    }
   });
 
   it("accepts only canonical lowercase UUID identities", () => {
