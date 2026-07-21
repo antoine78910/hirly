@@ -223,6 +223,13 @@ const timestampOrderingMigration = readFileSync(
   ),
   "utf8",
 );
+const errorLedgerMigration = readFileSync(
+  new URL(
+    "../backend/db/migrations/20260721003000_sprout_ingestion_error_ledger.sql",
+    import.meta.url,
+  ),
+  "utf8",
+);
 
 describe("Sprout source commit timestamps", () => {
   test("uses one commit timestamp for ordered attempt and success fields", () => {
@@ -238,5 +245,18 @@ describe("Sprout source commit timestamps", () => {
     expect(timestampOrderingMigration).not.toContain(
       "last_success_at = clock_timestamp()",
     );
+  });
+});
+
+describe("Sprout ingestion error ledger", () => {
+  test("retains diagnostic evidence through a lease-fenced, private writer", () => {
+    expect(errorLedgerMigration).toContain("CREATE TABLE public.sprout_ingestion_errors");
+    expect(errorLedgerMigration).toContain("request_document jsonb NOT NULL");
+    expect(errorLedgerMigration).toContain("response_document jsonb NOT NULL");
+    expect(errorLedgerMigration).toContain("schema_diagnostics jsonb NOT NULL");
+    expect(errorLedgerMigration).toContain("worker_private.record_sprout_ingestion_error");
+    expect(errorLedgerMigration).toContain("task.lease_token = p_lease_token");
+    expect(errorLedgerMigration).toContain("REVOKE ALL ON public.sprout_ingestion_errors FROM PUBLIC");
+    expect(errorLedgerMigration).toContain("GRANT SELECT ON public.sprout_ingestion_errors TO hirly_inventory_operator");
   });
 });

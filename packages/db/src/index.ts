@@ -58,6 +58,17 @@ export interface SproutSourceRuntimeConfiguration {
   policyEvidenceRef: string;
 }
 
+export interface SproutIngestionErrorRecord {
+  sourceId: string | null;
+  errorCode: string;
+  errorMessage: string;
+  request: Record<string, unknown>;
+  response: unknown;
+  responseStatus: number | null;
+  responseBytes: number | null;
+  schemaDiagnostics: readonly Record<string, unknown>[];
+}
+
 export interface DueSchedule {
   id: string;
   cronExpression: string;
@@ -454,6 +465,28 @@ export class WorkerRepository {
       canaryEvidence: row.canary_evidence,
       rollbackEvidence: row.rollback_evidence,
     });
+  }
+
+  async recordSproutIngestionError(
+    lease: Lease,
+    input: SproutIngestionErrorRecord,
+  ): Promise<void> {
+    await this.sql`
+      SELECT worker_private.record_sprout_ingestion_error(
+        ${lease.taskId}::uuid,
+        ${lease.leaseToken}::uuid,
+        ${lease.claimGeneration.toString()}::bigint,
+        ${lease.leaseOwner},
+        ${input.sourceId}::uuid,
+        ${input.errorCode},
+        ${input.errorMessage},
+        ${this.sql.json(asJson(input.request))},
+        ${this.sql.json(asJson(input.response))},
+        ${input.responseStatus},
+        ${input.responseBytes},
+        ${this.sql.json(asJson(input.schemaDiagnostics))}
+      )
+    `;
   }
 
   async claimProviderWork(

@@ -33,6 +33,19 @@ export interface SproutHttpTransportOptions {
   onOperation?: (event: SproutTransportOperation) => void;
 }
 
+export class SproutSchemaDriftError extends IngestionError {
+  constructor(
+    readonly evidence: {
+      status: number;
+      responseBytes: number;
+      response: unknown;
+      schemaDiagnostics: readonly SproutSchemaDiagnostic[];
+    },
+  ) {
+    super("provider_permanent", "sprout_schema_drift");
+  }
+}
+
 export type SproutTransportOperation =
   | {
       type: "fetch_response";
@@ -305,7 +318,15 @@ export class SproutHttpTransport implements SproutRuntimeTransport<SproutRawJob>
           responseBytes: body.byteLength,
           schemaDiagnostics: diagnostics,
         });
-        throw new IngestionError("provider_permanent", "sprout_schema_drift");
+        throw new SproutSchemaDriftError({
+          status: response.status,
+          responseBytes: body.byteLength,
+          response: body.byteLength <= 1_000_000 ? decoded : {
+            retained: false,
+            reason: "response_exceeds_error_ledger_budget",
+          },
+          schemaDiagnostics: diagnostics,
+        });
       }
       observe(this.options.onOperation, {
         type: "fetch_response",

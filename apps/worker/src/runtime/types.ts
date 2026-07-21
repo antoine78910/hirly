@@ -54,6 +54,7 @@ export interface RuntimeStore {
     mode: "canary" | "backfill" | "incremental",
   ): Promise<SproutSourceRuntimeConfiguration | null>;
   commitSproutSourcePage?: WorkerRepository["commitSproutSourcePage"];
+  recordSproutIngestionError?: WorkerRepository["recordSproutIngestionError"];
 }
 
 export interface DueSchedule {

@@ -21,6 +21,7 @@ import type { ProviderCore } from "../providers/core";
 import {
   SPROUT_FRANCE_DISABLED_REGISTRATION,
   SproutHttpTransport,
+  SproutSchemaDriftError,
   createSproutCommitRepository,
   hasSproutFranceLocation,
   runSproutPageTask,
@@ -126,6 +127,8 @@ export function createTaskHandlers(
         );
       }
       const provider = providerSchema.parse(task.provider);
+      let sproutSourceId: string | null = null;
+      let sproutRequestDocument: Record<string, unknown> | null = null;
       try {
         await store.assertProviderRunnable(provider);
         const module = modules[provider] ?? getProviderModule(provider);
@@ -220,6 +223,7 @@ export function createTaskHandlers(
               );
             }
             const payload = sproutTaskPayloadSchema.parse(task.payload);
+            sproutSourceId = payload.sourceId;
             const runtime = await store.getSproutSourceRuntime(
               payload.sourceId,
               payload.mode,
@@ -231,6 +235,15 @@ export function createTaskHandlers(
               );
             }
             const checkpoint = sproutCheckpointSchema.parse(runtime.checkpoint);
+            sproutRequestDocument = {
+              countryCode: "FR",
+              mode: payload.mode,
+              offset: checkpoint.offset,
+              pageSize: checkpoint.pageSize,
+              filterVariant: payload.filterVariant,
+              includeQualifiedRadius: payload.filterVariant === "qualified_radius",
+              includeUnknownWorkLocation: false,
+            };
             const configuredOrigins =
               options.sproutAllowedOrigins ??
               (process.env.SPROUT_ALLOWED_ORIGIN
@@ -520,6 +533,28 @@ export function createTaskHandlers(
         }
       } catch (error) {
         if (provider === "sprout") {
+          const schemaDrift = error instanceof SproutSchemaDriftError
+            ? error
+            : null;
+          if (store.recordSproutIngestionError && sproutRequestDocument) {
+            try {
+              await store.recordSproutIngestionError(task, {
+                sourceId: sproutSourceId,
+                errorCode: error instanceof IngestionError ? error.code : "unexpected_error",
+                errorMessage: safeErrorMessage(error).slice(0, 512),
+                request: sproutRequestDocument,
+                response: schemaDrift?.evidence.response ?? {
+                  retained: false,
+                  reason: "no_provider_response_available",
+                },
+                responseStatus: schemaDrift?.evidence.status ?? null,
+                responseBytes: schemaDrift?.evidence.responseBytes ?? null,
+                schemaDiagnostics: schemaDrift?.evidence.schemaDiagnostics ?? [],
+              });
+            } catch {
+              // Error-ledger failures must not hide the original ingestion failure.
+            }
+          }
           emitSproutOperation(logger, task, {
             event: "sprout.page_terminal",
             severity: "error",

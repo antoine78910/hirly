@@ -62,6 +62,13 @@ export class PostgresRuntimeStore implements RuntimeStore {
     return this.repository.commitSproutSourcePage(lease, providerClaim, commit);
   }
 
+  recordSproutIngestionError(
+    lease: Lease,
+    input: Parameters<WorkerRepository["recordSproutIngestionError"]>[1],
+  ) {
+    return this.repository.recordSproutIngestionError(lease, input);
+  }
+
   claimProviderWork(lease: Lease, provider: Provider, leaseSeconds: number) {
     return this.repository.claimProviderWork(lease, provider, leaseSeconds);
   }
