@@ -129,6 +129,11 @@ export function createTaskHandlers(
       try {
         await store.assertProviderRunnable(provider);
         const module = modules[provider] ?? getProviderModule(provider);
+        let rateGate = rateGates.get(provider);
+        if (!rateGate) {
+          rateGate = new ProviderRateGate(module.rateLimit);
+          rateGates.set(provider, rateGate);
+        }
         if (
           !store.claimProviderWork ||
           !store.heartbeatProviderWork ||
@@ -335,7 +340,13 @@ export function createTaskHandlers(
               },
               mode: payload.mode,
               checkpoint,
-              transport,
+              transport: {
+                fetchPage: (request, requestSignal) =>
+                  rateGate.run(
+                    () => transport.fetchPage(request, requestSignal),
+                    requestSignal,
+                  ),
+              },
               repository,
               hasFranceLocation: hasSproutFranceLocation,
               signal: claimAbort.signal,
@@ -393,11 +404,6 @@ export function createTaskHandlers(
               },
             });
             return { taskCompleted: true };
-          }
-          let rateGate = rateGates.get(provider);
-          if (!rateGate) {
-            rateGate = new ProviderRateGate(module.rateLimit);
-            rateGates.set(provider, rateGate);
           }
           const request = providerSearchRequestSchema.parse({
             provider,
