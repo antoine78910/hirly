@@ -62,7 +62,7 @@ export function UpgradeModalProvider({ children }) {
   return (
     <UpgradeModalContext.Provider value={{ upgradeOpen, openUpgrade, closeUpgrade }}>
       {children}
-      <DesktopUpgradeModal open={upgradeOpen} onClose={closeUpgrade} />
+      {/* <DesktopUpgradeModal open={upgradeOpen} onClose={closeUpgrade} />*/}
     </UpgradeModalContext.Provider>
   );
 }
