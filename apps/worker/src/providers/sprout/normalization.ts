@@ -163,6 +163,18 @@ function firstJobType(value: unknown): string | null {
   return value.find((entry): entry is string => typeof entry === "string") ?? null;
 }
 
+function normalizedSalaryBounds(raw: SproutRawJob): {
+  salaryMin: number | null;
+  salaryMax: number | null;
+} {
+  const salaryMin = raw.salaryMin ?? null;
+  const salaryMax = raw.salaryMax ?? null;
+  if (salaryMin !== null && salaryMax !== null && salaryMin > salaryMax) {
+    return { salaryMin: salaryMax, salaryMax: salaryMin };
+  }
+  return { salaryMin, salaryMax };
+}
+
 export function tryNormalizeSproutJob(
   rawValue: SproutRawJob,
   now = new Date(),
@@ -184,6 +196,7 @@ export function tryNormalizeSproutJob(
       externalId: raw.id,
     };
   }
+  const salary = normalizedSalaryBounds(raw);
 
   return {
     accepted: true,
@@ -204,8 +217,8 @@ export function tryNormalizeSproutJob(
       city: primary.city,
       region: primary.region,
       remote: cleanText(raw.workLocation)?.toUpperCase() === "REMOTE",
-      salaryMin: raw.salaryMin ?? null,
-      salaryMax: raw.salaryMax ?? null,
+      salaryMin: salary.salaryMin,
+      salaryMax: salary.salaryMax,
       currency: cleanText(raw.currency)?.toUpperCase() ?? null,
       postedAt: freshnessEligiblePostedAt(raw, now),
       importedAt: normalizedIsoDate(raw.createdAt),

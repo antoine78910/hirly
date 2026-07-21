@@ -40,6 +40,17 @@ function rawJob(overrides: Partial<SproutRawJob> = {}): SproutRawJob {
 }
 
 describe("Sprout adapter security and inventory contract", () => {
+  test("repairs inverted salary bounds before canonical validation", () => {
+    const result = tryNormalizeSproutJob(
+      rawJob({ salaryMin: 70_000, salaryMax: 50_000 }),
+    );
+
+    expect(result).toMatchObject({
+      accepted: true,
+      job: { salaryMin: 50_000, salaryMax: 70_000 },
+    });
+  });
+
   test("builds the validated France request shape without narrowing filters", () => {
     const query = buildSproutFranceQuery({ offset: 20, limit: 100 });
 
