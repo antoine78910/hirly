@@ -14,6 +14,12 @@ jest.mock("../../hooks/useIsDesktop", () => ({
   useIsDesktop: () => false,
 }));
 
+jest.mock("../../context/UpgradeModalContext", () => ({
+  UpgradeModalProvider: ({ children }) => (
+    <div data-testid="upgrade-modal-provider">{children}</div>
+  ),
+}));
+
 jest.mock("../maintenance/MaintenanceBanner", () => () => (
   <aside data-testid="maintenance-banner">Maintenance</aside>
 ));
@@ -39,6 +45,7 @@ describe("AppLayout", () => {
     act(() => root.render(<AppLayout />));
 
     expect(container.querySelector("[data-testid='maintenance-banner']")).not.toBeNull();
+    expect(container.querySelector("[data-testid='upgrade-modal-provider']")).not.toBeNull();
     expect(container.textContent).toContain("App route");
   });
 });

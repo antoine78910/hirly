@@ -5,7 +5,6 @@ import { queryClient } from "@/lib/queryClient";
 import { Toaster } from "@/components/ui/sonner";
 import ImpersonationBanner from "@/components/ImpersonationBanner";
 import { AuthProvider } from "@/context/AuthContext";
-import { UpgradeModalProvider } from "@/context/UpgradeModalContext";
 import { AppLocaleProvider } from "@/context/AppLocaleContext";
 import { MobileThemeProvider } from "@/context/MobileThemeContext";
 import Terms from "@/pages/legal/Terms";
@@ -258,11 +257,9 @@ function App() {
             <AppLocaleProvider>
               <FrontendVersionChecker />
               <MobileThemeProvider>
-              <UpgradeModalProvider>
-                <AppErrorBoundary>
-                  <AppRouter />
-                </AppErrorBoundary>
-              </UpgradeModalProvider>
+              <AppErrorBoundary>
+                <AppRouter />
+              </AppErrorBoundary>
               </MobileThemeProvider>
             </AppLocaleProvider>
             <AdminToaster />
