@@ -66,8 +66,8 @@ describe("governed paid-lifecycle migration contract", () => {
     expect(sql.match(/security definer/g)).toHaveLength(8);
     expect(sql.match(/set search_path = pg_catalog/g)).toHaveLength(8);
     expect(sql).not.toContain("set search_path = pg_catalog,");
-    expect(sql.match(/public\.digest\(/g)).toHaveLength(3);
-    expect(sql).toContain("public.gen_random_uuid()");
+    expect(sql.match(/extensions\.digest\(/g)).toHaveLength(3);
+    expect(sql).toContain("extensions.gen_random_uuid()");
     expect(sql.match(/where evidence\.business_key = v_(?:invoice|state)_key/g)).toHaveLength(2);
     expect(sql.match(/return query select/g)?.length).toBeGreaterThanOrEqual(4);
   });
