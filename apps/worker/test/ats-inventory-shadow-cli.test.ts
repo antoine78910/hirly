@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "bun:test";
@@ -38,6 +38,7 @@ function greenhouseResponse(id: string) {
       absolute_url: `https://boards.greenhouse.io/vaulttec/jobs/${id}`,
       content: "Read-only shadow fixture",
     }],
+    meta: { total: 1 },
   });
 }
 
@@ -57,48 +58,46 @@ describe("ATS inventory shadow CLI", () => {
     ])).toThrow("exact provider, tenant, country FR");
   });
 
-  test("fails closed before Greenhouse public transport can claim a complete snapshot", async () => {
+  test("permits and seals Greenhouse evidence only after total reconciliation", async () => {
     const root = await mkdtemp(join(tmpdir(), "ats-shadow-cli-"));
     try {
       await writeFile(join(root, "policy.json"), JSON.stringify(policy()));
-      let calls = 0;
-      const output = join(root, "runs", "first.json");
-      await expect(runAtsInventoryShadowCli(runCommand(root, output), {
+      const firstPath = join(root, "runs", "first.json");
+      const secondPath = join(root, "runs", "second.json");
+      await expect(runAtsInventoryShadowCli(runCommand(root, firstPath), {
         now: () => now,
         makeRunId: () => "run-one",
-        fetch: async () => {
-          calls += 1;
-          return greenhouseResponse("1");
-        },
-      })).rejects.toThrow("greenhouse public transport cannot prove complete snapshots");
-      expect(calls).toBe(0);
-      await expect(readFile(output, "utf8")).rejects.toThrow();
+        fetch: async () => greenhouseResponse("1"),
+      })).resolves.toMatchObject({ complete: true, jobs: [{ externalId: "vaulttec:1" }] });
+      await expect(runAtsInventoryShadowCli(runCommand(root, secondPath), {
+        now: () => new Date("2026-07-22T00:00:00.000Z"),
+        makeRunId: () => "run-two",
+        fetch: async () => greenhouseResponse("1"),
+      })).resolves.toMatchObject({ complete: true });
+      const scorecardPath = join(root, "scorecards", "sealed.json");
+      const command = parseAtsInventoryShadowArgs([
+        "seal", "--run", firstPath, "--run", secondPath, "--output", scorecardPath, "--evidence-root", root,
+      ]);
+      await expect(runAtsInventoryShadowCli(command)).resolves.toMatchObject({
+        provider: "greenhouse",
+        verdict: "complete_shadow_ready",
+      });
     } finally {
       await rm(root, { recursive: true, force: true });
     }
   });
 
-  test("refuses to seal Greenhouse artifacts that merely assert completeness", async () => {
+  test("does not write evidence when Greenhouse total reconciliation fails", async () => {
     const root = await mkdtemp(join(tmpdir(), "ats-shadow-cli-"));
     try {
-      const firstPath = join(root, "runs", "first.json");
-      const secondPath = join(root, "runs", "second.json");
-      const run = (runId: string, capturedAt: string) => ({
-        schemaVersion: "job-supply-shadow-run.v1", runId, provider: "greenhouse",
-        tenantId: "vaulttec", countryCode: "FR", policyDigest: "a".repeat(64),
-        complete: true, canonicalWritesEnabled: false, capturedAt,
-        jobs: [{ externalId: "vaulttec:1", fingerprint: "b".repeat(64) }],
-      });
-      await mkdir(join(root, "runs"), { recursive: true });
-      await writeFile(firstPath, JSON.stringify(run("run-one", "2026-07-21T00:00:00.000Z")));
-      await writeFile(secondPath, JSON.stringify(run("run-two", "2026-07-22T00:00:00.000Z")));
-      const scorecardPath = join(root, "scorecards", "sealed.json");
-      const command = parseAtsInventoryShadowArgs([
-        "seal", "--run", firstPath, "--run", secondPath, "--output", scorecardPath, "--evidence-root", root,
-      ]);
-      await expect(runAtsInventoryShadowCli(command))
-        .rejects.toThrow("greenhouse public transport cannot prove complete snapshots");
-      await expect(readFile(scorecardPath, "utf8")).rejects.toThrow();
+      await writeFile(join(root, "policy.json"), JSON.stringify(policy()));
+      const output = join(root, "runs", "first.json");
+      await expect(runAtsInventoryShadowCli(runCommand(root, output), {
+        now: () => now,
+        makeRunId: () => "run-one",
+        fetch: async () => Response.json({ jobs: [], meta: { total: 1 } }),
+      })).rejects.toThrow("Greenhouse shadow response total did not reconcile");
+      await expect(readFile(output, "utf8")).rejects.toThrow();
     } finally {
       await rm(root, { recursive: true, force: true });
     }

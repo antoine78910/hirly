@@ -125,7 +125,7 @@ describe("ATS inventory production shadow readiness", () => {
     const observed: Array<[string, RequestInit]> = [];
     const greenhouse = createApprovedGreenhouseShadowTransport({
       approvedTenantId: "vaulttec", countryCode: "FR", policy: policy(), now,
-      fetch: async (url, init) => { observed.push([url, init]); return Response.json({ jobs: [] }); },
+      fetch: async (url, init) => { observed.push([url, init]); return Response.json({ jobs: [], meta: { total: 0 } }); },
     });
     const recruitee = createApprovedRecruiteeShadowTransport({
       approvedTenantId: "vaulttec", countryCode: "FR", policy: policy("recruitee"), now,
@@ -187,24 +187,23 @@ describe("ATS inventory production shadow readiness", () => {
     for (const runs of invalidSets) expect(() => buildAtsRepeatedShadowScorecard(runs)).toThrow(AtsShadowRefusal);
   });
 
-  test("fails closed when Greenhouse or Recruitee claim complete snapshots", () => {
-    for (const provider of ["greenhouse", "recruitee"] as const) {
-      const digest = approve(provider).policyDigest;
-      const base = {
-        capturedAt: "2026-07-21T00:00:00.000+00:00",
-        provider,
-        tenantId: "vaulttec",
-        countryCode: "FR",
-        policyDigest: digest,
-        complete: true,
-        requestCount: 1,
-        jobs: [{ externalId: "1", fingerprint: "a" }],
-      };
-      expect(() => buildAtsRepeatedShadowScorecard([
-        { ...base, runId: "a" },
-        { ...base, runId: "b", capturedAt: "2026-07-22T00:00:00.000+00:00" },
-      ])).toThrow(`${provider} public transport cannot prove complete snapshots`);
-    }
+  test("permits Greenhouse but keeps Recruitee fail-closed for complete snapshots", () => {
+    const greenhouseDigest = approve("greenhouse").policyDigest;
+    expect(buildAtsRepeatedShadowScorecard([
+      { runId: "a", capturedAt: "2026-07-21T00:00:00.000+00:00", provider: "greenhouse", tenantId: "vaulttec", countryCode: "FR", policyDigest: greenhouseDigest, complete: true, requestCount: 1, jobs: [{ externalId: "1", fingerprint: "a" }] },
+      { runId: "b", capturedAt: "2026-07-22T00:00:00.000+00:00", provider: "greenhouse", tenantId: "vaulttec", countryCode: "FR", policyDigest: greenhouseDigest, complete: true, requestCount: 1, jobs: [{ externalId: "1", fingerprint: "a" }] },
+    ])).toMatchObject({ provider: "greenhouse", verdict: "complete_shadow_ready" });
+
+    const recruiteeDigest = approve("recruitee").policyDigest;
+    const recruiteeRun = {
+      capturedAt: "2026-07-21T00:00:00.000+00:00", provider: "recruitee" as const,
+      tenantId: "vaulttec", countryCode: "FR", policyDigest: recruiteeDigest,
+      complete: true, requestCount: 1, jobs: [{ externalId: "1", fingerprint: "a" }],
+    };
+    expect(() => buildAtsRepeatedShadowScorecard([
+      { ...recruiteeRun, runId: "a" },
+      { ...recruiteeRun, runId: "b", capturedAt: "2026-07-22T00:00:00.000+00:00" },
+    ])).toThrow("recruitee public transport cannot prove complete snapshots");
   });
 
   test("complete empty snapshots can report removals without expiry mutation", () => {

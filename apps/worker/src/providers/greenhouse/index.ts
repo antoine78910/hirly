@@ -11,6 +11,7 @@ import {
 } from "../ats-fixture";
 import type { SourceAdapter, SourceContext } from "@hirly/ingestion";
 import {
+  AtsTrialTransportError,
   fetchBoundedAtsJson,
   parseAtsTrialOptions,
   type AtsTrialTransportOptions,
@@ -45,6 +46,9 @@ export type GreenhouseRawJob = z.output<typeof greenhouseRawJobSchema>;
 const greenhouseTrialResponseSchema = z
   .object({
     jobs: z.array(greenhouseRawJobSchema),
+    meta: z.object({
+      total: z.number().int().nonnegative(),
+    }).strict(),
   })
   .passthrough();
 
@@ -175,6 +179,12 @@ export function createGreenhouseTrialTransport(
         schema: greenhouseTrialResponseSchema,
         signal,
       });
+      if (page.jobs.length !== page.meta.total) {
+        throw new AtsTrialTransportError(
+          "malformed",
+          "Greenhouse shadow response total did not reconcile",
+        );
+      }
       return page.jobs;
     },
   };
