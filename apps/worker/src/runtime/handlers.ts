@@ -157,14 +157,14 @@ function environmentSproutSession(): {
 }
 
 export function sproutDiscoveryProfile(sourceKey: string): {
-  filterVariant: "qualified_radius" | "country_only";
+  filterVariant: "qualified_radius" | "country_only" | "global_unfiltered";
   includeUnknownWorkLocation: boolean;
 } {
   if (sourceKey === "sprout:france" || sourceKey === "sprout:france:country-only" || /^sprout:country:[A-Z]{2}$/.test(sourceKey)) {
-    // Country identity is the only query constraint. Unknown locations are
-    // requested too, then excluded before canonical write if they lack the
-    // lane's verified country code.
-    return { filterVariant: "country_only", includeUnknownWorkLocation: true };
+    // The API does not accept the otherwise-empty country-location shape.
+    // Fetch globally, then reject rows lacking this lane's verified country
+    // before the canonical source writer runs.
+    return { filterVariant: "global_unfiltered", includeUnknownWorkLocation: true };
   }
   throw new IngestionError("integrity_error", "sprout_unknown_discovery_lane");
 }

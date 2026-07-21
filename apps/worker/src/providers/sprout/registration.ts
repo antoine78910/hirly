@@ -85,7 +85,7 @@ export const sproutTaskPayloadSchema = z
     sourceId: z.uuid(),
     mode: z.enum(["canary", "backfill", "incremental"]),
     maxResponseBytes: z.number().int().positive().max(50_000_000),
-    filterVariant: z.enum(["qualified_radius", "country_only"]).default("qualified_radius"),
+    filterVariant: z.enum(["qualified_radius", "country_only", "global_unfiltered"]).default("qualified_radius"),
     // Retained only to accept already-enqueued tasks from the pre-lane
     // fallback implementation. Discovery lanes no longer use this counter
     // to change query semantics, so it must never block checkpoint recovery.

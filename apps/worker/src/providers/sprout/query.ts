@@ -1,12 +1,6 @@
 import { IngestionError } from "@hirly/ingestion";
 import { sproutCountry, type SproutCountryCode } from "./countries";
 
-export const SPROUT_FRANCE_LOCATION = {
-  address: "France",
-  countryCode: "FR",
-  isCountry: true,
-} as const;
-
 export interface SproutCountryQueryOptions {
   offset?: number;
   limit?: number;
@@ -24,8 +18,11 @@ function boundedInteger(value: number, name: string, minimum: number, maximum: n
 }
 
 /**
- * The only discovery filter is the country identity. All optional employment,
- * experience, salary, date, and radius filters are deliberately omitted.
+ * Sprout rejects its undocumented country-location parameter shape with 422.
+ * Keep the upstream request entirely broad and enforce the country boundary
+ * only after normalization, before the canonical source writer is called.
+ * All optional employment, experience, salary, date, work-location, and
+ * radius filters are deliberately omitted.
  */
 export function buildSproutCountryQuery(
   countryCode: SproutCountryCode | string,
@@ -33,13 +30,12 @@ export function buildSproutCountryQuery(
 ): URLSearchParams {
   const offset = boundedInteger(options.offset ?? 0, "offset", 0, 10_000_000);
   const limit = boundedInteger(options.limit ?? 10, "limit", 1, 500);
-  const country = sproutCountry(countryCode);
+  // Validate the source lane even though Sprout does not accept a country
+  // filter in this endpoint's public request contract.
+  sproutCountry(countryCode);
   const query = new URLSearchParams();
   query.set("jobTitle", "");
   query.set("jobCategory", "");
-  query.set("location[address]", country.address);
-  query.set("location[countryCode]", country.code);
-  query.set("location[isCountry]", "true");
   query.set("minimumSalary", "0");
   query.set("postedDate", "any");
   query.set("includeUnknownSalaryRange", "true");

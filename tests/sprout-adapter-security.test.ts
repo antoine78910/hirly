@@ -51,13 +51,10 @@ describe("Sprout adapter security and inventory contract", () => {
     });
   });
 
-  test("builds the validated France request shape without narrowing filters", () => {
+  test("builds the accepted broad request shape without narrowing filters", () => {
     const query = buildSproutFranceQuery({ offset: 20, limit: 100 });
 
     expect(Object.fromEntries(query)).toMatchObject({
-      "location[address]": "France",
-      "location[countryCode]": "FR",
-      "location[isCountry]": "true",
       jobTitle: "",
       jobCategory: "",
       minimumSalary: "0",
@@ -72,6 +69,10 @@ describe("Sprout adapter security and inventory contract", () => {
       "types",
       "experienceLevels",
       "workLocations",
+      "location[address]",
+      "location[countryCode]",
+      "location[isCountry]",
+      "location[radius]",
     ]) {
       expect(query.has(forbidden)).toBe(false);
     }

@@ -40,11 +40,11 @@ function task(mode: "canary" | "backfill" | "incremental" = "backfill") {
 describe("Sprout authenticated transport", () => {
   test("uses an immutable query profile for each checkpoint lane", () => {
     expect(sproutDiscoveryProfile("sprout:france")).toEqual({
-      filterVariant: "country_only",
+      filterVariant: "global_unfiltered",
       includeUnknownWorkLocation: true,
     });
     expect(sproutDiscoveryProfile("sprout:france:country-only")).toEqual({
-      filterVariant: "country_only",
+      filterVariant: "global_unfiltered",
       includeUnknownWorkLocation: true,
     });
     expect(() => sproutDiscoveryProfile("sprout:france:unapproved")).toThrow(
@@ -90,7 +90,7 @@ describe("Sprout authenticated transport", () => {
     expect(page.wrapperMismatch).toBe(true);
     expect(calls).toHaveLength(1);
     expect(calls[0]?.url.origin).toBe("https://api.sprout.invalid");
-    expect(calls[0]?.url.searchParams.get("location[countryCode]")).toBe("FR");
+    expect(calls[0]?.url.searchParams.has("location[countryCode]")).toBe(false);
     expect(calls[0]?.init).toMatchObject({ redirect: "manual", credentials: "omit" });
     const headers = new Headers(calls[0]?.init.headers);
     expect(headers.get("authorization")).toBe("Bearer fixture-access-token");
