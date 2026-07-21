@@ -33,11 +33,14 @@ WITH profile AS (
   ) AS location(latitude, longitude)
   WHERE location.latitude IS NOT NULL AND location.longitude IS NOT NULL
 ), role_terms AS (
-  -- Role filtering is intentionally token-based rather than an exact-title
-  -- comparison: "Fullstack Engineer" must also surface "Senior Fullstack
-  -- Developer". Ranking below still prefers the closer match.
+  -- Candidate profiles may select multiple roles. They are OR-ed for
+  -- eligibility; a job receives the strongest matching role score below.
   SELECT
-    role.value AS role,
+    coalesce(
+      array_agg(DISTINCT role_label ORDER BY role_label)
+        FILTER (WHERE role_label IS NOT NULL AND btrim(role_label) <> ''),
+      ARRAY[]::text[]
+    ) AS labels,
     coalesce(
       array_agg(DISTINCT token ORDER BY token) FILTER (WHERE char_length(token) >= 3),
       ARRAY[]::text[]
@@ -45,13 +48,20 @@ WITH profile AS (
   FROM effective_query
   CROSS JOIN profile
   CROSS JOIN LATERAL (
-    SELECT coalesce(effective_query.role, profile.target_role_label_normalized) AS value
-  ) AS role
+    SELECT CASE
+      WHEN effective_query.role IS NOT NULL THEN ARRAY[effective_query.role]
+      WHEN cardinality(profile.target_role_labels_normalized) > 0
+        THEN profile.target_role_labels_normalized
+      WHEN profile.target_role_label_normalized IS NOT NULL
+        THEN ARRAY[profile.target_role_label_normalized]
+      ELSE ARRAY[]::text[]
+    END AS labels
+  ) AS selected_roles
+  LEFT JOIN LATERAL unnest(selected_roles.labels) AS role_label ON true
   LEFT JOIN LATERAL regexp_split_to_table(
-    lower(coalesce(role.value, '')),
+    lower(coalesce(role_label, '')),
     '[^[:alnum:]]+'
   ) AS token ON true
-  GROUP BY role.value
 ), recency_candidates AS MATERIALIZED (
   SELECT document.*
   FROM public.job_search_documents AS document
@@ -79,9 +89,15 @@ WITH profile AS (
       -- A role phrase/all-term match ranks above a single compatible token;
       -- partial matches remain eligible instead of disappearing from inventory.
       + CASE
-        WHEN role_terms.role IS NULL THEN 0.20
-        WHEN lower(document.search_text) LIKE '%' || lower(role_terms.role) || '%' THEN 0.35
-        WHEN document.search_vector @@ websearch_to_tsquery('simple', role_terms.role) THEN 0.25
+        WHEN cardinality(role_terms.labels) = 0 THEN 0.20
+        WHEN EXISTS (
+          SELECT 1 FROM unnest(role_terms.labels) AS role_label
+          WHERE lower(document.search_text) LIKE '%' || lower(role_label) || '%'
+        ) THEN 0.35
+        WHEN EXISTS (
+          SELECT 1 FROM unnest(role_terms.labels) AS role_label
+          WHERE document.search_vector @@ websearch_to_tsquery('simple', role_label)
+        ) THEN 0.25
         WHEN EXISTS (
           SELECT 1 FROM unnest(role_terms.tokens) AS token
           WHERE document.search_vector @@ to_tsquery('simple', token || ':*')
@@ -92,6 +108,8 @@ WITH profile AS (
       + CASE WHEN document.country_codes && profile.country_codes THEN 0.15 ELSE 0 END
       + CASE WHEN document.contract_families && profile.contract_types THEN 0.10 ELSE 0 END
       + CASE WHEN document.work_modes && profile.work_modes THEN 0.10 ELSE 0 END
+      + CASE WHEN document.sector_ids && profile.sector_ids THEN 0.10 ELSE 0 END
+      + CASE WHEN document.industry_ids && profile.industry_ids THEN 0.10 ELSE 0 END
     )::numeric, 6)::double precision AS relevance_score,
     document.fulfillment_route,
     public.candidate_group_is_excluded($1, document.canonical_group_id) AS action_excluded,
@@ -112,8 +130,9 @@ WITH profile AS (
         effective_query.query_fingerprint = 'candidate-profile'
         AND (
           document.role_family_codes && profile.role_family_ids
-          OR document.search_vector @@ websearch_to_tsquery(
-            'simple', profile.target_role_label_normalized
+          OR EXISTS (
+            SELECT 1 FROM unnest(role_terms.labels) AS role_label
+            WHERE document.search_vector @@ websearch_to_tsquery('simple', role_label)
           )
           OR EXISTS (
             SELECT 1 FROM unnest(role_terms.tokens) AS token
@@ -132,6 +151,16 @@ WITH profile AS (
           )
         )
       )
+    )
+    AND (
+      effective_query.query_fingerprint <> 'candidate-profile'
+      OR cardinality(profile.sector_ids) = 0
+      OR document.sector_ids && profile.sector_ids
+    )
+    AND (
+      effective_query.query_fingerprint <> 'candidate-profile'
+      OR cardinality(profile.industry_ids) = 0
+      OR document.industry_ids && profile.industry_ids
     )
     AND (
       effective_query.query_fingerprint = 'candidate-profile'
