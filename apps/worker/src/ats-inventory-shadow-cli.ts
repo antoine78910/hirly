@@ -35,25 +35,33 @@ export function parseAtsInventoryShadowArgs(args: string[]): AtsInventoryShadowC
   const [type, ...rest] = args;
   if (type !== "run" && type !== "seal") throw new Error(usage);
   const values = new Map<string, string[]>();
-  for (let index = 0; index < rest.length; index += 2) {
+  for (let index = 0; index < rest.length;) {
     const name = rest[index];
-    const value = rest[index + 1];
     const allowed = type === "run"
       ? ["--provider", "--tenant", "--country", "--policy", "--output", "--evidence-root", "--live"]
       : ["--run", "--output", "--evidence-root"];
-    if (!name || !allowed.includes(name) || !value || value.startsWith("--")) {
+    if (!name || !allowed.includes(name)) {
       throw new Error(`${usage}; invalid argument: ${name ?? "missing"}`);
     }
+    if (name === "--live") {
+      if (type !== "run" || values.has(name)) throw new Error(`duplicate or invalid argument: ${name}`);
+      values.set(name, ["true"]);
+      index += 1;
+      continue;
+    }
+    const value = rest[index + 1];
+    if (!value || value.startsWith("--")) throw new Error(`${usage}; invalid argument: ${name}`);
     const entries = values.get(name) ?? [];
     if (name !== "--run" && entries.length > 0) throw new Error(`duplicate argument: ${name}`);
     entries.push(value);
     values.set(name, entries);
+    index += 2;
   }
   const one = (name: string) => values.get(name)?.[0];
   if (type === "run") {
     const provider = productionShadowProviderSchema.safeParse(one("--provider"));
     const tenantId = one("--tenant");
-    if (!provider.success || !tenantId || tenantId === "*" || one("--country") !== "FR" ||
+    if (!provider.success || !tenantId || /[?*\[\]{}]/.test(tenantId) || one("--country") !== "FR" ||
       !one("--policy") || !one("--output") || !one("--evidence-root") || one("--live") !== "true" || values.size !== 7) {
       throw new Error(`${usage}; run requires exact provider, tenant, country FR, policy, output, evidence root, and --live true`);
     }
@@ -87,7 +95,7 @@ export async function runAtsInventoryShadowCli(
 ): Promise<RunArtifact | ReturnType<typeof buildAtsRepeatedShadowScorecard> & { runs: readonly { path: string; sha256: string }[] }> {
   const root = await resolveEvidenceRoot(command.evidenceRootPath);
   if (command.type === "seal") return seal(command, root);
-  const policy = JSON.parse(await readContainedFile(command.policyPath, root));
+  const policy = JSON.parse(await readRegularFile(command.policyPath));
   const transport = command.provider === "greenhouse"
     ? createApprovedGreenhouseShadowTransport({ approvedTenantId: command.tenantId, countryCode: command.countryCode, policy, fetch: options.fetch })
     : command.provider === "recruitee"
@@ -109,7 +117,10 @@ export async function runAtsInventoryShadowCli(
 }
 
 async function seal(command: Extract<AtsInventoryShadowCliCommand, { type: "seal" }>, root: string) {
-  const loaded = await Promise.all(command.runPaths.map(async (path) => ({ path: await containedPath(path, root), artifact: runArtifactSchema.parse(JSON.parse(await readContainedFile(path, root))) })));
+  const loaded = await Promise.all(command.runPaths.map(async (path) => {
+    const contents = await readContainedFile(path, root);
+    return { path: await containedPath(path, root), contents, artifact: runArtifactSchema.parse(JSON.parse(contents)) };
+  }));
   const scorecard = buildAtsRepeatedShadowScorecard(loaded.map(({ artifact }) => ({
     runId: artifact.runId, capturedAt: artifact.capturedAt, provider: artifact.provider, tenantId: artifact.tenantId,
     countryCode: artifact.countryCode, policyDigest: artifact.policyDigest, complete: artifact.complete, requestCount: 1, jobs: artifact.jobs,
@@ -118,7 +129,7 @@ async function seal(command: Extract<AtsInventoryShadowCliCommand, { type: "seal
   const runs = scorecard.runIds.map((runId) => {
     const entry = byRunId.get(runId);
     if (!entry) throw new Error("scorecard run ID did not resolve to an input artifact");
-    return { path: entry.path, sha256: sha256(JSON.stringify(entry.artifact)) };
+    return { path: entry.path, sha256: sha256(entry.contents) };
   });
   const artifact = { ...scorecard, runs };
   await writeImmutableContained(command.outputPath, root, artifact);
@@ -155,6 +166,12 @@ async function readContainedFile(path: string, root: string): Promise<string> {
     const stat = await lstat(current);
     if (stat.isSymbolicLink()) throw new Error("artifact path must not traverse a symlink");
   }
+  return readFile(candidate, "utf8");
+}
+async function readRegularFile(path: string): Promise<string> {
+  const candidate = resolve(path);
+  const stat = await lstat(candidate);
+  if (!stat.isFile() || stat.isSymbolicLink()) throw new Error("policy path must be a regular file, not a symlink");
   return readFile(candidate, "utf8");
 }
 async function writeImmutableContained(path: string, root: string, value: unknown): Promise<void> {
