@@ -27,6 +27,7 @@ import { SUGGESTED_ONBOARDING_LOCATIONS } from "../onboarding/onboardingData";
 import { rankLocationSuggestions } from "../../lib/locationSearch";
 import { isResolvedLocation } from "../../lib/locationSearch";
 import { useAppLocale } from "../../context/AppLocaleContext";
+import { resolveSwipeFeedViewState } from "../../lib/swipeFeedRequestPolicy";
 import { getDesktopNavItems } from "../desktop/desktopNav";
 import SearchRadiusSlider from "./SearchRadiusSlider";
 import {
@@ -72,7 +73,6 @@ export default function DesktopSwipeFeed({
   onApply,
   onReport,
   onShare,
-  onRefresh,
   onRadiusChange,
   shouldGateApply = false,
   onApplyBlocked,
@@ -93,6 +93,15 @@ export default function DesktopSwipeFeed({
   const radius = filters?.searchRadius || "50km";
   const isDark = themeMode === "dark";
   const theme = DESKTOP_THEMES[themeMode];
+  const feedView = resolveSwipeFeedViewState({
+    loading,
+    jobCount: job ? 1 : 0,
+    feedMeta,
+    feedError,
+  });
+  const projectionLagMessage = lang === "fr"
+    ? "Vos offres sont en cours de projection et apparaîtront automatiquement."
+    : "Your jobs are being projected and will appear automatically.";
   const showClearFilters = countMenuFilterGroups(filters) > 0;
 
   const handleClearFilters = useCallback(() => {
@@ -415,7 +424,7 @@ export default function DesktopSwipeFeed({
         </div>
 
         <div className="relative min-h-0 flex-1 px-4 pb-4 pt-2 lg:px-6 lg:pb-5">
-          {loading && !job ? (
+          {feedView.kind === "loading" ? (
             <div className={`mx-auto ${DESKTOP_CARD_WIDTH} animate-pulse rounded-2xl border p-8 ${theme.skeleton}`}>
               <div className={`h-8 w-2/3 rounded ${theme.skeletonBar}`} />
               <div className={`mt-4 h-4 w-1/3 rounded ${theme.skeletonBar}`} />
@@ -424,15 +433,10 @@ export default function DesktopSwipeFeed({
           ) : !displayJob ? (
             <div className="mx-auto max-w-lg py-20 text-center">
               <p className={`text-lg font-semibold ${theme.emptyTitle}`}>
-                {feedError || feedFallbackMessage(t, feedMeta)}
+                {feedView.kind === "projection_lag"
+                  ? projectionLagMessage
+                  : feedError || feedFallbackMessage(t, feedMeta)}
               </p>
-              <button
-                type="button"
-                onClick={onRefresh}
-                className="mt-4 rounded-full gradient-linkedin px-6 py-2.5 text-sm font-semibold text-white"
-              >
-                {t("common.refresh")}
-              </button>
             </div>
           ) : (
             <div className={`relative mx-auto flex h-full ${DESKTOP_CARD_WIDTH} flex-col`}>

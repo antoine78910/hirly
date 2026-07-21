@@ -68,7 +68,6 @@ import {
   clearSwipedJobIdsByPrefix,
   filterOutSwipedJobs,
   getSwipeFeedCacheSnapshot,
-  isSwipeFeedCacheFresh,
   readSwipeFeedCache,
   recordSwipedJobId,
   seedSwipedJobIds,
@@ -76,8 +75,10 @@ import {
   writeSwipeFeedCache,
 } from "../lib/swipeFeedCache";
 import {
-  shouldPrefetchSwipeFeed,
-  SWIPE_BACKGROUND_POLL_DELAYS_MS,
+  createInitialSwipeFeedRequestGate,
+  createSwipeFeedRequestFence,
+  resolveSwipeFeedViewState,
+  sanitizeSwipeFeedParams,
 } from "../lib/swipeFeedRequestPolicy";
 
 const DEFAULT_SEARCH_RADIUS = "50km";
@@ -838,14 +839,12 @@ export default function Swipe() {
   const targetLocationDataRef = useRef(getSwipeFeedCacheSnapshot().targetLocationData);
   const pendingFiltersRef = useRef(undefined);
   const feedAbortRef = useRef(null);
-  const feedRequestIdRef = useRef(0);
+  const feedRequestFenceRef = useRef(createSwipeFeedRequestFence());
+  const initialFeedRequestGateRef = useRef(createInitialSwipeFeedRequestGate());
   const jobsRef = useRef(getSwipeFeedCacheSnapshot().jobs);
   const viewedJobIdsRef = useRef(new Set());
   const handleSwipeRef = useRef(null);
   const requestSwipeRef = useRef(null);
-  const backgroundPollTimerRef = useRef(null);
-  const backgroundPollCountRef = useRef(0);
-  const loadFeedRef = useRef(null);
 
   useEffect(() => {
     jobsRef.current = jobs;
@@ -1041,35 +1040,19 @@ export default function Swipe() {
       feedAbortRef.current.abort();
       feedAbortRef.current = null;
     }
-    if (backgroundPollTimerRef.current && !reason.startsWith("background_poll")) {
-      clearTimeout(backgroundPollTimerRef.current);
-      backgroundPollTimerRef.current = null;
-      backgroundPollCountRef.current = 0;
-    }
-    const requestId = feedRequestIdRef.current + 1;
-    feedRequestIdRef.current = requestId;
+    const requestFence = feedRequestFenceRef.current.next();
     const controller = new AbortController();
     feedAbortRef.current = controller;
     pendingFiltersRef.current = undefined;
-    // Prefetch backend (faster): ask `/jobs/feed` to query DB first and skip
-    // blocking provider refresh where possible.
-    //
     // Keep `stackPrefetch` (UI) limited to restoring-from-stack only: it controls
     // whether we show/clear the loading skeleton.
     const stackPrefetch = !replace && jobsRef.current.length > 0;
-    const backendPrefetch = shouldPrefetchSwipeFeed({
-      replace,
-      currentJobCount: jobsRef.current.length,
-      reason,
-    });
     // Only restore-from-navigation should skip the loading skeleton. Any explicit
     // target/filter change must clear the stack and show a fresh search.
-    const silentRefresh = replace && jobsRef.current.length > 0 && reason === "background_refresh_cache";
+    const silentRefresh = replace && jobsRef.current.length > 0 && reason === "initial_navigation";
     const isUserSearchChange = (
       reason.startsWith("target_")
       || reason.startsWith("filters_")
-      || reason === "empty_refresh"
-      || reason === "desktop_refresh"
       || reason === "demo_settings_changed"
       || reason === "initial_finance_demo"
     );
@@ -1083,10 +1066,7 @@ export default function Swipe() {
       if (replace) setJobs([]);
     }
     setFeedError("");
-    let params = buildFeedParams(f);
-    if (backendPrefetch) {
-      params.set("prefetch", "true");
-    }
+    const params = sanitizeSwipeFeedParams(buildFeedParams(f));
     let requestUrl = `/jobs/feed?${params.toString()}`;
     setLastFeedDebug({
       reason,
@@ -1113,7 +1093,6 @@ export default function Swipe() {
       });
       return data;
     };
-    let keepLoadingForBackgroundRefresh = false;
     try {
       let data;
       try {
@@ -1127,7 +1106,7 @@ export default function Swipe() {
           throw firstError;
         }
       }
-      if (requestId !== feedRequestIdRef.current) return;
+      if (!requestFence.isCurrent()) return;
       const financeFeed = isFinanceDemoFeedResponse(data);
       let localFeedGuard = financeFeed ? null : buildLocalFeedGuard({ params, response: data });
       let responseJobs = Array.isArray(data?.jobs) ? data.jobs : [];
@@ -1205,75 +1184,9 @@ export default function Swipe() {
         });
         return filtered;
       });
-      // Backend started a provider refresh in the background: silently poll a
-      // couple of times to merge freshly imported jobs into the stack.
-      if (
-        data?.background_refresh_scheduled
-        && backgroundPollCountRef.current < SWIPE_BACKGROUND_POLL_DELAYS_MS.length
-      ) {
-        keepLoadingForBackgroundRefresh = safeJobs.length === 0;
-        backgroundPollCountRef.current += 1;
-        const attempt = backgroundPollCountRef.current;
-        backgroundPollTimerRef.current = setTimeout(() => {
-          backgroundPollTimerRef.current = null;
-          if (!fetchingRef.current) {
-            loadFeedRef.current?.(false, filtersRef.current, `background_poll_${attempt}`);
-          }
-        }, SWIPE_BACKGROUND_POLL_DELAYS_MS[attempt - 1]);
-      } else if (!data?.background_refresh_scheduled) {
-        backgroundPollCountRef.current = 0;
-      }
     } catch (e) {
       if (controller.signal.aborted || e?.code === "ERR_CANCELED") return;
-      if (requestId !== feedRequestIdRef.current) return;
-      if (e?.code === "ECONNABORTED") {
-        const retryParams = new URLSearchParams(params);
-        const retryUrl = `/jobs/feed?${retryParams.toString()}`;
-        try {
-          const retryData = await requestFeed(retryUrl);
-          if (requestId !== feedRequestIdRef.current) return;
-          const financeFeed = isFinanceDemoFeedResponse(retryData);
-          const localFeedGuard = financeFeed ? null : buildLocalFeedGuard({ params: retryParams, response: retryData });
-          const responseJobs = Array.isArray(retryData?.jobs) ? retryData.jobs : [];
-          let safeJobs = localFeedGuard ? responseJobs.filter(localFeedGuard) : responseJobs;
-          if (!financeFeed) safeJobs = filterOutSwipedJobs(safeJobs);
-          safeJobs = filterPersonalSwipeFeedJobs(user?.email, safeJobs);
-          setLastFeedDebug({
-            reason: `${reason}_timeout_retry`,
-            forceRefresh: replace,
-            filters: f || null,
-            filtersRef: filtersRef.current || null,
-            requestUrl: retryUrl,
-            requestParams: Object.fromEntries(retryParams.entries()),
-            requestParamEntries: Array.from(retryParams.entries()),
-            response: {
-              jobsCount: safeJobs.length,
-              feedSummary: retryData?.feed_summary || null,
-              requestTrace: retryData?.request_trace || null,
-              firstJobs: safeJobs.slice(0, 5).map((job) => ({
-                title: job.title,
-                company: job.company,
-                location: job.location,
-                application_mode: job.application_mode,
-                can_auto_apply: job.can_auto_apply,
-                provider: job.provider,
-              })),
-            },
-          });
-          setTotalCount(typeof retryData.total === "number" ? retryData.total : null);
-          setFeedMeta(retryData || null);
-          setJobs((prev) => {
-            const base = replace ? [] : filterOutSwipedJobs(localFeedGuard ? prev.filter(localFeedGuard) : prev);
-            const seen = new Set(base.map((j) => j.job_id));
-            const merged = [...base];
-            safeJobs.forEach((j) => { if (!seen.has(j.job_id)) merged.push(j); });
-            return filterPersonalSwipeFeedJobs(user?.email, filterOutSwipedJobs(merged));
-          });
-          return;
-        } catch (_) {
-          /* fall through to normal timeout message */
-        }
-      }
+      if (!requestFence.isCurrent()) return;
       const rawDetail = e?.response?.data?.detail;
       const detail = e?.code === "ECONNABORTED"
         ? t("swipe.feedTimeout")
@@ -1288,22 +1201,13 @@ export default function Swipe() {
       if (replace) setJobs([]);
       toast.error(typeof detail === "string" ? detail : t("toasts.loadJobsError"));
     } finally {
-      if (requestId === feedRequestIdRef.current) {
-        if (!stackPrefetch && !silentRefresh && !keepLoadingForBackgroundRefresh) setLoading(false);
+      if (requestFence.isCurrent()) {
+        if (!stackPrefetch && !silentRefresh) setLoading(false);
         fetchingRef.current = false;
         if (feedAbortRef.current === controller) feedAbortRef.current = null;
       }
     }
   }, [t, user?.user_id, user?.email]);
-
-  loadFeedRef.current = loadFeed;
-
-  useEffect(() => () => {
-    if (backgroundPollTimerRef.current) {
-      clearTimeout(backgroundPollTimerRef.current);
-      backgroundPollTimerRef.current = null;
-    }
-  }, []);
 
   useEffect(() => {
     const onDemoSettings = (event) => {
@@ -1374,7 +1278,9 @@ export default function Swipe() {
   }, [lang, loadFeed, t]);
 
   useEffect(() => {
-    if (authLoading) return;
+    if (authLoading || !user?.user_id) return;
+    const navigationIdentity = `${user.user_id}:${isFinanceDemo ? "finance" : isDemoAccount ? "demo" : "live"}`;
+    if (!initialFeedRequestGateRef.current.claim(navigationIdentity)) return;
     if (isDemoAccount) ensureDemoAccountDefaults();
     const bootstrap = async () => {
       const isDemo = isDemoAccount;
@@ -1419,22 +1325,13 @@ export default function Swipe() {
         setFeedMeta(cached.meta);
         setLoading(false);
         preloadCompanyLogos(cachedJobs.slice(0, 6));
-        syncSwipedJobsFromServer(user?.user_id).then(() => {
-          setJobs((prev) => {
-            const visible = filterPersonalSwipeFeedJobs(user?.email, filterOutSwipedJobs(prev));
-            jobsRef.current = visible;
-            if (!visible.length && !fetchingRef.current) {
-              loadFeed(true, mergedFilters, "initial_empty_after_swipe_filter");
-            }
-            return visible;
-          });
+        await syncSwipedJobsFromServer(user.user_id);
+        setJobs((prev) => {
+          const visible = filterPersonalSwipeFeedJobs(user?.email, filterOutSwipedJobs(prev));
+          jobsRef.current = visible;
+          return visible;
         });
-        if (isSwipeFeedCacheFresh(cached.savedAt)) {
-          return;
-        }
-        window.setTimeout(() => {
-          loadFeed(true, mergedFilters, "background_refresh_cache");
-        }, 1200);
+        loadFeed(true, mergedFilters, "initial_navigation");
         return;
       }
 
@@ -1446,10 +1343,7 @@ export default function Swipe() {
         jobsRef.current = [];
       }
 
-      const reason = readPersistedFilters()
-        ? "initial_persisted_filters"
-        : "initial_profile_defaults";
-      loadFeed(true, mergedFilters, reason);
+      loadFeed(true, mergedFilters, "initial_navigation");
     };
     bootstrap();
   }, [authLoading, loadProfile, loadFeed, applyFinanceDemoTarget, syncSwipedJobsFromServer, user?.user_id, user?.email, isDemoAccount, isFinanceDemo]);
@@ -1589,6 +1483,21 @@ export default function Swipe() {
     }
     return null;
   }, [feedError, t]);
+  const feedView = resolveSwipeFeedViewState({
+    loading,
+    jobCount: jobs.length,
+    feedMeta,
+    feedError,
+  });
+  const projectionLagCopy = lang === "fr"
+    ? {
+        title: "Mise à jour de votre feed",
+        body: "Vos offres sont en cours de projection. Elles apparaîtront automatiquement, sans actualisation.",
+      }
+    : {
+        title: "Updating your feed",
+        body: "Your jobs are being projected and will appear automatically without a manual refresh.",
+      };
 
   useEffect(() => {
     if (!feedError || loading) return;
@@ -1831,7 +1740,6 @@ export default function Swipe() {
           onApply={() => handleSwipe("apply")}
           onReport={setReportJob}
           onShare={handleShareJob}
-          onRefresh={() => loadFeed(true, filtersRef.current, "desktop_refresh")}
           onRadiusChange={handleRadiusChange}
           shouldGateApply={shouldBlockApply()}
           onApplyBlocked={handleApplyBlocked}
@@ -1920,9 +1828,9 @@ export default function Swipe() {
 
       <div className="flex min-h-0 flex-1 flex-col px-4 pt-1">
         <div className="relative mx-auto min-h-0 w-full max-w-md flex-1 overflow-hidden">
-          {loading && jobs.length === 0 && <SkeletonCard />}
+          {feedView.kind === "loading" && <SkeletonCard />}
 
-          {!loading && jobs.length === 0 && (
+          {["projection_lag", "empty", "error"].includes(feedView.kind) && (
             <motion.div
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
@@ -1933,7 +1841,9 @@ export default function Swipe() {
                 <Zap className="h-7 w-7 text-sprout-mint" />
               </div>
               <h3 className="font-display text-2xl font-bold text-white">
-                {feedError
+                {feedView.kind === "projection_lag"
+                  ? projectionLagCopy.title
+                  : feedError
                   ? t("swipe.couldNotLoad")
                   : feedMeta?.fallback_reason === "no_auto_apply_jobs_found"
                   ? t("swipe.noJobsFilters")
@@ -1941,25 +1851,22 @@ export default function Swipe() {
               </h3>
               <p className="mt-2 max-w-xs text-sm text-sprout-muted">
                 {feedSetupGate?.body
-                  || (feedError
+                  || (feedView.kind === "projection_lag"
+                    ? projectionLagCopy.body
+                    : feedError
                     ? feedError
                     : feedMeta?.provider_rate_limited
                     ? t("swipe.providerRateLimited")
                     : feedFallbackMessage(t, feedMeta))}
               </p>
-              <button
-                onClick={() => {
-                  if (feedSetupGate?.action) {
-                    feedSetupGate.action();
-                    return;
-                  }
-                  loadFeed(true, filtersRef.current, "empty_refresh");
-                }}
-                className="mt-6 h-11 rounded-full bg-sprout-mint px-6 font-semibold text-white transition-opacity hover:opacity-90"
-                data-testid="refresh-feed-btn"
-              >
-                {feedSetupGate?.label || t("common.refresh")}
-              </button>
+              {feedSetupGate?.action && (
+                <button
+                  onClick={feedSetupGate.action}
+                  className="mt-6 h-11 rounded-full bg-sprout-mint px-6 font-semibold text-white transition-opacity hover:opacity-90"
+                >
+                  {feedSetupGate.label}
+                </button>
+              )}
             </motion.div>
           )}
 
