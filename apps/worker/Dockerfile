@@ -4,9 +4,11 @@ COPY package.json bun.lock bunfig.toml tsconfig.base.json ./
 COPY apps/worker/package.json apps/worker/package.json
 COPY apps/job-ingestion-audit/package.json apps/job-ingestion-audit/package.json
 COPY apps/analytics-backfill/package.json apps/analytics-backfill/package.json
+COPY apps/feed-v2/package.json apps/feed-v2/package.json
 COPY packages/config/package.json packages/config/package.json
 COPY packages/contracts/package.json packages/contracts/package.json
 COPY packages/db/package.json packages/db/package.json
+COPY packages/feed-v2/package.json packages/feed-v2/package.json
 COPY packages/ingestion/package.json packages/ingestion/package.json
 COPY packages/matching/package.json packages/matching/package.json
 COPY packages/matching-oracle/package.json packages/matching-oracle/package.json
