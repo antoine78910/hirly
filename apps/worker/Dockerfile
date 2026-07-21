@@ -8,6 +8,7 @@ COPY packages/config/package.json packages/config/package.json
 COPY packages/contracts/package.json packages/contracts/package.json
 COPY packages/db/package.json packages/db/package.json
 COPY packages/ingestion/package.json packages/ingestion/package.json
+COPY packages/matching-oracle/package.json packages/matching-oracle/package.json
 COPY packages/observability/package.json packages/observability/package.json
 RUN bun install --frozen-lockfile
 COPY apps/worker apps/worker
@@ -17,7 +18,6 @@ RUN bun run --cwd apps/worker build
 FROM oven/bun:1.3.14-slim
 WORKDIR /app
 ENV NODE_ENV=production
-COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/apps/worker/dist ./apps/worker/dist
 USER bun
 EXPOSE 3001
