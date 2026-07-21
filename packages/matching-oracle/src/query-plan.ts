@@ -8,12 +8,13 @@ SELECT
 FROM job_search_documents AS jsd
 WHERE jsd.lifecycle_status = 'active'
   AND jsd.validation_status <> 'invalid'
-  AND jsd.expires_at > $1
+  AND (jsd.expires_at IS NULL OR jsd.expires_at > $1)
   AND jsd.published_at >= $2
   AND jsd.role_family_ids && $3::text[]
   AND jsd.country_code = ANY($4::text[])
   AND jsd.contract_type = ANY($5::text[])
   AND jsd.work_mode = ANY($6::text[])
+  AND ST_DWithin(jsd.location_geography, $8::geography, $9 * 1000)
   AND NOT EXISTS (
     SELECT 1
     FROM candidate_action_projection AS cap
@@ -28,6 +29,7 @@ LIMIT 1000;
 export const REQUIRED_INDEXES = [
   "job_search_documents_active_role_family_gin",
   "job_search_documents_active_country_contract_mode_published",
+  "job_search_documents_active_location_gist",
   "candidate_action_projection_candidate_group_active",
 ] as const;
 

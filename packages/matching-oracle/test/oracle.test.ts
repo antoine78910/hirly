@@ -26,6 +26,7 @@ describe("PR0 deterministic online matching oracle", () => {
           "role_family_overlap",
           "skill_overlap",
           "location_work_mode_match",
+          "within_explicit_radius",
           "contract_match",
           "fresh_listing",
         ],
@@ -53,6 +54,19 @@ describe("PR0 deterministic online matching oracle", () => {
     expect(result.coarseCandidateCount).toBe(1);
   });
 
+  test("enforces the explicit Paris 52km radius and fails closed for unknown coordinates", () => {
+    const unknownLocation = {
+      ...jobs[0]!,
+      canonicalGroupId: "group-unknown-location",
+      preferredJobId: "job-unknown-location",
+      latitude: undefined,
+      longitude: undefined,
+    };
+    const result = new MatchingOracle([...jobs, unknownLocation]).match(profile, actions, { now });
+    expect(result.results.map((entry) => entry.canonicalGroupId)).toEqual(["group-best"]);
+    expect(result.hiddenCount).toBe(4);
+  });
+
   test("rejects duplicate canonical groups and unbounded configurations", () => {
     expect(() => new MatchingOracle([jobs[0]!, jobs[0]!])).toThrow("duplicate canonical group");
     expect(() => new MatchingOracle([{ ...jobs[0]!, publishedAt: "not-a-date" }])).toThrow("invalid publishedAt");
@@ -72,6 +86,8 @@ describe("PR0 deterministic online matching oracle", () => {
     expect(ONLINE_MATCH_EXPLAIN_SQL).toContain("EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)");
     expect(ONLINE_MATCH_EXPLAIN_SQL).toContain("LIMIT 1000");
     expect(ONLINE_MATCH_EXPLAIN_SQL).toContain("NOT EXISTS");
+    expect(ONLINE_MATCH_EXPLAIN_SQL).toContain("expires_at IS NULL OR jsd.expires_at > $1");
+    expect(ONLINE_MATCH_EXPLAIN_SQL).toContain("ST_DWithin");
     expect(ONLINE_MATCH_EXPLAIN_SQL).not.toMatch(/CROSS\s+JOIN/i);
     expect(queryPlanEvidence().databaseEvidence).toBe("not_collected");
   });

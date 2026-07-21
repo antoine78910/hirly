@@ -7,6 +7,9 @@ export interface CandidateSearchProfile {
   roleFamilyIds: string[];
   skillIds: string[];
   countryCodes: string[];
+  originLatitude?: number;
+  originLongitude?: number;
+  radiusKm?: number;
   contractTypes: string[];
   workModes: WorkMode[];
   salaryFloor?: number;
@@ -23,6 +26,8 @@ export interface JobSearchDocument {
   roleFamilyIds: string[];
   skillIds: string[];
   countryCode: string;
+  latitude?: number;
+  longitude?: number;
   contractType: string;
   workMode: WorkMode;
   salaryFloor?: number;
