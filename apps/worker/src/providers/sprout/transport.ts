@@ -10,10 +10,15 @@ export interface SproutSecretResolver {
   ): Promise<{ accessToken: string; refreshToken: string }>;
 }
 
+export interface SproutTokenRefresher {
+  refresh(refreshToken: string, signal: AbortSignal): Promise<{ accessToken: string; refreshToken: string }>;
+}
+
 export interface SproutHttpTransportOptions {
   endpoint: string;
   allowedOrigins: readonly string[];
   secrets: SproutSecretResolver;
+  tokenRefresher?: SproutTokenRefresher;
   fetch?: typeof globalThis.fetch;
   timeoutMs?: number;
   maxResponseBytes: number;
@@ -171,8 +176,9 @@ export class SproutHttpTransport implements SproutRuntimeTransport<SproutRawJob>
       signal.throwIfAborted();
       throw new IngestionError("authorization_blocked", "sprout_credential_unavailable");
     }
-    const accessToken = resolved.accessToken.trim();
-    const refreshToken = resolved.refreshToken.trim();
+    let accessToken = resolved.accessToken.trim();
+    let refreshToken = resolved.refreshToken.trim();
+    let refreshed = false;
     if (
       !accessToken ||
       accessToken.length > 16_384 ||
@@ -222,6 +228,18 @@ export class SproutHttpTransport implements SproutRuntimeTransport<SproutRawJob>
         });
         await this.sleep(backoffMs, signal);
         continue;
+      }
+      if ((response.status === 401 || response.status === 403) && !refreshed && this.options.tokenRefresher) {
+        refreshed = true;
+        try {
+          const next = await this.options.tokenRefresher.refresh(refreshToken, signal);
+          accessToken = next.accessToken.trim();
+          refreshToken = next.refreshToken.trim();
+          if (!accessToken || !refreshToken) throw new Error("empty_refresh_response");
+          continue;
+        } catch {
+          throw new IngestionError("authorization_blocked", "sprout_token_refresh_failed");
+        }
       }
       if (response.status === 401 || response.status === 403) {
         throw new IngestionError("authorization_blocked", "sprout_authorization_rejected");

@@ -78,6 +78,28 @@ function environmentSproutSecretResolver(): SproutSecretResolver {
   };
 }
 
+function environmentSproutTokenRefresher() {
+  return {
+    async refresh(refreshToken: string, signal: AbortSignal) {
+      const apiKey = process.env.SPROUT_SUPABASE_ANON_KEY?.trim();
+      if (!apiKey) throw new Error("sprout_refresh_api_key_unavailable");
+      const response = await fetch(
+        "https://qxkswyqmsisjdtmywnow.supabase.co/auth/v1/token?grant_type=refresh_token",
+        {
+          method: "POST",
+          headers: { apikey: apiKey, authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
+          body: JSON.stringify({ refresh_token: refreshToken }),
+          signal,
+        },
+      );
+      if (!response.ok) throw new Error("sprout_refresh_rejected");
+      const body = (await response.json()) as { access_token?: string; refresh_token?: string };
+      if (!body.access_token || !body.refresh_token) throw new Error("sprout_refresh_response_invalid");
+      return { accessToken: body.access_token, refreshToken: body.refresh_token };
+    },
+  };
+}
+
 export function createTaskHandlers(
   store: RuntimeStore,
   logger?: Logger,
@@ -211,6 +233,7 @@ export function createTaskHandlers(
               endpoint: runtime.endpoint,
               allowedOrigins: configuredOrigins,
               secrets: options.sproutSecretResolver ?? environmentSproutSecretResolver(),
+              tokenRefresher: environmentSproutTokenRefresher(),
               fetch: options.sproutFetch,
               maxResponseBytes: payload.maxResponseBytes,
               onOperation(operation) {
