@@ -56,6 +56,27 @@ describe("Sprout source persistence boundary", () => {
     expect(migration).toContain("SET checkpoint = p_checkpoint_out");
     expect(migration).not.toMatch(/GRANT\s+(?:INSERT|UPDATE|DELETE)/i);
     expect(migration).toContain("TO hirly_inventory_worker");
+    expect(migration).toContain(
+      "jsonb_array_length(p_entries) NOT BETWEEN 0 AND 500",
+    );
+  });
+
+  test("exposes runnable metadata without persisting credential material", () => {
+    expect(migration).toContain("credential_ref text");
+    expect(migration).toContain("approved_page_size integer");
+    expect(migration).toContain(
+      "worker_private.get_sprout_source_runtime",
+    );
+    expect(migration).toContain(
+      "worker_private.career_source_runnable(source.id, 'FR', p_mode)",
+    );
+    expect(migration).toContain(
+      "(source.checkpoint->>'pageSize')::integer = source.approved_page_size",
+    );
+    expect(migration).toContain("'^secret://[a-z0-9][a-z0-9/_-]{2,127}$'");
+    expect(rollback).toContain(
+      "DROP FUNCTION IF EXISTS worker_private.get_sprout_source_runtime",
+    );
   });
 
   test("preserves immutable raw evidence, occurrence identity, and collision evidence", () => {

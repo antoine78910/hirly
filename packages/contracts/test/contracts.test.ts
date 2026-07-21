@@ -8,6 +8,7 @@ import {
   sourcePageCommitSchema,
   sourceTrialManifestSchema,
   sourceTrialResultSchema,
+  sproutSourceRuntimeSchema,
 } from "../src";
 
 describe("shared contracts", () => {
@@ -162,6 +163,17 @@ describe("shared contracts", () => {
         ],
       }).entries[0]?.canonical,
     ).toEqual(canonical);
+    expect(
+      sourcePageCommitSchema.parse({
+        sourceId: "11111111-1111-4111-8111-111111111111",
+        countryCode: "FR",
+        mode: "incremental",
+        checkpointIn: { version: "sprout.offset.v1", offset: 100 },
+        checkpointOut: { version: "sprout.offset.v1", offset: 100 },
+        complete: true,
+        entries: [],
+      }).entries,
+    ).toEqual([]);
     expect(() =>
       sourcePageCommitSchema.parse({
         sourceId: "11111111-1111-4111-8111-111111111111",
@@ -173,6 +185,34 @@ describe("shared contracts", () => {
         entries: [{ canonical: { ...canonical, salaryMin: 80_000 } }],
       }),
     ).toThrow();
+  });
+
+  test("validates secret-reference-only Sprout runtime metadata", () => {
+    const runtime = {
+      sourceId: "11111111-1111-4111-8111-111111111111",
+      policyId: "22222222-2222-4222-8222-222222222222",
+      endpoint: "https://api.example.test/jobs",
+      credentialRef: "secret://sprout/france-api",
+      approvedPageSize: 100,
+      checkpoint: {
+        version: "sprout.offset.v1",
+        offset: 0,
+        pageSize: 100,
+        observedTotal: null,
+        watermark: null,
+      },
+      policyEvidenceRef: "policy/sprout/france/2026-07-21",
+    };
+    expect(sproutSourceRuntimeSchema.parse(runtime)).toEqual(runtime);
+    for (const credentialRef of [
+      "Bearer token",
+      "https://user:secret@example.test",
+      "secret://Sprout/france",
+    ]) {
+      expect(() =>
+        sproutSourceRuntimeSchema.parse({ ...runtime, credentialRef }),
+      ).toThrow();
+    }
   });
 
   test("validates bounded non-production source trial manifests and results", () => {

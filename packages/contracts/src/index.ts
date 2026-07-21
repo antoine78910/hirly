@@ -579,6 +579,20 @@ export const sourcePageCommitResultSchema = z
   })
   .strict();
 
+export const sproutSourceRuntimeSchema = z
+  .object({
+    sourceId: z.uuid(),
+    policyId: z.uuid(),
+    endpoint: httpsBaseUrlSchema,
+    credentialRef: z
+      .string()
+      .regex(/^secret:\/\/[a-z0-9][a-z0-9/_-]{2,127}$/),
+    approvedPageSize: z.number().int().positive().max(500),
+    checkpoint: sourceCheckpointSchema,
+    policyEvidenceRef: z.string().trim().min(1).max(2_048),
+  })
+  .strict();
+
 export const validationResultSchema = canonicalJobSchema.pick({
   selectedApplyUrl: true,
   validationStatus: true,
@@ -644,5 +658,6 @@ export type SourcePageCommit = z.infer<typeof sourcePageCommitSchema>;
 export type SourcePageCommitResult = z.infer<
   typeof sourcePageCommitResultSchema
 >;
+export type SproutSourceRuntime = z.infer<typeof sproutSourceRuntimeSchema>;
 export type ValidationResult = z.infer<typeof validationResultSchema>;
 export type StableErrorCode = z.infer<typeof stableErrorCodeSchema>;

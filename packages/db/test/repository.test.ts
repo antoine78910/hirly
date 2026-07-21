@@ -9,8 +9,51 @@ describe("database repository boundary", () => {
     expect(methods).toContain("finish");
     expect(methods).toContain("writeJobAndComplete");
     expect(methods).toContain("commitSproutSourcePage");
+    expect(methods).toContain("getSproutSourceRuntime");
     expect(methods).not.toContain("updateTask");
     expect(methods).not.toContain("query");
+  });
+
+  test("reads only runnable secret-reference Sprout source metadata", async () => {
+    const statements: string[] = [];
+    const values: unknown[][] = [];
+    const tag = ((strings: TemplateStringsArray, ...parameters: unknown[]) => {
+      statements.push(strings.join("?"));
+      values.push(parameters);
+      return Promise.resolve([
+        {
+          source_id: "11111111-1111-4111-8111-111111111111",
+          policy_id: "22222222-2222-4222-8222-222222222222",
+          endpoint: "https://api.example.test/jobs",
+          credential_ref: "secret://sprout/france-api",
+          approved_page_size: 100,
+          checkpoint: {
+            version: "sprout.offset.v1",
+            offset: 0,
+            pageSize: 100,
+          },
+          policy_evidence_ref: "policy/sprout/france/2026-07-21",
+        },
+      ]);
+    }) as unknown as Database;
+    tag.json = (value) => value as never;
+
+    const runtime = await new WorkerRepository(tag).getSproutSourceRuntime(
+      "11111111-1111-4111-8111-111111111111",
+      "backfill",
+    );
+
+    expect(statements[0]).toContain(
+      "worker_private.get_sprout_source_runtime",
+    );
+    expect(values[0]).toEqual([
+      "11111111-1111-4111-8111-111111111111",
+      "backfill",
+    ]);
+    expect(runtime).toMatchObject({
+      credentialRef: "secret://sprout/france-api",
+      approvedPageSize: 100,
+    });
   });
 
   test("commits a validated Sprout page through one scoped RPC", async () => {

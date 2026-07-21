@@ -4,6 +4,7 @@ import {
   runViewSchema,
   sourcePageCommitResultSchema,
   sourcePageCommitSchema,
+  sproutSourceRuntimeSchema,
   type CanonicalJob,
   type CareerSourceCandidate,
   type CareerSourceCandidateRegistration,
@@ -12,6 +13,7 @@ import {
   type RunView,
   type SourcePageCommit,
   type SourcePageCommitResult,
+  type SproutSourceRuntime,
 } from "@hirly/contracts";
 import postgres, { type Sql } from "postgres";
 
@@ -410,47 +412,35 @@ export class WorkerRepository {
 
   async getSproutSourceRuntime(
     sourceId: string,
-    mode: "backfill" | "incremental",
-  ): Promise<SproutSourceRuntimeConfiguration | null> {
-    const [row] = await this.sql<{
-      source_id: string;
-      policy_id: string;
-      endpoint: string;
-      credential_ref: string;
-      approved_page_size: number;
-      checkpoint: Record<string, unknown>;
-      evidence_reference: string;
-    }[]>`
-      SELECT
-        source.id AS source_id,
-        source.policy_id,
-        source.base_url AS endpoint,
-        source.credential_ref,
-        source.approved_page_size,
-        source.checkpoint,
-        policy.evidence_reference
-      FROM public.career_sources AS source
-      JOIN public.source_policy AS policy
-        ON policy.id = source.policy_id AND policy.provider = source.provider
-      WHERE source.id = ${sourceId}::uuid
-        AND source.provider = 'sprout'
-        AND source.base_url IS NOT NULL
-        AND source.credential_ref IS NOT NULL
-        AND source.approved_page_size IS NOT NULL
-        AND source.checkpoint->>'pageSize' = source.approved_page_size::text
-        AND policy.evidence_reference IS NOT NULL
-        AND worker_private.career_source_runnable(source.id, 'FR', ${mode})
+    mode: "incremental" | "backfill",
+  ): Promise<SproutSourceRuntime | null> {
+    const [row] = await this.sql<
+      {
+        source_id: string;
+        policy_id: string;
+        endpoint: string;
+        credential_ref: string;
+        approved_page_size: number;
+        checkpoint: Record<string, unknown>;
+        policy_evidence_ref: string;
+      }[]
+    >`
+      SELECT *
+      FROM worker_private.get_sprout_source_runtime(
+        ${sourceId}::uuid,
+        ${mode}
+      )
     `;
     if (!row) return null;
-    return {
+    return sproutSourceRuntimeSchema.parse({
       sourceId: row.source_id,
       policyId: row.policy_id,
       endpoint: row.endpoint,
       credentialRef: row.credential_ref,
       approvedPageSize: row.approved_page_size,
       checkpoint: row.checkpoint,
-      policyEvidenceRef: row.evidence_reference,
-    };
+      policyEvidenceRef: row.policy_evidence_ref,
+    });
   }
 
   async claimProviderWork(

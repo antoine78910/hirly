@@ -3,6 +3,17 @@
 -- assigns no writer, and leaves every provider/source activation flag false.
 BEGIN;
 
+ALTER TABLE public.career_sources
+  ADD COLUMN IF NOT EXISTS credential_ref text,
+  ADD COLUMN IF NOT EXISTS approved_page_size integer,
+  ADD CONSTRAINT career_sources_credential_ref_guard CHECK (
+    credential_ref IS NULL
+    OR credential_ref ~ '^secret://[a-z0-9][a-z0-9/_-]{2,127}$'
+  ),
+  ADD CONSTRAINT career_sources_approved_page_size_guard CHECK (
+    approved_page_size IS NULL OR approved_page_size BETWEEN 1 AND 500
+  );
+
 MERGE INTO public.provider_registry AS registry
 USING (
   VALUES (
@@ -39,7 +50,7 @@ USING (
     'Sprout France'::text,
     ARRAY['FR']::text[],
     'partner_feed'::text,
-    '{"version":"sprout.offset.v1","offset":0,"pageSize":10,"observedTotal":null,"watermark":null}'::jsonb,
+    '{"version":"sprout.offset.v1","offset":0,"pageSize":null,"observedTotal":null,"watermark":null}'::jsonb,
     '{"FR":true}'::jsonb
   )
 ) AS incoming(
@@ -77,6 +88,48 @@ DROP TRIGGER IF EXISTS source_identity_collisions_immutable
 CREATE TRIGGER source_identity_collisions_immutable
 BEFORE UPDATE OR DELETE ON public.source_identity_collisions
 FOR EACH ROW EXECUTE FUNCTION worker_private.reject_immutable_source_evidence();
+
+CREATE OR REPLACE FUNCTION worker_private.get_sprout_source_runtime(
+  p_source_id uuid,
+  p_mode text
+)
+RETURNS TABLE (
+  source_id uuid,
+  policy_id uuid,
+  endpoint text,
+  credential_ref text,
+  approved_page_size integer,
+  checkpoint jsonb,
+  policy_evidence_ref text
+)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = pg_catalog
+AS $$
+  SELECT
+    source.id,
+    source.policy_id,
+    source.base_url,
+    source.credential_ref,
+    source.approved_page_size,
+    source.checkpoint,
+    policy.evidence_reference
+  FROM public.career_sources AS source
+  JOIN public.source_policy AS policy
+    ON policy.id = source.policy_id
+   AND policy.provider = source.provider
+  WHERE source.id = p_source_id
+    AND source.provider = 'sprout'
+    AND p_mode IN ('incremental', 'backfill')
+    AND worker_private.career_source_runnable(source.id, 'FR', p_mode)
+    AND worker_private.career_source_base_url_is_safe(source.base_url)
+    AND source.credential_ref ~ '^secret://[a-z0-9][a-z0-9/_-]{2,127}$'
+    AND source.approved_page_size BETWEEN 1 AND 500
+    AND (source.checkpoint->>'pageSize') ~ '^[1-9][0-9]*$'
+    AND (source.checkpoint->>'pageSize')::integer = source.approved_page_size
+    AND policy.evidence_reference IS NOT NULL
+$$;
 
 CREATE OR REPLACE FUNCTION worker_private.commit_sprout_source_page(
   p_task_id uuid,
@@ -504,10 +557,14 @@ END
 $$;
 
 REVOKE ALL ON public.source_identity_collisions FROM PUBLIC;
+REVOKE ALL ON FUNCTION worker_private.get_sprout_source_runtime(uuid, text)
+  FROM PUBLIC;
 REVOKE ALL ON FUNCTION worker_private.commit_sprout_source_page(
   uuid, uuid, bigint, text, uuid, uuid, text, text, jsonb, jsonb, boolean, jsonb
 ) FROM PUBLIC;
 GRANT SELECT ON public.source_identity_collisions TO hirly_inventory_operator;
+GRANT EXECUTE ON FUNCTION worker_private.get_sprout_source_runtime(uuid, text)
+  TO hirly_inventory_worker;
 GRANT EXECUTE ON FUNCTION worker_private.commit_sprout_source_page(
   uuid, uuid, bigint, text, uuid, uuid, text, text, jsonb, jsonb, boolean, jsonb
 ) TO hirly_inventory_worker;
@@ -515,11 +572,15 @@ GRANT EXECUTE ON FUNCTION worker_private.commit_sprout_source_page(
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
+    REVOKE ALL ON FUNCTION worker_private.get_sprout_source_runtime(uuid, text)
+      FROM anon;
     REVOKE ALL ON FUNCTION worker_private.commit_sprout_source_page(
       uuid, uuid, bigint, text, uuid, uuid, text, text, jsonb, jsonb, boolean, jsonb
     ) FROM anon;
   END IF;
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
+    REVOKE ALL ON FUNCTION worker_private.get_sprout_source_runtime(uuid, text)
+      FROM authenticated;
     REVOKE ALL ON FUNCTION worker_private.commit_sprout_source_page(
       uuid, uuid, bigint, text, uuid, uuid, text, text, jsonb, jsonb, boolean, jsonb
     ) FROM authenticated;
