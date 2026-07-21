@@ -22,6 +22,7 @@ import {
   resolveManifestOutput,
   sanitizedEnvironment,
   sha256,
+  signShadowRunEvidenceRecord,
   signActivationEvidenceRecord,
   successfullyCreatedDatabaseUrls,
   validateSelectedManifest,
@@ -30,6 +31,7 @@ import {
 
 const root = resolve(import.meta.dir, "..");
 const ACTIVATION_HMAC_KEY = "g015-test-only-activation-attestation-key-material";
+const SHADOW_EVIDENCE_HMAC_KEY = "g015-test-only-ats-shadow-evidence-key-material";
 const ACTIVATION_ISSUER = "github-actions";
 const ACTIVATION_WORKFLOW_ID = "job-supply-release";
 const ACTIVATION_WORKFLOW_RUN_ID = "20260721.1";
@@ -39,6 +41,7 @@ function evaluateProviderActivationPreflight(input: any) {
   return evaluateProviderActivationPreflightRaw(input, {
     evidenceRoot: input.evidenceRoot,
     trustedAttestationKey: ACTIVATION_HMAC_KEY,
+    trustedShadowEvidenceKey: SHADOW_EVIDENCE_HMAC_KEY,
     trustedAttestationIssuer: ACTIVATION_ISSUER,
     trustedWorkflowId: ACTIVATION_WORKFLOW_ID,
     trustedWorkflowRunId: ACTIVATION_WORKFLOW_RUN_ID,
@@ -1078,10 +1081,8 @@ async function passingManualPreflight(evidenceRoot: string, provider = "recruite
     policyDigest,
     releaseHead: releaseAttestation.releaseHead,
   };
-  const runs = await Promise.all(["shadow-1", "shadow-2"].map((runId, index) => writeEvidence(
-    evidenceRoot,
-    `shadow/${runId}.json`,
-    {
+  const runs = await Promise.all(["shadow-1", "shadow-2"].map((runId, index) => {
+    const unsignedRun = {
       schemaVersion: "job-supply-shadow-run.v1",
       runId,
       provider,
@@ -1092,8 +1093,12 @@ async function passingManualPreflight(evidenceRoot: string, provider = "recruite
       canonicalWritesEnabled: false,
       capturedAt: `2026-07-2${index + 1}T00:00:00.000Z`,
       jobs: [{ externalId: `job-${index + 1}`, fingerprint: `${index + 1}` }],
-    },
-  )));
+    };
+    return writeEvidence(evidenceRoot, `shadow/${runId}.json`, {
+      ...unsignedRun,
+      signature: signShadowRunEvidenceRecord(unsignedRun, SHADOW_EVIDENCE_HMAC_KEY),
+    });
+  }));
   const shadowEvidence = {
     schemaVersion: 1,
     verdict: "complete_shadow_ready",

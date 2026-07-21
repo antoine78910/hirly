@@ -887,6 +887,27 @@ export function signActivationEvidenceRecord(record, key) {
   return createHmac("sha256", key).update(canonicalJson(unsigned)).digest("hex");
 }
 
+export function signShadowRunEvidenceRecord(record, key) {
+  if (typeof key !== "string" || key.length < 32) {
+    throw new Error("ATS shadow evidence HMAC key must contain at least 32 characters");
+  }
+  const { signature: _signature, ...unsigned } = record;
+  return createHmac("sha256", key).update(canonicalJson(unsigned)).digest("hex");
+}
+
+function validateShadowRunSignature(run, key) {
+  if (typeof key !== "string" || key.length < 32) {
+    throw new Error("trusted ATS shadow evidence HMAC key must contain at least 32 characters");
+  }
+  if (!/^[0-9a-f]{64}$/.test(String(run.signature ?? ""))) {
+    throw new Error("shadow run signature is missing or invalid");
+  }
+  const expected = signShadowRunEvidenceRecord(run, key);
+  if (!timingSafeEqual(Buffer.from(run.signature, "hex"), Buffer.from(expected, "hex"))) {
+    throw new Error("shadow run signature is invalid");
+  }
+}
+
 function validateActivationProvenance(record, trust, label) {
   assertOnlyKeys(record, trust.allowedKeys, label);
   if (!trust.key || trust.key.length < 32 || !trust.issuer || !trust.workflowId || !trust.workflowRunId) {
@@ -1347,7 +1368,7 @@ function validateReleaseAttestationEvidence(attestation, evidenceRoot, failures)
   }
 }
 
-function validateShadowScorecard(scorecard, input, evidenceRoot) {
+function validateShadowScorecard(scorecard, input, evidenceRoot, trustedShadowEvidenceKey) {
   if (!scorecard || typeof scorecard !== "object" || Array.isArray(scorecard)) throw new Error("scorecard must be an object");
   assertOnlyKeys(scorecard, [
     "canonicalWritesEnabled", "countryCode", "evidenceDigest", "policyDigest", "provider",
@@ -1383,8 +1404,9 @@ function validateShadowScorecard(scorecard, input, evidenceRoot) {
     if (!run || typeof run !== "object" || Array.isArray(run)) throw new Error("shadow run must be an object");
     assertOnlyKeys(run, [
       "canonicalWritesEnabled", "capturedAt", "complete", "countryCode", "jobs",
-      "policyDigest", "provider", "runId", "schemaVersion", "tenantId",
+      "policyDigest", "provider", "runId", "schemaVersion", "signature", "tenantId",
     ], "shadow run");
+    validateShadowRunSignature(run, trustedShadowEvidenceKey);
     if (
       run.schemaVersion !== SHADOW_RUN_VERSION
       || run.runId !== scorecard.runIds[index]
@@ -1526,6 +1548,9 @@ export function evaluateProviderActivationPreflight(input = {}, options = {}) {
     evidenceIds: new Set(),
     runKinds: new Set(),
   };
+  const trustedShadowEvidenceKey = options.trustedShadowEvidenceKey
+    ?? options.trustedAtsShadowEvidenceKey
+    ?? process.env.ATS_SHADOW_EVIDENCE_HMAC_KEY;
   const provider = String(input.provider ?? "").trim();
   const targetVerdict = input.targetVerdict;
   const allowedTargets = new Set([
@@ -1553,7 +1578,7 @@ export function evaluateProviderActivationPreflight(input = {}, options = {}) {
   if (!String(input.rollback?.commandTranscriptId ?? "").trim()) failures.push("rollback command/transcript identifier is required");
   try {
     const scorecard = containedEvidenceDescriptor(input.shadowScorecard, evidenceRoot).json;
-    validateShadowScorecard(scorecard, scopedInput, evidenceRoot);
+    validateShadowScorecard(scorecard, scopedInput, evidenceRoot, trustedShadowEvidenceKey);
   } catch (error) {
     failures.push(`sealed repeated shadow scorecard is required: ${error.message}`);
   }
