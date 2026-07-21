@@ -161,9 +161,11 @@ export const buildPostHogConfig = (): Partial<PostHogConfig> => {
     capture_heatmaps: false,
     disable_surveys: true,
     disable_session_recording: !replayEnabled,
-    ...(replayEnabled
-      ? { advanced_disable_feature_flags: true }
-      : { advanced_disable_flags: true }),
+    // Remote feature flags are the production control plane for operational UI
+    // such as the maintenance banner. Automatic capture remains disabled and
+    // `$feature_flag_called` events are still rejected by before_send.
+    advanced_disable_flags: false,
+    advanced_disable_feature_flags: false,
     enable_recording_console_log: false,
     capture_performance: false,
     session_recording: {

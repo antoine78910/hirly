@@ -74,6 +74,7 @@ import { devBypassAuth } from "@/lib/dev";
 import { isTrainingRoute } from "@/lib/trainingRoutes";
 import { needsOAuthCallbackRedirect } from "@/lib/oauthCallback";
 import PostHogLifecycle from "@/components/analytics/PostHogLifecycle";
+import MaintenanceBanner from "@/components/maintenance/MaintenanceBanner";
 
 import PasswordReset from '@/pages/PasswordReset';
 
@@ -255,6 +256,7 @@ function App() {
           <BrowserRouter>
             <PostHogLifecycle />
             <AppLocaleProvider>
+              <MaintenanceBanner />
               <MobileThemeProvider>
               <UpgradeModalProvider>
                 <AppErrorBoundary>

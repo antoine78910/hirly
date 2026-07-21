@@ -65,7 +65,7 @@ describe("posthog client", () => {
     expect(mockStopSessionRecording).toHaveBeenCalled();
   });
 
-  it("uses strict automatic-capture suppression in both profiles", () => {
+  it("keeps automatic capture suppressed while enabling remote feature flags", () => {
     const profileA = buildPostHogConfig();
     expect(profileA).toMatchObject({
       autocapture: false,
@@ -76,16 +76,17 @@ describe("posthog client", () => {
       capture_heatmaps: false,
       disable_surveys: true,
       disable_session_recording: true,
-      advanced_disable_flags: true,
+      advanced_disable_flags: false,
+      advanced_disable_feature_flags: false,
     });
-    expect(profileA).not.toHaveProperty("advanced_disable_feature_flags");
 
     process.env.REACT_APP_POSTHOG_REPLAY_ENABLED = "true";
     process.env.REACT_APP_POSTHOG_REPLAY_HOSTILE_QA_APPROVED = "true";
     const profileB = buildPostHogConfig();
     expect(profileB).toMatchObject({
       disable_session_recording: false,
-      advanced_disable_feature_flags: true,
+      advanced_disable_flags: false,
+      advanced_disable_feature_flags: false,
       session_recording: {
         maskAllInputs: true,
         maskTextSelector: "*",
@@ -95,7 +96,6 @@ describe("posthog client", () => {
         recordBody: false,
       },
     });
-    expect(profileB).not.toHaveProperty("advanced_disable_flags");
     expect(profileB).not.toHaveProperty("enable_heatmaps");
   });
 
