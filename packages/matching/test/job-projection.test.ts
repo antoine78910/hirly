@@ -8,6 +8,7 @@ import {
 const source = (overrides: Partial<JobProjectionSource> = {}): JobProjectionSource => ({
   canonicalGroupId: "11111111-1111-4111-8111-111111111111",
   preferredJobId: "job_0123456789abcdef",
+  authoritativeVersion: "7",
   groupStatus: "active",
   title: "Sr. Développeur Full Stack",
   normalizedTitle: "senior developpeur full stack",
@@ -73,7 +74,7 @@ describe("job search-document projection", () => {
       now,
     );
     const route = await projectJobSearchDocument(
-      source({ autoApplySupported: true, manualFulfillmentReady: false }),
+      source({ authoritativeVersion: "8", autoApplySupported: true, manualFulfillmentReady: false }),
       now,
     );
     expect(first.action).toBe("upsert");
@@ -81,7 +82,8 @@ describe("job search-document projection", () => {
     expect(route.action).toBe("upsert");
     if (first.action !== "upsert" || preferred.action !== "upsert" || route.action !== "upsert") return;
     expect(preferred.canonicalGroupId).toBe(first.canonicalGroupId);
-    expect(preferred.row.job_version).not.toBe(first.row.job_version);
+    expect(preferred.row.job_version).toBe(first.row.job_version);
+    expect(preferred.sourceContentHash).not.toBe(first.sourceContentHash);
     expect(route.row.fulfillment_route).toBe("auto");
     expect(route.row.lifecycle_status).toBe("active");
     expect(route.row.job_version).not.toBe(first.row.job_version);
@@ -110,6 +112,7 @@ describe("job search-document projection", () => {
     expect(await projectJobSearchDocument(source({ groupStatus: "superseded" }), now)).toEqual({
       action: "remove",
       canonicalGroupId: "11111111-1111-4111-8111-111111111111",
+      authoritativeVersion: "7",
     });
     expect(
       affectedCanonicalGroupIds({
