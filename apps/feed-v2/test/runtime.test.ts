@@ -189,10 +189,8 @@ describe("Feed v2 runtime adapters", () => {
 });
 
 describe("Feed v2 peak serving query", () => {
-  test("bounds the deterministic active recency pool before scoring and keyset pagination", () => {
+  test("scores the complete active inventory before keyset pagination", () => {
     expect(FEED_V2_INDEXED_READ_SQL).toContain("recency_candidates AS MATERIALIZED");
-    expect(FEED_V2_INDEXED_READ_SQL).toContain("ORDER BY document.last_seen_at DESC, document.canonical_group_id ASC");
-    expect(FEED_V2_INDEXED_READ_SQL).toContain("LIMIT 1000");
     expect(FEED_V2_INDEXED_READ_SQL).toMatch(/FROM recency_candidates AS document[\s\S]*ORDER BY relevance_score DESC, canonical_group_id ASC/);
     expect(FEED_V2_INDEXED_READ_SQL).toContain("ORDER BY document.projected_at DESC");
   });

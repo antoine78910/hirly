@@ -7735,15 +7735,16 @@ async def _try_feed_v2(
     preferred_ids = [job.preferred_job_id for job in validated.jobs]
     if preferred_ids:
         try:
-            source_rows = await db.jobs.find(
-                {"job_id": {"$in": preferred_ids}}, {"_id": 0},
-            ).to_list(len(preferred_ids))
+            source_rows = await asyncio.gather(*[
+                db.jobs.find_one({"job_id": job_id}, {"_id": 0})
+                for job_id in preferred_ids
+            ])
         except (AttributeError, RuntimeError) as exc:
             logger.warning("jobs/feed v2_card_hydration_skipped reason=%s", type(exc).__name__)
             source_rows = []
         source_by_id = {
-            str(row.get("job_id")): row for row in source_rows
-            if isinstance(row, dict) and row.get("job_id")
+            job_id: row for job_id, row in zip(preferred_ids, source_rows)
+            if isinstance(row, dict)
         }
         if source_by_id:
             hydrated_jobs = []

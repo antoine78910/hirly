@@ -36,8 +36,6 @@ WITH profile AS (
   SELECT document.*
   FROM public.job_search_documents AS document
   WHERE document.lifecycle_status = 'active'
-  ORDER BY document.last_seen_at DESC, document.canonical_group_id ASC
-  LIMIT 1000
 ), inventory_meta AS (
   SELECT concat(
     coalesce((
