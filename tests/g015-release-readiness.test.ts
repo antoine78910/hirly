@@ -518,7 +518,15 @@ describe("G015 release verification contract", () => {
         Object.assign(input, step, {
           transitionEvidence: await writeTransitionEvidence(evidenceRoot, step.targetVerdict, step.gates, scope),
         });
-        expect(evaluateProviderActivationPreflight(input).status).toBe("PASS");
+        const { deployedArtifactDigest: _artifactDigest, ...writerScope } = scope;
+        input.writerOwnership = await writeEvidence(evidenceRoot, `ownership/${provider}-${step.targetVerdict}.json`, {
+          schemaVersion: "job-supply-writer-ownership.v1", status: "observed", ...writerScope,
+          previousWriterRuntime: step.currentVerdict === "blocked" ? "none" : "typescript",
+          writerRuntime: "typescript", throughNone: step.currentVerdict === "blocked",
+          simultaneousCanonicalWriters: false, ownershipEpoch: 5,
+          observedAt: "2026-07-21T00:00:00.000Z",
+        });
+        expect(evaluateProviderActivationPreflight(input)).toMatchObject({ status: "PASS", failures: [] });
         const skipped = structuredClone(input);
         skipped.currentVerdict = "blocked";
         if (step.targetVerdict !== "inventory_canary_ready") {
@@ -612,7 +620,7 @@ describe("G015 release verification contract", () => {
     };
     input.writerOwnership = await writeEvidence(evidenceRoot, "ownership/greenhouse-active.json", {
       schemaVersion: "job-supply-writer-ownership.v1", status: "observed", ...scope,
-      previousWriterRuntime: "none", writerRuntime: "typescript", throughNone: true,
+      previousWriterRuntime: "typescript", writerRuntime: "typescript", throughNone: false,
       simultaneousCanonicalWriters: false, ownershipEpoch: 5,
       observedAt: "2026-07-21T00:00:00.000Z",
     });
@@ -661,7 +669,7 @@ describe("G015 release verification contract", () => {
     };
     input.writerOwnership = await writeEvidence(evidenceRoot, "ownership/greenhouse-inventory-active.json", {
       schemaVersion: "job-supply-writer-ownership.v1", status: "observed", ...scope,
-      previousWriterRuntime: "none", writerRuntime: "typescript", throughNone: true,
+      previousWriterRuntime: "typescript", writerRuntime: "typescript", throughNone: false,
       simultaneousCanonicalWriters: false, ownershipEpoch: 5,
       observedAt: "2026-07-21T00:00:00.000Z",
     });
@@ -715,6 +723,13 @@ describe("G015 release verification contract", () => {
         envelope.observedAt = "2026-07-22T00:00:00.000Z";
         envelope.signature = signActivationEvidenceRecord(envelope, ACTIVATION_HMAC_KEY);
         input.transitionEvidence.review = await writeEvidence(root, "activation/future-review.json", envelope);
+      },
+      async (root: string, input: any) => {
+        const descriptor = input.transitionEvidence.review;
+        const envelope = JSON.parse(await readFile(resolve(root, descriptor.path), "utf8"));
+        envelope.observedAt = "2026-07-19T00:00:00.000Z";
+        envelope.signature = signActivationEvidenceRecord(envelope, ACTIVATION_HMAC_KEY);
+        input.transitionEvidence.review = await writeEvidence(root, "activation/stale-review.json", envelope);
       },
       async (root: string, input: any) => {
         const review = JSON.parse(await readFile(resolve(root, input.transitionEvidence.review.path), "utf8"));
@@ -987,9 +1002,9 @@ async function passingManualPreflight(evidenceRoot: string, provider = "recruite
     schemaVersion: "job-supply-writer-ownership.v1",
     status: "observed",
     ...scope,
-    previousWriterRuntime: "none",
+    previousWriterRuntime: "typescript",
     writerRuntime: "typescript",
-    throughNone: true,
+    throughNone: false,
     simultaneousCanonicalWriters: false,
     ownershipEpoch: 4,
     observedAt: "2026-07-21T00:00:00.000Z",

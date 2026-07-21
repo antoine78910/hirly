@@ -303,13 +303,20 @@ artifacts whose run IDs and provider scope match the scorecard. Writer evidence
 seals the current runtime, previous runtime, ownership epoch, the transition
 through `writer_runtime=none`, and the absence of simultaneous writers.
 
-Activation state cannot be skipped. `inventory_canary_ready` requires an
-`inventory_manual` receipt plus sealed review and UltraQA gates;
+Activation state cannot be skipped. `inventory_canary_ready` starts only from
+`blocked` and requires the prior-state receipt plus sealed review and UltraQA gates;
 `inventory_active` requires the inventory-canary receipt, observation window,
-review, and UltraQA; `application_canary_ready` starts only from
+review, and UltraQA; `inventory_manual` is terminal and starts only from
+`inventory_active`, retaining TypeScript as the inventory writer without a
+false writer transfer; `application_canary_ready` starts only from
 `inventory_active`; and `application_active` requires the application-canary
 receipt, observation window, review, and UltraQA. Every prerequisite is a
-separately sealed, release-HEAD-bound evidence envelope.
+separately sealed evidence envelope and underlying artifact, both bound to the
+exact release HEAD and deployed artifact digest. Activation evidence must be
+fresh, non-future, uniquely identified, and HMAC-attested by the configured CI
+issuer and exact workflow run using runtime-provided trust material. Review
+attestations require security `CLEAN` with zero unresolved findings, code review
+`APPROVE`, and architecture `CLEAR`; UltraQA attestations require `passed`.
 
 Rollback order is exact: disable transport and schedule, stop claims and drain,
 prove no writes, transition writer ownership through `writer_runtime=none`,
