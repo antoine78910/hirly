@@ -383,6 +383,10 @@ export function sanitizeSourceDocument(
     return "[REDACTED]";
   }
   if (typeof value === "string") {
+    const preserveIsoTimestamp =
+      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(
+        value,
+      );
     return value
       .replace(credentialUrl, (match) => {
         const schemeEnd = match.indexOf("://") + 3;
@@ -391,7 +395,7 @@ export function sanitizeSourceDocument(
       .replace(bearer, "Bearer [REDACTED]")
       .replace(querySecret, "$1[REDACTED]")
       .replace(email, "[REDACTED_EMAIL]")
-      .replace(phone, "[REDACTED_PHONE]");
+      .replace(preserveIsoTimestamp ? /$^/ : phone, "[REDACTED_PHONE]");
   }
   if (Array.isArray(value)) {
     return value.map((entry) => sanitizeSourceDocument(entry));
