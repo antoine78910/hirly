@@ -23,6 +23,8 @@ export interface RuntimeStore {
   assertProviderRunnable(provider: Provider): Promise<void>;
   dueSchedules(limit: number): Promise<DueSchedule[]>;
   enqueueDueSchedule(scheduleId: string, nextDueAt: Date): Promise<string | null>;
+  enqueue(input: EnqueueRun): Promise<string>;
+  attachCareerSource?(runId: string, sourceId: string): Promise<void>;
   getRun(runId: string): Promise<RunView | null>;
   claimProviderWork?(
     lease: Lease,

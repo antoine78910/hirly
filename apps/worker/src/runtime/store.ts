@@ -27,6 +27,14 @@ export class PostgresRuntimeStore implements RuntimeStore {
     return this.repository.enqueueDueSchedule(scheduleId, nextDueAt);
   }
 
+  enqueue(input: Parameters<WorkerRepository["enqueue"]>[0]): Promise<string> {
+    return this.repository.enqueue(input);
+  }
+
+  attachCareerSource(runId: string, sourceId: string): Promise<void> {
+    return this.repository.attachCareerSource(runId, sourceId);
+  }
+
   async getRun(runId: string): Promise<RunView | null> {
     return this.repository.getRun(runId);
   }

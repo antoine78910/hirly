@@ -3,6 +3,7 @@ import { PermanentTaskError, safeErrorMessage } from "./retry";
 import {
   providerSchema,
   providerSearchRequestSchema,
+  enqueueRunSchema,
   type Provider,
 } from "@hirly/contracts";
 import type { Logger } from "@hirly/observability";
@@ -338,6 +339,21 @@ export function createTaskHandlers(
               signal: claimAbort.signal,
               maxResponseBytes: payload.maxResponseBytes,
             });
+            if (!result.complete) {
+              const nextOffset = result.checkpoint.offset;
+              const nextRunId = await store.enqueue(enqueueRunSchema.parse({
+                kind: "provider_ingestion",
+                provider: "sprout",
+                idempotencyKey: `sprout:${payload.sourceId}:${payload.mode}:${nextOffset}`,
+                triggerSource: "cli",
+                tasks: [{
+                  taskKey: `sprout:france:${payload.mode}:${payload.sourceId}:${nextOffset}`,
+                  taskType: "provider.fetch_page",
+                  payload,
+                }],
+              }));
+              await store.attachCareerSource?.(nextRunId, payload.sourceId);
+            }
             emitSproutOperation(logger, task, {
               event: "sprout.page_complete",
               severity: "info",
