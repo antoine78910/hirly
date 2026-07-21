@@ -15,6 +15,9 @@
     "updated_at": "2026-07-21T07:59:00.000Z",
     "data": {
       "target_role": "Développeur Full Stack",
+      "target_roles": ["Développeur Full Stack", "Frontend Engineer"],
+      "sector_ids": ["Software Engineering"],
+      "industry_ids": ["Health Tech"],
       "rome_codes": ["m1805"],
       "skills": ["TypeScript", "React", "TypeScript", "Node.js"],
       "skill_ids": ["typescript", "react", "node"],

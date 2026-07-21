@@ -26,7 +26,10 @@ const profile: CandidateSearchProfile = {
   version: "7",
   status: "active",
   targetRoleLabelNormalized: "software engineer",
+  targetRoleLabelsNormalized: ["software engineer"],
   roleFamilyIds: ["software-engineering"],
+  sectorIds: ["software-engineering"],
+  industryIds: [],
   romeCodes: [],
   skillIds: ["typescript"],
   skillTerms: ["typescript"],
@@ -55,6 +58,8 @@ function job(id: string, overrides: Partial<JobSearchDocument> = {}): JobSearchD
     preferredJobId: `job-${id}`,
     jobVersion: "3",
     roleFamilyIds: ["software-engineering"],
+    sectorIds: ["software-engineering"],
+    industryIds: [],
     romeCodes: [],
     skillIds: ["typescript"],
     seniorityMin: 2,
@@ -149,7 +154,9 @@ describe("G006 deterministic ONLINE_FIRST matcher", () => {
     expect(matchOnline(request, snapshot({ profileTombstoned: true })).emptyReason).toBe("DELETION_PENDING");
     expect(matchOnline(request, snapshot({ actionWatermark: "8" })).emptyReason).toBe("PROJECTION_LAG");
     expect(matchOnline(request, snapshot({ reconciliationRequired: true })).emptyReason).toBe("PROJECTION_LAG");
-    expect(matchOnline(request, snapshot({ profile: { ...profile, status: "paused" } })).emptyReason).toBe("PROFILE_INACTIVE");
+    expect(matchOnline(request, snapshot({
+      profile: { ...profile, status: "paused" } as CandidateSearchProfile,
+    })).emptyReason).toBe("PROFILE_INACTIVE");
   });
 
   test("hard-filters policy, lifecycle, validation, freshness, route and candidate constraints", () => {

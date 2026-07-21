@@ -196,6 +196,8 @@ export async function projectJobSearchDocument(
   const validCountry = countryCode && /^[A-Z]{2}$/.test(countryCode) ? countryCode : null;
   const coordinatesKnown = source.latitude != null && source.longitude != null;
   const roleFamilyIds = roleFamilies(source);
+  const sectorIds = strings(read(source.data, "sectorIds", "sector_ids", "sectors", "sector"), 32);
+  const industryIds = strings(read(source.data, "industryIds", "industry_ids", "industries", "industry"), 32);
   const romeCodes = strings(read(source.data, "romeCodes", "rome_codes"), 32)
     .map((value) => value.toUpperCase())
     .filter((value) => /^[A-Z]\d{4}$/.test(value));
@@ -222,6 +224,8 @@ export async function projectJobSearchDocument(
     preferredJobId: source.preferredJobId,
     normalizedTitle,
     roleFamilyIds,
+    sectorIds,
+    industryIds,
     romeCodes,
     skillIds,
     contractTypes: contractTypesValue,
@@ -239,7 +243,16 @@ export async function projectJobSearchDocument(
     sourceEligible: source.sourceEligible,
     policyEligible: source.policyEligible,
     featureSchemaVersion: JOB_FEATURE_SCHEMA_VERSION,
-    searchText: [source.title, source.company, source.location, ...roleFamilyIds, ...romeCodes, ...skillIds]
+    searchText: [
+      source.title,
+      source.company,
+      source.location,
+      ...roleFamilyIds,
+      ...sectorIds,
+      ...industryIds,
+      ...romeCodes,
+      ...skillIds,
+    ]
       .map((value) => String(value).trim())
       .filter(Boolean)
       .join(" ")
@@ -254,6 +267,8 @@ export async function projectJobSearchDocument(
       preferredJobId: content.preferredJobId,
       jobVersion,
       roleFamilyIds: content.roleFamilyIds,
+      sectorIds: content.sectorIds,
+      industryIds: content.industryIds,
       romeCodes: content.romeCodes,
       skillIds: content.skillIds,
       seniorityMin: null,

@@ -78,6 +78,8 @@ describe("job projection repository", () => {
         lifecycle_status: "active",
         normalized_title: "software-engineer",
         role_family_codes: ["software-engineering"],
+        sector_ids: ["software-engineering"],
+        industry_ids: [],
         rome_codes: [],
         skill_codes: [],
         seniority_min: null,

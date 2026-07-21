@@ -51,7 +51,10 @@ const activeCandidateSearchProfileSchema = z
     version: monotonicVersionSchema,
     status: z.enum(["active", "paused"]),
     targetRoleLabelNormalized: normalizedTokenSchema.nullable(),
+    targetRoleLabelsNormalized: uniqueArray(normalizedTokenSchema, 32),
     roleFamilyIds: uniqueArray(normalizedTokenSchema, 32),
+    sectorIds: uniqueArray(normalizedTokenSchema, 32),
+    industryIds: uniqueArray(normalizedTokenSchema, 32),
     romeCodes: uniqueArray(z.string().regex(/^[A-Z]\d{4}$/), 32),
     skillIds: uniqueArray(normalizedTokenSchema, 128),
     skillTerms: uniqueArray(normalizedTokenSchema, 128),
@@ -101,7 +104,10 @@ const deletedCandidateSearchProfileSchema = z
     version: monotonicVersionSchema,
     status: z.literal("deleted"),
     targetRoleLabelNormalized: z.null(),
+    targetRoleLabelsNormalized: uniqueArray(normalizedTokenSchema, 0),
     roleFamilyIds: uniqueArray(normalizedTokenSchema, 0),
+    sectorIds: uniqueArray(normalizedTokenSchema, 0),
+    industryIds: uniqueArray(normalizedTokenSchema, 0),
     romeCodes: uniqueArray(z.string().regex(/^[A-Z]\d{4}$/), 0),
     skillIds: uniqueArray(normalizedTokenSchema, 0),
     skillTerms: uniqueArray(normalizedTokenSchema, 0),
@@ -130,7 +136,10 @@ export const candidateSearchProfileSchema = z
     if (
       value.status === "deleted" &&
       (value.targetRoleLabelNormalized !== null ||
+        value.targetRoleLabelsNormalized.length > 0 ||
         value.roleFamilyIds.length > 0 ||
+        value.sectorIds.length > 0 ||
+        value.industryIds.length > 0 ||
         value.romeCodes.length > 0 ||
         value.skillIds.length > 0 ||
         value.skillTerms.length > 0 ||
@@ -162,7 +171,10 @@ export const candidateSearchProfilePersistenceRowSchema = z
     version: monotonicVersionSchema,
     status: candidateProjectionStatusSchema,
     target_role_label_normalized: normalizedTokenSchema.nullable(),
+    target_role_labels_normalized: uniqueArray(normalizedTokenSchema, 32),
     role_family_ids: uniqueArray(normalizedTokenSchema, 32),
+    sector_ids: uniqueArray(normalizedTokenSchema, 32),
+    industry_ids: uniqueArray(normalizedTokenSchema, 32),
     rome_codes: uniqueArray(z.string().regex(/^[A-Z]\d{4}$/), 32),
     skill_ids: uniqueArray(normalizedTokenSchema, 128),
     skill_terms: uniqueArray(normalizedTokenSchema, 128),
@@ -197,7 +209,10 @@ export function toCandidateSearchProfilePersistenceRow(
     version: value.version,
     status: value.status,
     target_role_label_normalized: value.targetRoleLabelNormalized,
+    target_role_labels_normalized: value.targetRoleLabelsNormalized,
     role_family_ids: value.roleFamilyIds,
+    sector_ids: value.sectorIds,
+    industry_ids: value.industryIds,
     rome_codes: value.romeCodes,
     skill_ids: value.skillIds,
     skill_terms: value.skillTerms,
@@ -309,6 +324,8 @@ export const jobSearchDocumentSchema = z
     preferredJobId: z.string().min(1).max(256),
     jobVersion: monotonicVersionSchema,
     roleFamilyIds: uniqueArray(normalizedTokenSchema, 32),
+    sectorIds: uniqueArray(normalizedTokenSchema, 32),
+    industryIds: uniqueArray(normalizedTokenSchema, 32),
     romeCodes: uniqueArray(z.string().regex(/^[A-Z]\d{4}$/), 32),
     skillIds: uniqueArray(normalizedTokenSchema, 256),
     seniorityMin: z.number().int().min(0).max(20).nullable(),
@@ -366,6 +383,8 @@ export const jobSearchDocumentPersistenceRowSchema = z
     lifecycle_status: jobLifecycleStatusSchema,
     normalized_title: normalizedTokenSchema,
     role_family_codes: uniqueArray(normalizedTokenSchema, 32),
+    sector_ids: uniqueArray(normalizedTokenSchema, 32),
+    industry_ids: uniqueArray(normalizedTokenSchema, 32),
     rome_codes: uniqueArray(z.string().regex(/^[A-Z]\d{4}$/), 32),
     skill_codes: uniqueArray(normalizedTokenSchema, 256),
     seniority_min: z.number().int().min(0).max(20).nullable(),
@@ -424,6 +443,8 @@ export function toJobSearchDocumentPersistenceRow(
     lifecycle_status: value.lifecycleStatus,
     normalized_title: derived.normalizedTitle,
     role_family_codes: value.roleFamilyIds,
+    sector_ids: value.sectorIds,
+    industry_ids: value.industryIds,
     rome_codes: value.romeCodes,
     skill_codes: value.skillIds,
     seniority_min: value.seniorityMin,

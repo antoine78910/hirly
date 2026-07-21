@@ -33,6 +33,8 @@ const source = (overrides: Partial<JobProjectionSource> = {}): JobProjectionSour
   policyEligible: true,
   data: {
     role_family_ids: ["software-engineering"],
+    sector_ids: ["software-engineering"],
+    industry: "Health Tech",
     rome_codes: ["M1805"],
     skills: ["TypeScript", "React"],
     contract_type: "CDI",
@@ -54,6 +56,8 @@ describe("job search-document projection", () => {
           contract_type: "CDI",
           rome_codes: ["m1805"],
           role_family_ids: ["software-engineering"],
+          sector_ids: ["software-engineering"],
+          industry: "Health Tech",
           ignored: null,
         },
       }),
@@ -65,6 +69,8 @@ describe("job search-document projection", () => {
     expect(second.sourceContentHash).toBe(first.sourceContentHash);
     expect(second.row.job_version).toBe(first.row.job_version);
     expect(second.row.skill_codes).toEqual(["react", "typescript"]);
+    expect(second.row.sector_ids).toEqual(["software-engineering"]);
+    expect(second.row.industry_ids).toEqual(["health-tech"]);
   });
 
   test("uses the authoritative version even when projected content changes", async () => {

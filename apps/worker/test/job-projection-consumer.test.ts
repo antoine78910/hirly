@@ -61,6 +61,8 @@ const document = {
   lifecycle_status: "active",
   normalized_title: "software-engineer",
   role_family_codes: [],
+  sector_ids: [],
+  industry_ids: [],
   rome_codes: [],
   skill_codes: [],
   seniority_min: null,

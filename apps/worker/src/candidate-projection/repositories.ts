@@ -129,7 +129,8 @@ export class InventoryCandidateProjectionStore implements CandidateProjectionSto
     const rows = await this.sql<{ candidate_id: string }[]>`
       INSERT INTO public.candidate_search_profiles (
         schema_version, candidate_id, version, status,
-        target_role_label_normalized, role_family_ids, rome_codes, skill_ids,
+        target_role_label_normalized, target_role_labels_normalized, role_family_ids,
+        sector_ids, industry_ids, rome_codes, skill_ids,
         skill_terms, seniority_min, seniority_max, contract_types, work_modes,
         origin_latitude, origin_longitude, radius_km, country_codes,
         location_policy, salary_floor, currency, freshness_window_days,
@@ -137,7 +138,8 @@ export class InventoryCandidateProjectionStore implements CandidateProjectionSto
         source_profile_updated_at, projected_at, source_event_id
       ) SELECT
         ${row.schema_version}, ${row.candidate_id}, ${row.version}::bigint, ${row.status},
-        ${row.target_role_label_normalized}, ${row.role_family_ids}, ${row.rome_codes}, ${row.skill_ids},
+        ${row.target_role_label_normalized}, ${row.target_role_labels_normalized}, ${row.role_family_ids},
+        ${row.sector_ids}, ${row.industry_ids}, ${row.rome_codes}, ${row.skill_ids},
         ${row.skill_terms}, ${row.seniority_min}, ${row.seniority_max}, ${row.contract_types}, ${row.work_modes},
         ${row.origin_latitude}, ${row.origin_longitude}, ${row.radius_km}, ${row.country_codes},
         ${row.location_policy}, ${row.salary_floor}, ${row.currency}, ${row.freshness_window_days},
@@ -151,7 +153,10 @@ export class InventoryCandidateProjectionStore implements CandidateProjectionSto
         version = EXCLUDED.version,
         status = EXCLUDED.status,
         target_role_label_normalized = EXCLUDED.target_role_label_normalized,
+        target_role_labels_normalized = EXCLUDED.target_role_labels_normalized,
         role_family_ids = EXCLUDED.role_family_ids,
+        sector_ids = EXCLUDED.sector_ids,
+        industry_ids = EXCLUDED.industry_ids,
         rome_codes = EXCLUDED.rome_codes,
         skill_ids = EXCLUDED.skill_ids,
         skill_terms = EXCLUDED.skill_terms,
