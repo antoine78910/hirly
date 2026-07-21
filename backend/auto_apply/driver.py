@@ -17,7 +17,7 @@ import os
 import random
 import time
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from apply_agent.blockers import (
     captcha_active, collect_post_submit_errors, confirmation_text_found,
@@ -151,15 +151,31 @@ class BrowserApplyDriver(ApplyDriver):
         """Return a provider-specific route failure before candidate data moves."""
         return None
 
-    async def _abort_if_submission_boundary_changed(
+    async def submission_locator_root(
+        self,
+        page: Any,
+        job: Dict[str, Any],
+    ) -> Tuple[Optional[Any], Optional[str]]:
+        """Return the validated root for one candidate-data operation.
+
+        Providers with a form boundary may return a form locator. Providers
+        that intentionally operate across the page (notably SmartRecruiters)
+        keep the page-scoped default and their existing overrides unchanged.
+        """
+        failure = await self.submission_boundary_failure(page, job)
+        if failure:
+            return None, failure
+        return page, None
+
+    async def _validated_submission_locator_root(
         self,
         page: Any,
         job: Dict[str, Any],
         evidence: SubmissionEvidence,
-    ) -> bool:
-        failure = await self.submission_boundary_failure(page, job)
+    ) -> Optional[Any]:
+        root, failure = await self.submission_locator_root(page, job)
         if not failure:
-            return False
+            return root
         evidence.blocked_reason = f"route:{failure}"
         await self._log_step(
             evidence,
@@ -168,7 +184,15 @@ class BrowserApplyDriver(ApplyDriver):
             status="blocked",
             error=failure,
         )
-        return True
+        return None
+
+    async def _abort_if_submission_boundary_changed(
+        self,
+        page: Any,
+        job: Dict[str, Any],
+        evidence: SubmissionEvidence,
+    ) -> bool:
+        return await self._validated_submission_locator_root(page, job, evidence) is None
 
     async def _raise_if_proxy_connect_failure(
         self,
@@ -605,10 +629,24 @@ class BrowserApplyDriver(ApplyDriver):
                                     error=str(policy_failure)[:100],
                                 )
                                 return evidence
-                        await self._click_submit(page, evidence)
+                        locator_root = await self._validated_submission_locator_root(
+                            page,
+                            ctx.job,
+                            evidence,
+                        )
+                        if locator_root is None:
+                            return evidence
+                        await self._click_submit(locator_root, evidence)
                         continue
+                    locator_root = await self._validated_submission_locator_root(
+                        page,
+                        ctx.job,
+                        evidence,
+                    )
+                    if locator_root is None:
+                        return evidence
                     try:
-                        await self._apply_step(page, step, ctx.documents, evidence)
+                        await self._apply_step(locator_root, step, ctx.documents, evidence)
                     except Exception as step_exc:
                         # Click intercepted by modal / overlay — screenshot and recover.
                         recovery = await recover_stuck_page(
