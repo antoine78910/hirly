@@ -20,14 +20,26 @@ import {
   resolveManifestOutput,
   sanitizedEnvironment,
   sha256,
+  signActivationEvidenceRecord,
   validateSelectedManifest,
   verifyDeploymentDefaults,
 } from "../scripts/verify-job-supply-release.mjs";
 
 const root = resolve(import.meta.dir, "..");
+const ACTIVATION_HMAC_KEY = "g015-test-only-activation-attestation-key-material";
+const ACTIVATION_ISSUER = "github-actions";
+const ACTIVATION_WORKFLOW_ID = "job-supply-release";
+const ACTIVATION_WORKFLOW_RUN_ID = "20260721.1";
+let activationEvidenceSequence = 0;
 
 function evaluateProviderActivationPreflight(input: any) {
-  return evaluateProviderActivationPreflightRaw(input, { evidenceRoot: input.evidenceRoot });
+  return evaluateProviderActivationPreflightRaw(input, {
+    evidenceRoot: input.evidenceRoot,
+    trustedAttestationKey: ACTIVATION_HMAC_KEY,
+    trustedAttestationIssuer: ACTIVATION_ISSUER,
+    trustedWorkflowId: ACTIVATION_WORKFLOW_ID,
+    trustedWorkflowRunId: ACTIVATION_WORKFLOW_RUN_ID,
+  });
 }
 
 describe("G015 release verification contract", () => {
@@ -489,6 +501,34 @@ describe("G015 release verification contract", () => {
     await rm(evidenceRoot, { recursive: true, force: true });
   });
 
+  test("enforces the complete inventory lifecycle for every supported inventory provider", async () => {
+    for (const provider of ["greenhouse", "recruitee", "nicoka"]) {
+      for (const step of [
+        { currentVerdict: "blocked", targetVerdict: "inventory_canary_ready", gates: ["prior_state_receipt", "review", "ultraqa"] },
+        { currentVerdict: "inventory_canary_ready", targetVerdict: "inventory_active", gates: ["canary_receipt", "observation", "review", "ultraqa"] },
+        { currentVerdict: "inventory_active", targetVerdict: "inventory_manual", gates: ["prior_state_receipt", "review", "ultraqa"] },
+      ] as const) {
+        const evidenceRoot = await mkdtemp(join(tmpdir(), `g015-${provider}-lifecycle-`));
+        const input = await passingManualPreflight(evidenceRoot, provider);
+        const scope = {
+          provider, tenantId: input.tenantId, countryCode: input.countryCode,
+          policyDigest: input.policyDigest, releaseHead: "a".repeat(40),
+          deployedArtifactDigest: "b".repeat(64),
+        };
+        Object.assign(input, step, {
+          transitionEvidence: await writeTransitionEvidence(evidenceRoot, step.targetVerdict, step.gates, scope),
+        });
+        expect(evaluateProviderActivationPreflight(input).status).toBe("PASS");
+        const skipped = structuredClone(input);
+        skipped.currentVerdict = "blocked";
+        if (step.targetVerdict !== "inventory_canary_ready") {
+          expect(evaluateProviderActivationPreflight(skipped).status).toBe("BLOCKED");
+        }
+        await rm(evidenceRoot, { recursive: true, force: true });
+      }
+    }
+  });
+
   test("validates exact shadow scorecard scope, reconciliation, run IDs, and inner digest", async () => {
     for (const mutate of [
       (value: any) => { value.provider = "nicoka"; },
@@ -649,6 +689,67 @@ describe("G015 release verification contract", () => {
     await rm(evidenceRoot, { recursive: true, force: true });
   });
 
+  test("rejects forged, stale, future, replayed, or artifact-mismatched activation attestations", async () => {
+    const mutations = [
+      async (_root: string, input: any) => {
+        input.transitionEvidence.review.signature = "0".repeat(64);
+      },
+      async (root: string, input: any) => {
+        const descriptor = input.transitionEvidence.review;
+        const envelope = JSON.parse(await readFile(resolve(root, descriptor.path), "utf8"));
+        envelope.review.security.verdict = "CLEAN";
+        envelope.review.security.unresolvedFindings = 1;
+        envelope.signature = signActivationEvidenceRecord(envelope, ACTIVATION_HMAC_KEY);
+        input.transitionEvidence.review = await writeEvidence(root, "activation/forged-review.json", envelope);
+      },
+      async (root: string, input: any) => {
+        const descriptor = input.transitionEvidence.ultraqa;
+        const envelope = JSON.parse(await readFile(resolve(root, descriptor.path), "utf8"));
+        envelope.ultraqa.status = "failed";
+        envelope.signature = signActivationEvidenceRecord(envelope, ACTIVATION_HMAC_KEY);
+        input.transitionEvidence.ultraqa = await writeEvidence(root, "activation/failed-ultraqa.json", envelope);
+      },
+      async (root: string, input: any) => {
+        const descriptor = input.transitionEvidence.review;
+        const envelope = JSON.parse(await readFile(resolve(root, descriptor.path), "utf8"));
+        envelope.observedAt = "2026-07-22T00:00:00.000Z";
+        envelope.signature = signActivationEvidenceRecord(envelope, ACTIVATION_HMAC_KEY);
+        input.transitionEvidence.review = await writeEvidence(root, "activation/future-review.json", envelope);
+      },
+      async (root: string, input: any) => {
+        const review = JSON.parse(await readFile(resolve(root, input.transitionEvidence.review.path), "utf8"));
+        const ultraqa = JSON.parse(await readFile(resolve(root, input.transitionEvidence.ultraqa.path), "utf8"));
+        ultraqa.evidenceId = review.evidenceId;
+        ultraqa.signature = signActivationEvidenceRecord(ultraqa, ACTIVATION_HMAC_KEY);
+        input.transitionEvidence.ultraqa = await writeEvidence(root, "activation/replayed-ultraqa.json", ultraqa);
+      },
+      async (root: string, input: any) => {
+        const scope = {
+          provider: input.provider, tenantId: input.tenantId, countryCode: input.countryCode,
+          policyDigest: input.policyDigest, releaseHead: "a".repeat(40),
+          deployedArtifactDigest: "c".repeat(64),
+        };
+        input.transitionEvidence.review = await writeActivationEvidence(
+          root,
+          "inventory_manual_review",
+          scope,
+        );
+      },
+    ];
+    for (const mutate of mutations) {
+      const evidenceRoot = await mkdtemp(join(tmpdir(), "g015-hostile-attestation-"));
+      const input = await passingManualPreflight(evidenceRoot);
+      input.now = "2026-07-21T01:00:00.000Z";
+      await mutate(evidenceRoot, input);
+      expect(evaluateProviderActivationPreflight(input).status).toBe("BLOCKED");
+      await rm(evidenceRoot, { recursive: true, force: true });
+    }
+    const evidenceRoot = await mkdtemp(join(tmpdir(), "g015-missing-trust-"));
+    const input = await passingManualPreflight(evidenceRoot);
+    expect(evaluateProviderActivationPreflightRaw(input, { evidenceRoot }).status).toBe("BLOCKED");
+    await rm(evidenceRoot, { recursive: true, force: true });
+  });
+
   test("creates secret-free Phase 0 receipts and blocks unobserved remote evidence", () => {
     const input = phase0Input();
     const receipt = createAtsPhase0Receipt(input, {
@@ -767,11 +868,6 @@ async function writeActivationEvidence(
   },
   semanticOverrides: Record<string, unknown> = {},
 ) {
-  const artifact = await writeEvidence(
-    evidenceRoot,
-    `activation/artifacts/${kind}.json`,
-    { kind, result: "passed" },
-  );
   const semantics = kind.endsWith("_review")
     ? {
         review: {
@@ -783,16 +879,40 @@ async function writeActivationEvidence(
     : kind.endsWith("_ultraqa")
       ? { ultraqa: { status: "passed" } }
       : {};
-  return writeEvidence(evidenceRoot, `activation/${kind}.json`, {
+  const provenance = () => ({
+    issuer: ACTIVATION_ISSUER,
+    workflowId: ACTIVATION_WORKFLOW_ID,
+    workflowRunId: ACTIVATION_WORKFLOW_RUN_ID,
+    evidenceId: `g015-${++activationEvidenceSequence}-${kind}`,
+    observedAt: "2026-07-21T00:00:00.000Z",
+  });
+  const unsignedArtifact = {
+    kind,
+    result: "passed",
+    releaseHead: scope.releaseHead,
+    deployedArtifactDigest: scope.deployedArtifactDigest ?? "b".repeat(64),
+    ...provenance(),
+    ...semantics,
+  };
+  const artifact = await writeEvidence(
+    evidenceRoot,
+    `activation/artifacts/${kind}.json`,
+    { ...unsignedArtifact, signature: signActivationEvidenceRecord(unsignedArtifact, ACTIVATION_HMAC_KEY) },
+  );
+  const unsignedEnvelope = {
     schemaVersion: "job-supply-activation-evidence.v1",
     kind,
     status: "passed",
     ...scope,
     deployedArtifactDigest: scope.deployedArtifactDigest ?? "b".repeat(64),
-    observedAt: "2026-07-21T00:00:00.000Z",
+    ...provenance(),
     artifacts: [artifact],
     ...semantics,
     ...semanticOverrides,
+  };
+  return writeEvidence(evidenceRoot, `activation/${kind}.json`, {
+    ...unsignedEnvelope,
+    signature: signActivationEvidenceRecord(unsignedEnvelope, ACTIVATION_HMAC_KEY),
   });
 }
 
