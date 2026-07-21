@@ -22,8 +22,8 @@ export const sproutProvider: ProviderCore<SproutRawJob> = {
   provider: SPROUT_PROVIDER,
   authorizationStatus: "unverified",
   accessMethod: "disabled-authenticated-api",
-  // Sprout permits at most one request every ten seconds.
-  rateLimit: { requestsPerMinute: 6, concurrency: 1 },
+  // Keep Sprout calls strictly serialized and at least three seconds apart.
+  rateLimit: { requestsPerMinute: 20, concurrency: 1 },
   coreReady: true,
   liveTransportReady: false,
   shadowModeReady: false,

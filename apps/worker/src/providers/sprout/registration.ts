@@ -35,7 +35,7 @@ export const SPROUT_FRANCE_DISABLED_REGISTRATION =
     authorizationStatus: "unverified",
     writerRuntime: "none",
     policyStatus: "pending",
-    requestsPerMinute: 6,
+    requestsPerMinute: 20,
     concurrency: 1,
     enabled: false,
     transportEnabled: false,

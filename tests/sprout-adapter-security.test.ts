@@ -173,7 +173,7 @@ describe("Sprout adapter security and inventory contract", () => {
       expect(getProviderModule("sprout")).toBe(sproutProvider);
       expect(sproutProvider).toMatchObject({
         authorizationStatus: "unverified",
-        rateLimit: { requestsPerMinute: 6, concurrency: 1 },
+        rateLimit: { requestsPerMinute: 20, concurrency: 1 },
         liveTransportReady: false,
         canonicalWriteReady: false,
       });
