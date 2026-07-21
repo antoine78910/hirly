@@ -29,6 +29,7 @@ import {
   sproutTaskPayloadSchema,
   type SproutRawJob,
   type SproutSecretResolver,
+  type SproutTokenRefresher,
 } from "../providers/sprout";
 
 function emitSproutOperation(
@@ -64,40 +65,93 @@ function emitSproutOperation(
   }
 }
 
-function environmentSproutSecretResolver(): SproutSecretResolver {
-  return {
-    async resolve(reference) {
-      if (reference !== "secret://sprout/france-api") {
-        throw new IngestionError("authorization_blocked", "sprout_credential_reference_rejected");
-      }
-      const accessToken = process.env.SPROUT_FRANCE_API_TOKEN?.trim();
-      const refreshToken = process.env.SPROUT_FRANCE_REFRESH_TOKEN?.trim();
-      if (!accessToken || !refreshToken) {
-        throw new IngestionError("authorization_blocked", "sprout_credential_unavailable");
-      }
-      return { accessToken, refreshToken };
-    },
-  };
+/** Serializes a provider's claim-to-release lifecycle inside one worker. */
+class ProviderOperationGate {
+  private tail: Promise<void> = Promise.resolve();
+
+  async run<T>(operation: () => Promise<T>, signal: AbortSignal): Promise<T> {
+    let release!: () => void;
+    const previous = this.tail;
+    this.tail = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    try {
+      await Promise.race([
+        previous,
+        new Promise<void>((_, reject) => {
+          signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+        }),
+      ]);
+      signal.throwIfAborted();
+      return await operation();
+    } finally {
+      release();
+    }
+  }
 }
 
-function environmentSproutTokenRefresher() {
+/**
+ * Keeps the rotated Supabase session inside the single worker process.
+ *
+ * Refresh tokens are one-time-use.  Multiple country lanes can observe the
+ * same expired access token, so a per-task refresher would race and revoke the
+ * token needed by its peers.  One shared session makes refresh single-flight;
+ * callers that started with the old refresh token receive the replacement.
+ */
+function environmentSproutSession(): {
+  secrets: SproutSecretResolver;
+  tokenRefresher: SproutTokenRefresher;
+} {
+  let current: { accessToken: string; refreshToken: string } | null = null;
+  let refreshInFlight: Promise<{ accessToken: string; refreshToken: string }> | null = null;
+
+  function initialCredentials(): { accessToken: string; refreshToken: string } {
+    const accessToken = process.env.SPROUT_FRANCE_API_TOKEN?.trim();
+    const refreshToken = process.env.SPROUT_FRANCE_REFRESH_TOKEN?.trim();
+    if (!accessToken || !refreshToken) {
+      throw new IngestionError("authorization_blocked", "sprout_credential_unavailable");
+    }
+    return { accessToken, refreshToken };
+  }
+
   return {
-    async refresh(refreshToken: string, signal: AbortSignal) {
-      const apiKey = process.env.SPROUT_SUPABASE_ANON_KEY?.trim();
-      if (!apiKey) throw new Error("sprout_refresh_api_key_unavailable");
-      const response = await fetch(
-        "https://qxkswyqmsisjdtmywnow.supabase.co/auth/v1/token?grant_type=refresh_token",
-        {
-          method: "POST",
-          headers: { apikey: apiKey, authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
-          body: JSON.stringify({ refresh_token: refreshToken }),
-          signal,
-        },
-      );
-      if (!response.ok) throw new Error("sprout_refresh_rejected");
-      const body = (await response.json()) as { access_token?: string; refresh_token?: string };
-      if (!body.access_token || !body.refresh_token) throw new Error("sprout_refresh_response_invalid");
-      return { accessToken: body.access_token, refreshToken: body.refresh_token };
+    secrets: {
+      async resolve(reference) {
+        if (reference !== "secret://sprout/france-api") {
+          throw new IngestionError("authorization_blocked", "sprout_credential_reference_rejected");
+        }
+        return current ?? initialCredentials();
+      },
+    },
+    tokenRefresher: {
+      async refresh(refreshToken: string, signal: AbortSignal) {
+        // Another lane already refreshed the session while this lane was
+        // waiting in the provider rate gate. Never reuse the stale token.
+        if (current && current.refreshToken !== refreshToken) return current;
+        if (!refreshInFlight) {
+          refreshInFlight = (async () => {
+            const apiKey = process.env.SPROUT_SUPABASE_ANON_KEY?.trim();
+            if (!apiKey) throw new Error("sprout_refresh_api_key_unavailable");
+            const response = await fetch(
+              "https://qxkswyqmsisjdtmywnow.supabase.co/auth/v1/token?grant_type=refresh_token",
+              {
+                method: "POST",
+                headers: { apikey: apiKey, authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
+                body: JSON.stringify({ refresh_token: refreshToken }),
+                signal,
+              },
+            );
+            if (!response.ok) throw new Error("sprout_refresh_rejected");
+            const body = (await response.json()) as { access_token?: string; refresh_token?: string };
+            if (!body.access_token || !body.refresh_token) throw new Error("sprout_refresh_response_invalid");
+            current = { accessToken: body.access_token.trim(), refreshToken: body.refresh_token.trim() };
+            return current;
+          })().finally(() => {
+            refreshInFlight = null;
+          });
+        }
+        return await refreshInFlight;
+      },
     },
   };
 }
@@ -127,6 +181,8 @@ export function createTaskHandlers(
   } = {},
 ): TaskHandlers {
   const rateGates = new Map<Provider, ProviderRateGate>();
+  const providerOperationGates = new Map<Provider, ProviderOperationGate>();
+  const sproutEnvironmentSession = environmentSproutSession();
   return {
     "inventory.maintenance": async (_task, signal) => {
       signal.throwIfAborted();
@@ -173,6 +229,12 @@ export function createTaskHandlers(
           1,
           Math.ceil((task.leaseUntil.getTime() - Date.now()) / 1_000),
         );
+        let providerOperationGate = providerOperationGates.get(provider);
+        if (!providerOperationGate) {
+          providerOperationGate = new ProviderOperationGate();
+          providerOperationGates.set(provider, providerOperationGate);
+        }
+        return await providerOperationGate.run(async () => {
         const providerClaim = await store.claimProviderWork(
           task,
           provider,
@@ -285,8 +347,8 @@ export function createTaskHandlers(
             const transport = new SproutHttpTransport({
               endpoint: runtime.endpoint,
               allowedOrigins: configuredOrigins,
-              secrets: options.sproutSecretResolver ?? environmentSproutSecretResolver(),
-              tokenRefresher: environmentSproutTokenRefresher(),
+              secrets: options.sproutSecretResolver ?? sproutEnvironmentSession.secrets,
+              tokenRefresher: sproutEnvironmentSession.tokenRefresher,
               fetch: options.sproutFetch,
               maxResponseBytes: payload.maxResponseBytes,
               onOperation(operation) {
@@ -569,6 +631,7 @@ export function createTaskHandlers(
             }
           }
         }
+        }, signal);
       } catch (error) {
         if (provider === "sprout") {
           const schemaDrift = error instanceof SproutSchemaDriftError
