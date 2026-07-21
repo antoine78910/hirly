@@ -18,7 +18,7 @@ or authorize a hybrid schema.
 
 ## Independent failure evidence
 
-Worker-3 ran the integrated migrations against a fresh
+Worker-3 ran integrated HEAD `87c9711` against a fresh
 `postgres:15-alpine` container with:
 
 ```sh
@@ -29,7 +29,15 @@ CANDIDATE_MATCHING_MIGRATION_TEST_DATABASE_URL=postgres://postgres:postgres@127.
 Result: **7 passed, 2 failed**. Both failures were PostgreSQL `23502` errors:
 `candidate_search_profiles.projected_at` was required by the parity migration
 but omitted by the deletion and RLS/alias fixtures. No approval is possible
-until the corrected integrated suite passes independently.
+until the corrected integrated suite passes independently. The exact final
+smoke output is retained at `/tmp/worker3-g003-pg15-final.log` for the active
+team run.
+
+The integrated RLS implementation also remained based on a reader-self-set
+custom GUC at this checkpoint. The accepted repair direction is fail-closed
+direct access to candidate tables plus narrow single-candidate
+`SECURITY DEFINER` reads; upstream application authorization remains a separate
+boundary.
 
 ## Preserved boundaries
 
