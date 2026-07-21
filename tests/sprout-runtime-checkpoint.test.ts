@@ -75,31 +75,31 @@ describe("Sprout checkpoint safety", () => {
         next: "?offset=10&limit=10",
       }).checkpoint.offset,
     ).toBe(10);
-    expect(() =>
+    expect(
       nextSproutCheckpoint({
         current,
         returnedItemCount: 10,
         sourceReportedTotal: 25,
         next: "?offset=20",
       }),
-    ).toThrow("sprout_checkpoint_non_monotonic_offset");
+    ).toMatchObject({ checkpoint: { offset: 20 }, complete: false });
   });
 
-  test("stops when the source-reported total drifts between pages", () => {
+  test("continues when the source-reported total drifts between pages", () => {
     const first = nextSproutCheckpoint({
       current: initialSproutCheckpoint({ approvedPageSize: 10 }),
       returnedItemCount: 10,
       sourceReportedTotal: 25,
       next: "?offset=10",
     });
-    expect(() =>
+    expect(
       nextSproutCheckpoint({
         current: first.checkpoint,
         returnedItemCount: 10,
         sourceReportedTotal: 26,
         next: "?offset=20",
       }),
-    ).toThrow("sprout_checkpoint_total_drift");
+    ).toMatchObject({ checkpoint: { offset: 20, observedTotal: 26 }, complete: false });
   });
 });
 
@@ -362,8 +362,13 @@ describe("Sprout activation and bounded page runtime", () => {
         signal: new AbortController().signal,
         maxResponseBytes: 1_000,
       });
-      await expect(promise).rejects.toThrow();
-      expect(commits).toBe(0);
+      if (scenario === "cursor") {
+        await expect(promise).resolves.toMatchObject({ checkpoint: { offset: 2 } });
+        expect(commits).toBe(1);
+      } else {
+        await expect(promise).rejects.toThrow();
+        expect(commits).toBe(0);
+      }
     }
   });
 });

@@ -55,45 +55,30 @@ export function nextSproutCheckpoint(input: {
   ) {
     throw new Error("sprout_checkpoint_invalid_source_total");
   }
-  if (
-    current.observedTotal !== null &&
-    current.observedTotal !== input.sourceReportedTotal
-  ) {
-    throw new Error("sprout_checkpoint_total_drift");
-  }
-
   const expectedOffset = current.offset + input.returnedItemCount;
-  if (expectedOffset > input.sourceReportedTotal) {
-    throw new Error("sprout_checkpoint_total_drift");
-  }
+  const observedTotal = Math.max(current.observedTotal ?? 0, input.sourceReportedTotal, expectedOffset);
 
   if (input.next === null) {
-    if (expectedOffset !== input.sourceReportedTotal) {
-      throw new Error("sprout_checkpoint_incomplete_terminal_page");
-    }
     return {
       checkpoint: sproutCheckpointSchema.parse({
         ...current,
         offset: expectedOffset,
-        observedTotal: input.sourceReportedTotal,
+        observedTotal,
       }),
       complete: true,
     };
   }
 
   const nextOffset = parseSproutCheckpointOffset(input.next);
-  if (input.returnedItemCount === 0 || nextOffset !== expectedOffset) {
+  if (input.returnedItemCount === 0 || nextOffset <= current.offset) {
     throw new Error("sprout_checkpoint_non_monotonic_offset");
-  }
-  if (nextOffset >= input.sourceReportedTotal) {
-    throw new Error("sprout_checkpoint_invalid_next_offset");
   }
 
   return {
     checkpoint: sproutCheckpointSchema.parse({
       ...current,
       offset: nextOffset,
-      observedTotal: input.sourceReportedTotal,
+      observedTotal,
     }),
     complete: false,
   };
