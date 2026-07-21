@@ -8,7 +8,7 @@ ALTER TABLE public.jobs DISABLE TRIGGER jobs_claimed_provider_write_guard;
 WITH classified AS (
   SELECT
     job_id,
-    lower(regexp_replace(selected_apply_url, '^https?://([^/]+).*$', '\\1')) AS host
+    lower(regexp_replace(selected_apply_url, '^https?://([^/]+).*$', '\1')) AS host
   FROM public.jobs
   WHERE coalesce(ats_provider, 'unknown') = 'unknown'
     AND selected_apply_url ~* '^https?://[^/]+'
