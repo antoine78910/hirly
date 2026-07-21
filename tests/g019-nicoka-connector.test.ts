@@ -9,6 +9,10 @@ import {
   type SourceContext,
 } from "../packages/ingestion/src";
 import {
+  buildAtsRepeatedShadowScorecard,
+  approveAtsInventoryShadowScope,
+} from "../apps/worker/src/providers/ats-inventory-readiness";
+import {
   createNicokaFixtureSourceAdapter,
   createNicokaShadowTransport,
   nicokaProvider,
@@ -257,6 +261,78 @@ describe("G019 Nicoka shadow connector", () => {
     });
     await expect(budget.fetch(new AbortController().signal)).rejects
       .toMatchObject({ classification: "budget_exceeded" });
+  });
+
+  test("seals a complete shadow scorecard only after page, offset, and total reconciliation", async () => {
+    const data = await fixture();
+    const transport = createNicokaShadowTransport({
+      approvedTenantId: "acme",
+      environment: "production",
+      fetch: async (input) => {
+        const page = Number(new URL(input).searchParams.get("page"));
+        return Response.json({
+          queryUid: "sealed-fixture-query",
+          offset: page - 1,
+          limit: 1,
+          page,
+          pages: 2,
+          total: 2,
+          data: [data.raw[page - 1]],
+        });
+      },
+    });
+    const policyDigest = approveAtsInventoryShadowScope({
+      policy: {
+        schemaVersion: 1,
+        provider: "nicoka",
+        mode: "shadow",
+        canonicalWritesEnabled: false,
+        policyId: "nicoka-reconciliation-test",
+        policyExpiresAt: "2026-08-21T00:00:00.000Z",
+        tenantAllowlist: ["acme"],
+        countryAllowlist: ["FR"],
+      },
+      provider: "nicoka",
+      approvedTenantId: "acme",
+      countryCode: "FR",
+      now: new Date("2026-07-21T00:00:00.000Z"),
+    }).policyDigest;
+    const records = await transport.fetch(new AbortController().signal);
+    const jobs = records.map((record) => ({
+      externalId: `acme:${record.id}`,
+      fingerprint: record.uid,
+    }));
+    const scorecard = buildAtsRepeatedShadowScorecard([
+      {
+        runId: "nicoka-reconciled-a",
+        capturedAt: "2026-07-21T00:00:00.000Z",
+        provider: "nicoka",
+        tenantId: "acme",
+        countryCode: "FR",
+        policyDigest,
+        complete: true,
+        requestCount: 2,
+        jobs,
+      },
+      {
+        runId: "nicoka-reconciled-b",
+        capturedAt: "2026-07-22T00:00:00.000Z",
+        provider: "nicoka",
+        tenantId: "acme",
+        countryCode: "FR",
+        policyDigest,
+        complete: true,
+        requestCount: 2,
+        jobs,
+      },
+    ]);
+    expect(scorecard).toMatchObject({
+      verdict: "complete_shadow_ready",
+      canonicalWritesEnabled: false,
+      provider: "nicoka",
+      runIds: ["nicoka-reconciled-a", "nicoka-reconciled-b"],
+      reconciliation: [{ additions: [], updates: [], removals: [] }],
+    });
   });
 
 });
