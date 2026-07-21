@@ -53,11 +53,11 @@ def test_product_operation_span_is_emitted_with_governed_metadata(monkeypatch):
         pass
 
     span = exporter.get_finished_spans()[0]
-    assert span.name == "ai.hirly.career_coach_interview_score"
-    assert span.attributes["ai.hirly.operation"] == "career_coach_interview_score"
-    assert span.attributes["ai.hirly.prompt_version"] == "v1"
-    assert span.attributes["ai.hirly.outcome"] == "success"
-    assert span.attributes["ai.hirly.raw_content_retention_days"] == 30
+    assert span.name == "gen_ai.hirly.career_coach_interview_score"
+    assert span.attributes["gen_ai.hirly.operation"] == "career_coach_interview_score"
+    assert span.attributes["gen_ai.hirly.prompt_version"] == "v1"
+    assert span.attributes["gen_ai.hirly.outcome"] == "success"
+    assert span.attributes["gen_ai.hirly.raw_content_retention_days"] == 30
 
 
 def test_user_context_is_reset_after_the_llm_workflow():
@@ -97,11 +97,11 @@ def test_generation_child_inherits_governed_tags_and_trace_identity(monkeypatch)
     )
     assert generation.context.trace_id == parent.context.trace_id
     assert generation.parent.span_id == parent.context.span_id
-    assert generation.attributes["ai.hirly.operation"] == "career_coach_interview_score"
-    assert generation.attributes["ai.hirly.prompt_version"] == "v1"
-    assert generation.attributes["ai.hirly.feature"] == "career_coach"
-    assert "ai.hirly.raw_input" not in generation.attributes
-    assert "ai.hirly.operation" not in http_child.attributes
+    assert generation.attributes["gen_ai.hirly.operation"] == "career_coach_interview_score"
+    assert generation.attributes["gen_ai.hirly.prompt_version"] == "v1"
+    assert generation.attributes["gen_ai.hirly.feature"] == "career_coach"
+    assert "gen_ai.hirly.raw_input" not in generation.attributes
+    assert "gen_ai.hirly.operation" not in http_child.attributes
 
 
 @pytest.mark.asyncio
@@ -136,8 +136,8 @@ async def test_raw_text_is_recorded_on_the_product_span_only_when_enabled(monkey
 
     span = exporter.get_finished_spans()[0]
     assert output == "raw output"
-    assert span.attributes["ai.hirly.raw_input"] == "SYSTEM:\nsystem prompt\n\nUSER:\nuser prompt"
-    assert span.attributes["ai.hirly.raw_output"] == "raw output"
+    assert span.attributes["gen_ai.hirly.raw_input"] == "SYSTEM:\nsystem prompt\n\nUSER:\nuser prompt"
+    assert span.attributes["gen_ai.hirly.raw_output"] == "raw output"
     assert "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT" not in span.attributes
 
 
@@ -172,5 +172,5 @@ async def test_raw_text_is_not_emitted_without_the_retention_gate(monkeypatch):
     )
 
     attributes = exporter.get_finished_spans()[0].attributes
-    assert "ai.hirly.raw_input" not in attributes
-    assert "ai.hirly.raw_output" not in attributes
+    assert "gen_ai.hirly.raw_input" not in attributes
+    assert "gen_ai.hirly.raw_output" not in attributes

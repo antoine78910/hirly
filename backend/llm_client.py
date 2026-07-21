@@ -16,11 +16,11 @@ _llm_user_ctx: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar(
 )
 
 _GENERATION_TAG_ATTRIBUTES = (
-    "ai.hirly.operation",
-    "ai.hirly.prompt_version",
-    "ai.hirly.feature",
-    "ai.hirly.actor_scope",
-    "ai.hirly.raw_content_retention_days",
+    "gen_ai.hirly.operation",
+    "gen_ai.hirly.prompt_version",
+    "gen_ai.hirly.feature",
+    "gen_ai.hirly.actor_scope",
+    "gen_ai.hirly.raw_content_retention_days",
 )
 
 
@@ -87,26 +87,26 @@ def observe_llm_operation(observation: LLMObservation):
 
         tracer = otel_trace.get_tracer("hirly.ai_observability")
         attributes = {
-            "ai.hirly.operation": observation.operation,
-            "ai.hirly.prompt_version": observation.prompt_version,
-            "ai.hirly.feature": observation.feature,
-            "ai.hirly.actor_scope": observation.actor_scope,
-            "ai.hirly.raw_content_retention_days": 30,
+            "gen_ai.hirly.operation": observation.operation,
+            "gen_ai.hirly.prompt_version": observation.prompt_version,
+            "gen_ai.hirly.feature": observation.feature,
+            "gen_ai.hirly.actor_scope": observation.actor_scope,
+            "gen_ai.hirly.raw_content_retention_days": 30,
         }
         with tracer.start_as_current_span(
-            f"ai.hirly.{observation.operation}", attributes=attributes
+            f"gen_ai.hirly.{observation.operation}", attributes=attributes
         ) as span:
             _tag_otel_span_with_user()
             try:
                 yield span
             except Exception as exc:
-                span.set_attribute("ai.hirly.outcome", "error")
-                span.set_attribute("ai.hirly.error_type", type(exc).__name__)
+                span.set_attribute("gen_ai.hirly.outcome", "error")
+                span.set_attribute("gen_ai.hirly.error_type", type(exc).__name__)
                 span.record_exception(exc)
                 span.set_status(Status(StatusCode.ERROR, str(exc)))
                 raise
             else:
-                span.set_attribute("ai.hirly.outcome", "success")
+                span.set_attribute("gen_ai.hirly.outcome", "success")
     except ImportError:
         # AI functionality must remain available when optional OTel packages
         # are unavailable (for local/test environments).
@@ -201,7 +201,7 @@ async def complete_json_text(
         actor_scope="unknown",
     )
     with _observe_llm_operation(observation) as span:
-        _record_raw_text(span, "ai.hirly.raw_input", f"SYSTEM:\n{system_message}\n\nUSER:\n{prompt}")
+        _record_raw_text(span, "gen_ai.hirly.raw_input", f"SYSTEM:\n{system_message}\n\nUSER:\n{prompt}")
         client = _client()
         response = await client.chat.completions.create(
             model=os.environ.get("OPENAI_MODEL", "gpt-4.1-mini"),
@@ -212,7 +212,7 @@ async def complete_json_text(
             ],
         )
         output = response.choices[0].message.content or ""
-        _record_raw_text(span, "ai.hirly.raw_output", output)
+        _record_raw_text(span, "gen_ai.hirly.raw_output", output)
         return output
 
 
@@ -244,7 +244,7 @@ async def extract_text_from_image_bytes(
         "No commentary."
     )
     with _observe_llm_operation(observation) as span:
-        _record_raw_text(span, "ai.hirly.raw_input", instruction)
+        _record_raw_text(span, "gen_ai.hirly.raw_input", instruction)
         client = _client()
         response = await client.chat.completions.create(
             model=os.environ.get("OPENAI_VISION_MODEL", os.environ.get("OPENAI_MODEL", "gpt-4.1-mini")),
@@ -263,7 +263,7 @@ async def extract_text_from_image_bytes(
             **_chat_output_token_kwargs(4096),
         )
         output = (response.choices[0].message.content or "").strip()
-        _record_raw_text(span, "ai.hirly.raw_output", output)
+        _record_raw_text(span, "gen_ai.hirly.raw_output", output)
         return output
 
 
@@ -300,5 +300,5 @@ async def transcribe_audio_bytes(
                 for seg in (dump.get("segments") or [])
             ],
         }
-        _record_raw_text(span, "ai.hirly.raw_output", result["text"])
+        _record_raw_text(span, "gen_ai.hirly.raw_output", result["text"])
         return result

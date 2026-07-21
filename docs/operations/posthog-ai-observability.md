@@ -5,7 +5,7 @@
 Hirly records each LLM request through the existing OpenAI OpenTelemetry
 instrumentation. The instrumentor remains the sole producer of `$ai_generation`
 facts (model, provider, tokens, latency, cost, and provider error). Hirly adds
-one parent `ai.hirly.*` span per product operation; it does not emit a parallel
+one parent `gen_ai.hirly.*` span per product operation; it does not emit a parallel
 business event for the same generation.
 
 ## Stable operation taxonomy
@@ -13,12 +13,12 @@ business event for the same generation.
 Every call must use `LLMObservation(operation, prompt_version, feature)`.
 The parent span contains these queryable fields:
 
-- `ai.hirly.operation` — stable operation identifier;
-- `ai.hirly.prompt_version` — explicit prompt contract version;
-- `ai.hirly.feature` — product feature owning the call;
-- `ai.hirly.actor_scope` — `user`, `system`, or `unknown`;
-- `ai.hirly.outcome` and `ai.hirly.error_type` — terminal result;
-- `ai.hirly.raw_content_retention_days` — contractual retention target: `30`.
+- `gen_ai.hirly.operation` — stable operation identifier;
+- `gen_ai.hirly.prompt_version` — explicit prompt contract version;
+- `gen_ai.hirly.feature` — product feature owning the call;
+- `gen_ai.hirly.actor_scope` — `user`, `system`, or `unknown`;
+- `gen_ai.hirly.outcome` and `gen_ai.hirly.error_type` — terminal result;
+- `gen_ai.hirly.raw_content_retention_days` — contractual retention target: `30`.
 
 Current operations include CV text/profile extraction, application-document and
 Greenhouse-answer generation, job-match scoring, application-agent decisions,
@@ -34,7 +34,7 @@ Set `POSTHOG_AI_RAW_CONTENT_ENABLED=true` and
 3. an incident process for deleting/containing sensitive observations.
 
 When enabled, the adapter stores raw **text** input/output on its governed
-parent span as `ai.hirly.raw_input` and `ai.hirly.raw_output`. It intentionally
+parent span as `gen_ai.hirly.raw_input` and `gen_ai.hirly.raw_output`. It intentionally
 does not enable the OpenAI instrumentor's global content-capture option: that
 would upload base64 CV images and audio bytes, which are neither useful nor
 bounded analytics payloads. OCR and transcription still retain their textual
@@ -44,9 +44,9 @@ Never place API keys, authorization headers, cookies, or secrets in prompts.
 
 ## Reading the data
 
-Use PostHog AI Observability to drill into a trace by `ai.hirly.operation` and
-`ai.hirly.prompt_version`. Compare model/provider, token usage, total cost,
-latency, error rate, and `ai.hirly.outcome` between versions. A regression is a
+Use PostHog AI Observability to drill into a trace by `gen_ai.hirly.operation` and
+`gen_ai.hirly.prompt_version`. Compare model/provider, token usage, total cost,
+latency, error rate, and `gen_ai.hirly.outcome` between versions. A regression is a
 change in error rate, latency, cost, or an operation-specific evaluation metric
 after a prompt/model release.
 
