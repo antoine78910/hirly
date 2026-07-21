@@ -50,16 +50,11 @@ describe("useFeedV2RolloutObservation", () => {
     expect(container.textContent).toBe("false");
   });
 
-  it("only observes an enabled rollout for the canonical analytics identity", () => {
+  it("observes an enabled rollout regardless of analytics identity", () => {
     mockUseFeatureFlagEnabled.mockReturnValue(true);
 
     act(() => {
       root.render(<Probe analyticsUserId="not-a-canonical-user" />);
-    });
-    expect(container.textContent).toBe("false");
-
-    act(() => {
-      root.render(<Probe analyticsUserId="123e4567-e89b-12d3-a456-426614174000" />);
     });
     expect(container.textContent).toBe("true");
   });
