@@ -31,11 +31,14 @@ The feature flag takes effect only when the relevant URL is valid. Missing or in
 configuration fails closed to the legacy Hirly presentation.
 
 `POSTHOG_PAID_LIFECYCLE_ENABLED` also fails closed by default. Before changing it,
-apply `20260721002000_posthog_paid_lifecycle.sql` to the live PostgreSQL target and
-prove apply, function-only service-role privileges, concurrency/fencing, dispatcher
-observability, down migration, unrelated-data preservation, reapply, and one minimal
-record/claim/send flow. Local SQL parsing or a skipped disposable-database suite is
-not sufficient evidence for this live rollout gate.
+apply `20260721001950_pgcrypto_schema_compatibility.sql` to every PostgreSQL
+database that will run the downstream paid-lifecycle migration, and verify the
+resulting `public.digest` wrappers remain marker-owned, `SECURITY INVOKER`, and
+`SET search_path = pg_catalog`. Then apply `20260721002000_posthog_paid_lifecycle.sql`
+to the live PostgreSQL target and prove apply, function-only service-role privileges,
+concurrency/fencing, dispatcher observability, down migration, unrelated-data preservation,
+reapply, and one minimal record/claim/send flow. Local SQL parsing or a skipped
+disposable-database suite is not sufficient evidence for this live rollout gate.
 
 ## Governed selector and query manifest
 
