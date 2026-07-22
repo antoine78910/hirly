@@ -60,6 +60,12 @@ test('production composition is rejected until durable adapters are explicitly a
   expect(() => assertFixtureOnlyMode('fixture')).not.toThrow();
 });
 
+test('operation registry rejects a production composition request before binding handlers', () => {
+  const job = { ...fixtureJobSnapshot, questions: [] };
+  const deps: RuntimeDependencies = { evidence: memoryEvidenceStore(fixtureEvidenceSnapshot, fixtureEvidenceItems), jobs: memoryStore(), drafts: memoryStore(), plans: memoryStore(), receipts: memoryReceiptStore(), reader: fixtureJobReader(job), model: fixtureModel, verifier: { async verify() { return { supports: [], blockedReasonCodes: [] }; } }, adapters: fixtureAdapterRegistry(controlledAtsSimulator()), idempotency: memoryIdempotencyStore(), clock, ids: incrementalIds(), hasher: sha256Hasher, logger: memorySafeLogger(), outbox: memoryOutbox() };
+  expect(() => createApplicationAgentOperationRegistry(deps, 'production')).toThrow('PRODUCTION_COMPOSITION_UNAVAILABLE');
+});
+
 test('approval port rejects wrong subject, canonical input, and review evidence before a handler can run', async () => {
   const input = { planId: 'submission_plan_fixture-a', planDigest: sha256Hasher.digest({ plan: 1 }), targetOrigin: 'https://jobs.fixture.example', adapterKey: 'fixture-ats', adapterVersion: '1.0.0', idempotencyKey: 'idem_fixture_12345678' };
   const review = { ref: 'review:fixture-approval', status: 'approved' as const, subject: { userId: 'candidate-a' }, planDigest: input.planDigest, targetOrigin: input.targetOrigin, adapterVersion: input.adapterVersion, issuedAt: '2025-12-31T23:00:00.000Z', expiresAt: '2026-01-01T01:00:00.000Z' };
