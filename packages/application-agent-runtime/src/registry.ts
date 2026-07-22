@@ -13,6 +13,7 @@ import type {
   SubmissionPlanStore, SubmissionReceiptStore, AuditOutboxPublisher,
 } from './ports';
 import { createGuardedEventPublisher } from './events';
+import { assertFixtureOnlyMode } from './core';
 
 export interface RuntimeDependencies {
   evidence: CandidateEvidenceStore; jobs: JobSnapshotStore; drafts: ApplicationDraftStore;
@@ -28,7 +29,13 @@ const safeEvent = (deps: RuntimeDependencies, values: Record<string, unknown>) =
 });
 
 /** All effectful calls enter through this ContractSpec registry; handlers are not public. */
-export const createApplicationAgentOperationRegistry = (deps: RuntimeDependencies) => {
+/**
+ * Production composition is deliberately unavailable in this foundation.
+ * A future production integration must opt in through a separately approved
+ * adapter project rather than reusing fixture composition by accident.
+ */
+export const createApplicationAgentOperationRegistry = (deps: RuntimeDependencies, compositionMode: 'fixture' | 'production' = 'fixture') => {
+  assertFixtureOnlyMode(compositionMode);
   const registry = new OperationSpecRegistry([...applicationAgentOperations]);
   const events = createGuardedEventPublisher(deps.outbox);
   const bind = (spec: any, handler: any) => registry.bind(spec, handler);
