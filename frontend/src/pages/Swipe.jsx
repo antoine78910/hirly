@@ -83,11 +83,11 @@ import {
   deriveFinalCursorActionedReason,
   resolveSwipeFeedViewState,
   sanitizeSwipeFeedParams,
+  shouldPrefetchSwipeFeedPage,
 } from "../lib/swipeFeedRequestPolicy";
 
 const DEFAULT_SEARCH_RADIUS = "50km";
 const FEED_BATCH_SIZE = 12;
-const FEED_PREFETCH_THRESHOLD = 7;
 const FILTERS_STORAGE_KEY = "swiipr.jobs.filters.v2";
 
 const isFinanceDemoFeedResponse = (data) => (
@@ -846,6 +846,8 @@ export default function Swipe() {
   const targetLocationDataRef = useRef(getSwipeFeedCacheSnapshot().targetLocationData);
   const pendingFiltersRef = useRef(undefined);
   const feedAbortRef = useRef(null);
+  const inFlightCursorRef = useRef(null);
+  const feedQueryEpochRef = useRef(0);
   const feedRequestFenceRef = useRef(createSwipeFeedRequestFence());
   const initialFeedRequestGateRef = useRef(createInitialSwipeFeedRequestGate());
   const jobsRef = useRef(getSwipeFeedCacheSnapshot().jobs);
@@ -1048,13 +1050,25 @@ export default function Swipe() {
     // Low-stack prefetches consume the committed Feed V2 cursor. Never repeat
     // the first page after the server has declared this query terminal.
     if (!replace && nextCursorRef.current === null) return;
-    if (feedAbortRef.current) {
+    // Appends are single-flight. A second low-stack event must coalesce with
+    // the request already claiming this cursor instead of aborting it.
+    if (!replace && fetchingRef.current) return;
+    if (replace && feedAbortRef.current) {
       feedAbortRef.current.abort();
       feedAbortRef.current = null;
     }
+    if (replace) {
+      feedQueryEpochRef.current += 1;
+      nextCursorRef.current = null;
+      inFlightCursorRef.current = null;
+      setNextCursor(null);
+    }
+    const requestEpoch = feedQueryEpochRef.current;
+    const requestedCursor = replace ? null : nextCursorRef.current;
     const requestFence = feedRequestFenceRef.current.next();
     const controller = new AbortController();
     feedAbortRef.current = controller;
+    inFlightCursorRef.current = requestedCursor;
     pendingFiltersRef.current = undefined;
     // Keep `stackPrefetch` (UI) limited to restoring-from-stack only: it controls
     // whether we show/clear the loading skeleton.
@@ -1077,10 +1091,13 @@ export default function Swipe() {
       setLoading(true);
       if (replace) setJobs([]);
     }
-    if (!replace) setNextPageLoading(true);
+    // Use the same in-flight marker for replacement and append requests. This
+    // lets the runway effect run exactly once after an initial low-card page
+    // commits, rather than racing the still-active replacement request.
+    setNextPageLoading(true);
     setFeedError("");
     const params = sanitizeSwipeFeedParams(buildFeedParams(f));
-    if (!replace && nextCursorRef.current) params.set("cursor", nextCursorRef.current);
+    if (requestedCursor) params.set("cursor", requestedCursor);
     let requestUrl = `/jobs/feed?${params.toString()}`;
     setLastFeedDebug({
       reason,
@@ -1123,8 +1140,6 @@ export default function Swipe() {
       if (!requestFence.isCurrent()) return;
       const financeFeed = isFinanceDemoFeedResponse(data);
       const receivedNextCursor = data?.nextCursor ?? data?.next_cursor ?? null;
-      nextCursorRef.current = receivedNextCursor;
-      setNextCursor(receivedNextCursor);
       let localFeedGuard = financeFeed ? null : buildLocalFeedGuard({ params, response: data });
       let responseJobs = Array.isArray(data?.jobs) ? data.jobs : [];
       const jobsAfterLocalGuard = localFeedGuard ? responseJobs.filter(localFeedGuard) : responseJobs;
@@ -1191,34 +1206,47 @@ export default function Swipe() {
         safeJobs.forEach((job) => cacheJobForDemo(job));
         seedTutorialShowcaseIfEmpty(safeJobs);
       }
-      setJobs((prev) => {
-        const base = replace ? [] : (financeFeed ? prev : filterOutSwipedJobs(localFeedGuard ? prev.filter(localFeedGuard) : prev));
-        const seen = new Set(base.map((j) => j.job_id));
-        const merged = [...base];
-        safeJobs.forEach((j) => { if (!seen.has(j.job_id)) merged.push(j); });
-        const visible = financeFeed ? merged : filterOutSwipedJobs(merged);
-        const filtered = filterPersonalSwipeFeedJobs(user?.email, visible);
-        preloadCompanyLogos(filtered.slice(0, 6));
-        writeSwipeFeedCache({
-          jobs: filtered,
-          meta: data,
+      // Single-flight append means jobsRef is the authoritative current stack
+      // here, including swipes that happened while this page was in transit.
+      const base = replace
+        ? []
+        : (financeFeed
+          ? jobsRef.current
+          : filterOutSwipedJobs(localFeedGuard ? jobsRef.current.filter(localFeedGuard) : jobsRef.current));
+      const seen = new Set(base.map((j) => j.job_id));
+      const merged = [...base];
+      safeJobs.forEach((j) => { if (!seen.has(j.job_id)) merged.push(j); });
+      const visible = financeFeed ? merged : filterOutSwipedJobs(merged);
+      const filtered = filterPersonalSwipeFeedJobs(user?.email, visible);
+      // Commit the visible stack before cursor/loading state changes so the
+      // final-card render cannot observe a stale empty ref.
+      jobsRef.current = filtered;
+      setJobs(filtered);
+      preloadCompanyLogos(filtered.slice(0, 6));
+      writeSwipeFeedCache({
+        jobs: filtered,
+        meta: data,
+        target: targetRef.current,
+        targetLocationData: targetLocationDataRef.current,
+        filters: filtersRef.current,
+        cacheKey: buildSwipeFeedCacheKey({
+          userId: user?.user_id,
           target: targetRef.current,
           targetLocationData: targetLocationDataRef.current,
           filters: filtersRef.current,
-          cacheKey: buildSwipeFeedCacheKey({
-            userId: user?.user_id,
-            target: targetRef.current,
-            targetLocationData: targetLocationDataRef.current,
-            filters: filtersRef.current,
-          }),
-          userId: user?.user_id,
-        });
-        return filtered;
+        }),
+        userId: user?.user_id,
       });
+      nextCursorRef.current = receivedNextCursor;
+      setNextCursor(receivedNextCursor);
       // Client-side swipe filtering can consume a complete server page. Keep
       // advancing through committed cursors before allowing a terminal state.
-      if (!safeJobs.length && receivedNextCursor) {
-        window.setTimeout(() => loadFeed(false, f, "filtered_page_continue"), 0);
+      if (!filtered.length && receivedNextCursor) {
+        window.setTimeout(() => {
+          if (feedQueryEpochRef.current === requestEpoch && nextCursorRef.current === receivedNextCursor) {
+            loadFeed(false, f, "filtered_page_continue");
+          }
+        }, 0);
       }
     } catch (e) {
       if (controller.signal.aborted || e?.code === "ERR_CANCELED") return;
@@ -1244,10 +1272,26 @@ export default function Swipe() {
         if ((!stackPrefetch && !silentRefresh) || jobsRef.current.length === 0) setLoading(false);
         fetchingRef.current = false;
         setNextPageLoading(false);
+        if (inFlightCursorRef.current === requestedCursor) inFlightCursorRef.current = null;
         if (feedAbortRef.current === controller) feedAbortRef.current = null;
       }
     }
   }, [t, user?.user_id, user?.email]);
+
+  // Start the next cursor page as soon as the current visible stack reaches
+  // its runway. This also covers a first page reduced by local dedupe/history
+  // filters, rather than waiting for the user to swipe into an empty stack.
+  useEffect(() => {
+    // Do not turn a failed append into an unbounded client retry loop. The
+    // committed cursor remains available for an explicit retry/refresh.
+    if (nextPageLoading || feedError) return;
+    if (!shouldPrefetchSwipeFeedPage({
+      nextCursor,
+      remainingJobs: jobs.length,
+      inFlightCursor: inFlightCursorRef.current,
+    })) return;
+    loadFeed(false, filtersRef.current, "low_stack_prefetch");
+  }, [feedError, jobs.length, loadFeed, nextCursor, nextPageLoading]);
 
   useEffect(() => {
     const onDemoSettings = (event) => {
@@ -1623,12 +1667,8 @@ export default function Swipe() {
     const job = topJob;
     cacheJobForDemo(job);
     recordSwipedJobId(job.job_id, user?.user_id);
-    const remainingAfterSwipe = jobs.length - 1;
     jobsRef.current = jobs.slice(1);
     setJobs((prev) => prev.slice(1));
-    if (remainingAfterSwipe <= FEED_PREFETCH_THRESHOLD && !fetchingRef.current) {
-      loadFeed(false, filtersRef.current, "after_swipe_low_stack");
-    }
     const direction = intent === "apply" ? "right" : "left";   // backend semantic
     if (intent === "apply") {
       trackEvent("application_generation_started", {
@@ -1729,16 +1769,12 @@ export default function Swipe() {
 
   const dismissJob = useCallback((jobId) => {
     recordSwipedJobId(jobId, user?.user_id);
-    const remainingAfterDismiss = jobs.length - 1;
     jobsRef.current = jobs.filter((job) => job.job_id !== jobId);
     setJobs((prev) => prev.filter((j) => j.job_id !== jobId));
     if (isFinanceDemoEnabled()) {
       performFinanceDemoSwipe({ job_id: jobId, direction: "left" });
     } else {
       api.post("/swipe", { job_id: jobId, direction: "left" }).catch(() => {});
-    }
-    if (remainingAfterDismiss <= FEED_PREFETCH_THRESHOLD && !fetchingRef.current) {
-      loadFeed(false, filtersRef.current, "after_dismiss_low_stack");
     }
   }, [jobs.length, loadFeed, user?.user_id]);
 
@@ -1819,6 +1855,7 @@ export default function Swipe() {
           job={topJob}
           loading={loading}
           nextPageLoading={nextPageLoading}
+          nextCursor={nextCursor}
           feedError={feedError}
           feedMeta={feedMeta}
           target={target}

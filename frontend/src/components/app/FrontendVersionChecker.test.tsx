@@ -144,4 +144,29 @@ describe("FrontendVersionChecker", () => {
     expect(checkForUpdate).toHaveBeenCalledTimes(2);
     expect(document.body.textContent).toContain("A new Hirly version is ready");
   });
+
+  it("closes a shown update dialog once the backend reports the matching version", async () => {
+    const checkForUpdate = jest
+      .fn()
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(false);
+    await act(async () => {
+      root.render(
+        <FrontendVersionChecker
+          checkForUpdate={checkForUpdate}
+          intervalMs={1000}
+        />,
+      );
+    });
+
+    expect(document.querySelector("[data-testid='frontend-update-dialog']")).not.toBeNull();
+
+    await act(async () => {
+      jest.advanceTimersByTime(1000);
+      await Promise.resolve();
+    });
+
+    expect(checkForUpdate).toHaveBeenCalledTimes(2);
+    expect(document.querySelector("[data-testid='frontend-update-dialog']")).toBeNull();
+  });
 });

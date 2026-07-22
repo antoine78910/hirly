@@ -52,9 +52,19 @@ describe("Swipe Feed v2 adoption boundary", () => {
     expect(swipeSource).toContain('"loading_next_page"');
     expect(swipeSource).toContain('feedView.kind === "projection_lag"');
     expect(desktopSource).toContain("resolveSwipeFeedViewState({");
+    expect(desktopSource).toContain("nextCursor,");
     expect(swipeSource).toContain("jobsRef.current.length === 0");
     expect(swipeSource).toContain('"profile_not_ready"');
     expect(desktopSource).toContain('"profile_not_ready"');
+  });
+
+  it("coalesces cursor prefetch and commits the visible stack before terminal rendering", () => {
+    expect(swipeSource).toContain("if (!replace && fetchingRef.current) return;");
+    expect(swipeSource).toContain("if (replace && feedAbortRef.current)");
+    expect(swipeSource).toContain("inFlightCursorRef.current = requestedCursor;");
+    expect(swipeSource).toContain("jobsRef.current = filtered;");
+    expect(swipeSource).toContain('"low_stack_prefetch"');
+    expect(swipeSource).toContain("shouldPrefetchSwipeFeedPage({");
   });
 
   it("does not send cache/query identity to terminal-state analytics", () => {

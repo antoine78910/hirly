@@ -5,6 +5,7 @@ import {
   resolveSwipeFeedSuggestions,
   resolveSwipeFeedViewState,
   sanitizeSwipeFeedParams,
+  shouldPrefetchSwipeFeedPage,
 } from "./swipeFeedRequestPolicy";
 
 describe("Swipe Feed v2 request policy", () => {
@@ -116,6 +117,13 @@ describe("Swipe Feed v2 request policy", () => {
       jobCount: 0,
       feedMeta: { emptyReason: "ALL_MATCHES_ACTIONED" },
     })).toEqual({ kind: "loading_next_page" });
+  });
+
+  it("prefetches only a committed, non-in-flight cursor with a short runway", () => {
+    expect(shouldPrefetchSwipeFeedPage({ nextCursor: "page-2", remainingJobs: 7 })).toBe(true);
+    expect(shouldPrefetchSwipeFeedPage({ nextCursor: "page-2", remainingJobs: 8 })).toBe(false);
+    expect(shouldPrefetchSwipeFeedPage({ nextCursor: "page-2", remainingJobs: 0, inFlightCursor: "page-2" })).toBe(false);
+    expect(shouldPrefetchSwipeFeedPage({ nextCursor: null, remainingJobs: 0 })).toBe(false);
   });
 
   it("orders only applicable broadening suggestions", () => {

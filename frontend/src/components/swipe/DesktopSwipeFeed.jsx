@@ -61,6 +61,7 @@ export default function DesktopSwipeFeed({
   job,
   loading,
   nextPageLoading = false,
+  nextCursor = null,
   feedError,
   feedMeta,
   target,
@@ -102,6 +103,7 @@ export default function DesktopSwipeFeed({
     loadingInitial: loading,
     loadingNextPage: nextPageLoading,
     jobCount: job ? 1 : 0,
+    nextCursor,
     feedMeta,
     feedError,
   });

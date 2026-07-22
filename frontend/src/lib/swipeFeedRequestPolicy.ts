@@ -32,6 +32,21 @@ export type SwipeFeedViewState =
   | { kind: "legacy_empty"; emptyReason: SwipeFeedEmptyReason | null }
   | { kind: "error"; emptyReason: SwipeFeedEmptyReason | null };
 
+export const SWIPE_FEED_PREFETCH_THRESHOLD = 7;
+
+/** Keeps a card runway while consuming cursor pages. */
+export function shouldPrefetchSwipeFeedPage(input: {
+  nextCursor?: string | null;
+  remainingJobs: number;
+  inFlightCursor?: string | null;
+}): boolean {
+  return Boolean(
+    input.nextCursor
+    && input.remainingJobs <= SWIPE_FEED_PREFETCH_THRESHOLD
+    && input.inFlightCursor !== input.nextCursor,
+  );
+}
+
 type FeedMeta = {
   inventoryState?: string;
   inventory_state?: string;

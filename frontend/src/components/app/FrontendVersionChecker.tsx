@@ -40,22 +40,20 @@ export default function FrontendVersionChecker({
   const { lang } = useAppLocale();
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const checkingRef = useRef(false);
-  const updateAvailableRef = useRef(false);
+  const dismissedRef = useRef(false);
 
   const check = useCallback(async () => {
-    if (checkingRef.current || updateAvailableRef.current) return;
+    if (checkingRef.current || dismissedRef.current) return;
     checkingRef.current = true;
     try {
-      if (await checkForUpdate()) {
-        updateAvailableRef.current = true;
-        setUpdateAvailable(true);
-      }
+      setUpdateAvailable(await checkForUpdate());
     } finally {
       checkingRef.current = false;
     }
   }, [checkForUpdate]);
 
   const closeUpdateDialog = useCallback(() => {
+    dismissedRef.current = true;
     setUpdateAvailable(false);
   }, []);
 
