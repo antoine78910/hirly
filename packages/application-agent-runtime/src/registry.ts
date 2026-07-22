@@ -51,10 +51,7 @@ export const createApplicationAgentOperationRegistry = (deps: RuntimeDependencie
       candidateEvidenceSnapshotId: snapshot.id,
       jobSnapshotId: job.id,
       status: hasUnboundClaim ? 'blocked' : generated.status,
-      claims: generated.claims.flatMap((claim) => {
-        const item = evidence.find((candidate) => candidate.id === claim.evidenceId);
-        return item ? [{ ...claim, evidenceStatement: item.atomicSupportedStatement, evidenceRef: item.sourceArtifactRef }] : [];
-      }),
+      claims: generated.claims.filter((claim) => evidence.some((item) => item.id === claim.evidenceId)),
     };
     await deps.drafts.put(draft);
     const eventName = draft.status === 'ready' ? 'hirlyApplication.prepared' : 'hirlyApplication.blocked';
