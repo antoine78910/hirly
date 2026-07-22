@@ -66,6 +66,8 @@ export interface RuntimeStore {
   ): Promise<SproutSourceRuntimeConfiguration | null>;
   commitSproutSourcePage?: WorkerRepository["commitSproutSourcePage"];
   recordSproutIngestionError?: WorkerRepository["recordSproutIngestionError"];
+  getSproutAuthSession?: WorkerRepository["getSproutAuthSession"];
+  compareAndSwapSproutAuthSession?: WorkerRepository["compareAndSwapSproutAuthSession"];
 }
 
 export interface DueSchedule {

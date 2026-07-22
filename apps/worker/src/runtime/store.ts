@@ -95,6 +95,17 @@ export class PostgresRuntimeStore implements RuntimeStore {
     return this.repository.recordSproutIngestionError(lease, input);
   }
 
+  getSproutAuthSession() {
+    return this.repository.getSproutAuthSession();
+  }
+
+  compareAndSwapSproutAuthSession(
+    expectedVersion: bigint | null,
+    ciphertext: string,
+  ) {
+    return this.repository.compareAndSwapSproutAuthSession(expectedVersion, ciphertext);
+  }
+
   claimProviderWork(lease: Lease, provider: Provider, leaseSeconds: number) {
     return this.repository.claimProviderWork(lease, provider, leaseSeconds);
   }

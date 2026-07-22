@@ -31,6 +31,7 @@ import {
   type SproutSecretResolver,
   type SproutTokenRefresher,
 } from "../providers/sprout";
+import { SproutSessionCipher, type SproutSession } from "../providers/sprout/session";
 
 function emitSproutOperation(
   logger: Logger | undefined,
@@ -98,20 +99,63 @@ class ProviderOperationGate {
  * token needed by its peers.  One shared session makes refresh single-flight;
  * callers that started with the old refresh token receive the replacement.
  */
-function environmentSproutSession(): {
+export function environmentSproutSession(
+  store?: Pick<RuntimeStore, "getSproutAuthSession" | "compareAndSwapSproutAuthSession">,
+): {
   secrets: SproutSecretResolver;
   tokenRefresher: SproutTokenRefresher;
 } {
-  let current: { accessToken: string; refreshToken: string } | null = null;
-  let refreshInFlight: Promise<{ accessToken: string; refreshToken: string }> | null = null;
+  type VersionedSession = SproutSession & { version: bigint | null };
+  const cipher = SproutSessionCipher.fromEnvironment(process.env.SPROUT_SESSION_ENCRYPTION_KEY);
+  let current: VersionedSession | null = null;
+  let loadInFlight: Promise<VersionedSession> | null = null;
+  let refreshInFlight: Promise<SproutSession> | null = null;
 
-  function initialCredentials(): { accessToken: string; refreshToken: string } {
+  function initialCredentials(): VersionedSession {
     const accessToken = process.env.SPROUT_FRANCE_API_TOKEN?.trim();
     const refreshToken = process.env.SPROUT_FRANCE_REFRESH_TOKEN?.trim();
     if (!accessToken || !refreshToken) {
       throw new IngestionError("authorization_blocked", "sprout_credential_unavailable");
     }
-    return { accessToken, refreshToken };
+    return { accessToken, refreshToken, version: null };
+  }
+
+  async function resolveCurrent(): Promise<VersionedSession> {
+    if (current) return current;
+    if (!loadInFlight) {
+      loadInFlight = (async () => {
+        // A configured cipher makes PostgreSQL the durable source after the
+        // first successful refresh. Until then, deployment variables provide
+        // the one-time bootstrap session.
+        if (cipher && store?.getSproutAuthSession) {
+          const persisted = await store.getSproutAuthSession();
+          if (persisted) {
+            const session = cipher.decrypt(persisted.ciphertext);
+            current = { ...session, version: persisted.version };
+            return current;
+          }
+        }
+        current = initialCredentials();
+        return current;
+      })().finally(() => {
+        loadInFlight = null;
+      });
+    }
+    return await loadInFlight;
+  }
+
+  async function persist(session: SproutSession, expectedVersion: bigint | null): Promise<VersionedSession> {
+    if (!cipher || !store?.compareAndSwapSproutAuthSession || !store.getSproutAuthSession) {
+      return { ...session, version: expectedVersion };
+    }
+    const version = await store.compareAndSwapSproutAuthSession(expectedVersion, cipher.encrypt(session));
+    if (version !== null) return { ...session, version };
+
+    // Another worker rotated the one-time refresh token first. Load its
+    // winner rather than overwriting it or retrying with a revoked token.
+    const winner = await store.getSproutAuthSession();
+    if (!winner) throw new Error("sprout_session_compare_and_swap_lost");
+    return { ...cipher.decrypt(winner.ciphertext), version: winner.version };
   }
 
   return {
@@ -120,14 +164,17 @@ function environmentSproutSession(): {
         if (reference !== "secret://sprout/france-api") {
           throw new IngestionError("authorization_blocked", "sprout_credential_reference_rejected");
         }
-        return current ?? initialCredentials();
+        const session = await resolveCurrent();
+        return { accessToken: session.accessToken, refreshToken: session.refreshToken };
       },
     },
     tokenRefresher: {
       async refresh(refreshToken: string, signal: AbortSignal) {
-        // Another lane already refreshed the session while this lane was
-        // waiting in the provider rate gate. Never reuse the stale token.
-        if (current && current.refreshToken !== refreshToken) return current;
+        const existing = await resolveCurrent();
+        // A different lane/process already replaced the one-time token.
+        if (existing.refreshToken !== refreshToken) {
+          return { accessToken: existing.accessToken, refreshToken: existing.refreshToken };
+        }
         if (!refreshInFlight) {
           refreshInFlight = (async () => {
             const apiKey = process.env.SPROUT_SUPABASE_ANON_KEY?.trim();
@@ -141,11 +188,24 @@ function environmentSproutSession(): {
                 signal,
               },
             );
-            if (!response.ok) throw new Error("sprout_refresh_rejected");
+            if (!response.ok) {
+              // Refresh tokens are single-use. A sibling process may have
+              // rotated first; recover its persisted successor instead of
+              // treating that expected race as a permanent authorization loss.
+              if (cipher && store?.getSproutAuthSession) {
+                const winner = await store.getSproutAuthSession();
+                if (winner && winner.version !== existing.version) {
+                  current = { ...cipher.decrypt(winner.ciphertext), version: winner.version };
+                  return { accessToken: current.accessToken, refreshToken: current.refreshToken };
+                }
+              }
+              throw new Error("sprout_refresh_rejected");
+            }
             const body = (await response.json()) as { access_token?: string; refresh_token?: string };
             if (!body.access_token || !body.refresh_token) throw new Error("sprout_refresh_response_invalid");
-            current = { accessToken: body.access_token.trim(), refreshToken: body.refresh_token.trim() };
-            return current;
+            const next = { accessToken: body.access_token.trim(), refreshToken: body.refresh_token.trim() };
+            current = await persist(next, existing.version);
+            return { accessToken: current.accessToken, refreshToken: current.refreshToken };
           })().finally(() => {
             refreshInFlight = null;
           });
@@ -182,7 +242,7 @@ export function createTaskHandlers(
 ): TaskHandlers {
   const rateGates = new Map<Provider, ProviderRateGate>();
   const providerOperationGates = new Map<Provider, ProviderOperationGate>();
-  const sproutEnvironmentSession = environmentSproutSession();
+  const sproutEnvironmentSession = environmentSproutSession(store);
   return {
     "inventory.maintenance": async (_task, signal) => {
       signal.throwIfAborted();

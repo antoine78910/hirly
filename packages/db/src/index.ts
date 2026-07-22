@@ -58,6 +58,11 @@ export interface SproutSourceRuntimeConfiguration {
   policyEvidenceRef: string;
 }
 
+export interface SproutAuthSessionRecord {
+  version: bigint;
+  ciphertext: string;
+}
+
 export interface SproutIngestionErrorRecord {
   sourceId: string | null;
   errorCode: string;
@@ -505,6 +510,27 @@ export class WorkerRepository {
       canaryEvidence: row.canary_evidence,
       rollbackEvidence: row.rollback_evidence,
     });
+  }
+
+  async getSproutAuthSession(): Promise<SproutAuthSessionRecord | null> {
+    const [row] = await this.sql<{ version: string; ciphertext: string }[]>`
+      SELECT * FROM worker_private.get_sprout_auth_session()
+    `;
+    return row ? { version: BigInt(row.version), ciphertext: row.ciphertext } : null;
+  }
+
+  async compareAndSwapSproutAuthSession(
+    expectedVersion: bigint | null,
+    ciphertext: string,
+  ): Promise<bigint | null> {
+    const [row] = await this.sql<{ version: string | null }[]>`
+      SELECT worker_private.compare_and_swap_sprout_auth_session(
+        ${expectedVersion?.toString() ?? null}::bigint,
+        ${ciphertext}
+      ) AS version
+    `;
+    if (!row?.version) return null;
+    return BigInt(row.version);
   }
 
   async recordSproutIngestionError(
