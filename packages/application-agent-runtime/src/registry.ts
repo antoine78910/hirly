@@ -18,6 +18,7 @@ import { createGuardedEventPublisher } from './events';
 import { assertFixtureOnlyMode } from './core';
 
 export interface RuntimeDependencies {
+  compositionMode: 'fixture' | 'production';
   evidence: CandidateEvidenceStore; jobs: JobSnapshotStore; drafts: ApplicationDraftStore;
   plans: SubmissionPlanStore; receipts: SubmissionReceiptStore; reader: JobSourceReader;
   model: ApplicationModelGateway; verifier: ClaimSupportVerifier; adapters: AtsCapabilityRegistry;
@@ -38,8 +39,8 @@ const safeEvent = (deps: RuntimeDependencies, values: Record<string, unknown>) =
  * A future production integration must opt in through a separately approved
  * adapter project rather than reusing fixture composition by accident.
  */
-export const createApplicationAgentOperationRegistry = (deps: RuntimeDependencies, compositionMode: 'fixture' | 'production' = 'fixture') => {
-  assertFixtureOnlyMode(compositionMode);
+export const createApplicationAgentOperationRegistry = (deps: RuntimeDependencies) => {
+  assertFixtureOnlyMode(deps.compositionMode);
   const registry = new OperationSpecRegistry([...applicationAgentOperations]);
   const runtimeContext = (ctx: HandlerCtx): HandlerCtx => ({ ...ctx, approvalPort: deps.approvalPort?.() });
   // Approval is enforced by ContractSpec before the submit handler. Wrap both

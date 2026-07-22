@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { Clock, Hasher, IdGenerator, IdempotencyStore, Redactor, SafeLogger, ApprovalNonceStore } from './ports';
+import type { Clock, Hasher, IdGenerator, IdempotencyStore, Redactor, SafeLogger, SafeLogFields, ApprovalNonceStore } from './ports';
 
 /** Matches runtime-core's approval serializer without taking runtime-core as a production dependency. */
 export const canonicalJson = (value: unknown): string => {
@@ -22,4 +22,12 @@ export const assertFixtureOnlyMode = (mode: 'fixture' | 'production') => {
 };
 const forbidden = /cv|email|name|address|cover|salary|legal|payload|statement|prompt/i;
 export const safeRedactor: Redactor = { redact(value) { if (Array.isArray(value)) return value.map((v) => safeRedactor.redact(v)); if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([k, v]) => [k, forbidden.test(k) ? '[REDACTED]' : safeRedactor.redact(v)])); return value; } };
-export const memorySafeLogger = (records: Array<Record<string, unknown>> = []): SafeLogger & { records: Array<Record<string, unknown>> } => ({ records, info(event, fields) { records.push({ level: 'info', event, ...safeRedactor.redact(fields) as object }); }, error(event, fields) { records.push({ level: 'error', event, ...safeRedactor.redact(fields) as object }); } });
+const safeLogFieldNames = new Set(['subjectRef', 'entityRef', 'planDigest', 'reasonCodes', 'occurredAt']);
+const validateSafeLogFields = (fields: SafeLogFields) => {
+  for (const [key, value] of Object.entries(fields)) {
+    if (!safeLogFieldNames.has(key) || forbidden.test(key) || typeof value === 'string' && /\s/.test(value)) throw new Error('UNSAFE_APPLICATION_AGENT_LOG_RECORD');
+  }
+  return fields;
+};
+export type SafeLogRecord = { level: 'info' | 'error'; event: 'application_agent_operation' | 'application_agent_failure'; fields: SafeLogFields };
+export const memorySafeLogger = (records: SafeLogRecord[] = []): SafeLogger & { records: SafeLogRecord[] } => ({ records, info(event, fields) { records.push({ level: 'info', event, fields: validateSafeLogFields(fields) }); }, error(event, fields) { records.push({ level: 'error', event, fields: validateSafeLogFields(fields) }); } });
