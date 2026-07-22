@@ -7,10 +7,10 @@ const runIntegration = databaseUrl ? test : test.skip;
 
 async function psql(args: string[]): Promise<string> {
   if (!databaseUrl) throw new Error("G010_TEST_DATABASE_URL is required");
-  const process = Bun.spawn(
-    ["psql", databaseUrl, "-X", "-v", "ON_ERROR_STOP=1", ...args],
-    { stdout: "pipe", stderr: "pipe" },
-  );
+  const process = Bun.spawn(["psql", databaseUrl, "-X", "-v", "ON_ERROR_STOP=1", ...args], {
+    stdout: "pipe",
+    stderr: "pipe",
+  });
   const [exitCode, stdout, stderr] = await Promise.all([
     process.exited,
     new Response(process.stdout).text(),
@@ -29,15 +29,14 @@ describe("G010 real-Postgres whole-provider fencing", () => {
     "applies, rejects ABA/direct DML, writes through the Python claim, rolls back, and reapplies",
     async () => {
       await apply("backend/db/jobs_inventory_schema.sql");
-      await apply(
-        "backend/db/migrations/20260720000100_typescript_worker_foundation.sql",
-      );
+      await apply("backend/db/migrations/20260720000100_typescript_worker_foundation.sql");
       await apply("backend/db/migrations/20260720000500_job_dedup_linkage.sql");
-      await apply(
-        "backend/db/migrations/20260720000700_provider_ownership_epochs.sql",
-      );
+      await apply("backend/db/migrations/20260720000700_provider_ownership_epochs.sql");
       try {
-        await psql(["-q", "-c", `
+        await psql([
+          "-q",
+          "-c",
+          `
           DO $precondition$
           BEGIN
             IF NOT EXISTS (
@@ -173,38 +172,51 @@ describe("G010 real-Postgres whole-provider fencing", () => {
             END IF;
           END
           $proof$;
-        `]);
+        `,
+        ]);
 
-        const count = await psql(["-A", "-t", "-q", "-c", `
+        const count = await psql([
+          "-A",
+          "-t",
+          "-q",
+          "-c",
+          `
           SELECT count(*) FROM public.jobs
           WHERE provider = 'france_travail' AND external_id = 'g010-1'
-        `]);
+        `,
+        ]);
         expect(count).toBe("1");
         expect(
-          await psql(["-A", "-t", "-q", "-c", `
+          await psql([
+            "-A",
+            "-t",
+            "-q",
+            "-c",
+            `
             SELECT title FROM public.jobs WHERE job_id = 'g010-other-provider'
-          `]),
+          `,
+          ]),
         ).toBe("Other provider remains backward compatible");
       } finally {
-        await apply(
-          "backend/db/migrations/20260720000700_provider_ownership_epochs.down.sql",
-        );
+        await apply("backend/db/migrations/20260720000700_provider_ownership_epochs.down.sql");
       }
 
       expect(
-        await psql(["-A", "-t", "-q", "-c", `
+        await psql([
+          "-A",
+          "-t",
+          "-q",
+          "-c",
+          `
           SELECT count(*) FROM information_schema.columns
           WHERE table_schema = 'public'
             AND table_name = 'provider_registry'
             AND column_name = 'ownership_epoch'
-        `]),
+        `,
+        ]),
       ).toBe("0");
-      await apply(
-        "backend/db/migrations/20260720000700_provider_ownership_epochs.sql",
-      );
-      await apply(
-        "backend/db/migrations/20260720000700_provider_ownership_epochs.down.sql",
-      );
+      await apply("backend/db/migrations/20260720000700_provider_ownership_epochs.sql");
+      await apply("backend/db/migrations/20260720000700_provider_ownership_epochs.down.sql");
     },
     30_000,
   );

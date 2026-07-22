@@ -65,13 +65,8 @@ describe("database repository boundary", () => {
       "backfill",
     );
 
-    expect(statements[0]).toContain(
-      "worker_private.get_sprout_source_runtime_v3",
-    );
-    expect(values[0]).toEqual([
-      "11111111-1111-4111-8111-111111111111",
-      "backfill",
-    ]);
+    expect(statements[0]).toContain("worker_private.get_sprout_source_runtime_v3");
+    expect(values[0]).toEqual(["11111111-1111-4111-8111-111111111111", "backfill"]);
     expect(runtime).toMatchObject({
       sourceKey: "sprout:france",
       credentialRef: "secret://sprout/france-api",
@@ -174,10 +169,7 @@ describe("database repository boundary", () => {
   test("registers a validated disabled career source through the private RPC", async () => {
     const statements: string[] = [];
     const values: unknown[][] = [];
-    const tag = ((
-      strings: TemplateStringsArray,
-      ...parameters: unknown[]
-    ) => {
+    const tag = ((strings: TemplateStringsArray, ...parameters: unknown[]) => {
       statements.push(strings.join("?"));
       values.push(parameters);
       return Promise.resolve([
@@ -208,9 +200,7 @@ describe("database repository boundary", () => {
     }) as unknown as Database;
     tag.json = (value) => value as never;
 
-    const candidate = await new WorkerRepository(
-      tag,
-    ).registerCareerSourceCandidate({
+    const candidate = await new WorkerRepository(tag).registerCareerSourceCandidate({
       provider: "greenhouse",
       sourceKey: "greenhouse:hirly",
       tenantKey: "hirly",
@@ -224,14 +214,8 @@ describe("database repository boundary", () => {
     });
 
     expect(statements).toHaveLength(1);
-    expect(statements[0]).toContain(
-      "worker_private.register_career_source_candidate",
-    );
-    expect(values[0]?.slice(0, 3)).toEqual([
-      "greenhouse",
-      "greenhouse:hirly",
-      "hirly",
-    ]);
+    expect(statements[0]).toContain("worker_private.register_career_source_candidate");
+    expect(values[0]?.slice(0, 3)).toEqual(["greenhouse", "greenhouse:hirly", "hirly"]);
     expect(candidate).toMatchObject({
       provider: "greenhouse",
       tenantKey: "hirly",

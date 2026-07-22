@@ -43,9 +43,7 @@ describe("root Bun workspace isolation", () => {
     expect(rootPackage.private).toBe(true);
     expect(rootPackage.packageManager).toMatch(/^bun@\d+\.\d+\.\d+$/);
     expect([...patterns].sort()).toEqual(["apps/*", "packages/*"]);
-    expect(patterns.some((pattern) => pattern.includes("frontend"))).toBe(
-      false,
-    );
+    expect(patterns.some((pattern) => pattern.includes("frontend"))).toBe(false);
 
     const resolvedManifests = patterns.flatMap((pattern) =>
       Array.from(
@@ -58,15 +56,12 @@ describe("root Bun workspace isolation", () => {
 
     expect(
       resolvedManifests.every(
-        (manifest) =>
-          manifest.startsWith("apps/") || manifest.startsWith("packages/"),
+        (manifest) => manifest.startsWith("apps/") || manifest.startsWith("packages/"),
       ),
     ).toBe(true);
     expect(
       resolvedManifests.some(
-        (manifest) =>
-          manifest === "frontend/package.json" ||
-          manifest.startsWith("frontend/"),
+        (manifest) => manifest === "frontend/package.json" || manifest.startsWith("frontend/"),
       ),
     ).toBe(false);
   });
@@ -80,11 +75,7 @@ describe("root Bun workspace isolation", () => {
       expect(command).not.toContain("frontend");
     }
 
-    for (const requiredFile of [
-      "bun.lock",
-      "bunfig.toml",
-      "tsconfig.base.json",
-    ]) {
+    for (const requiredFile of ["bun.lock", "bunfig.toml", "tsconfig.base.json"]) {
       expect(existsSync(join(repoRoot, requiredFile))).toBe(true);
     }
   });

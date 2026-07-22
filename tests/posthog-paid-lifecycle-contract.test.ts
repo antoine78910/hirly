@@ -2,10 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 
 const up = readFileSync(
-  new URL(
-    "../backend/db/migrations/20260721002000_posthog_paid_lifecycle.sql",
-    import.meta.url,
-  ),
+  new URL("../backend/db/migrations/20260721002000_posthog_paid_lifecycle.sql", import.meta.url),
   "utf8",
 );
 const down = readFileSync(
@@ -123,10 +120,12 @@ describe("governed paid-lifecycle migration contract", () => {
 
   test("down migration removes only the lifecycle surface in dependency order", () => {
     const sql = compact(down);
-    expect(sql.indexOf("drop function if exists analytics_private.block_posthog"))
-      .toBeLessThan(sql.indexOf("drop table if exists public.posthog_paid_lifecycle_outbox"));
-    expect(sql.indexOf("drop table if exists public.posthog_paid_lifecycle_outbox"))
-      .toBeLessThan(sql.indexOf("drop table if exists public.posthog_paid_lifecycle_evidence"));
+    expect(sql.indexOf("drop function if exists analytics_private.block_posthog")).toBeLessThan(
+      sql.indexOf("drop table if exists public.posthog_paid_lifecycle_outbox"),
+    );
+    expect(sql.indexOf("drop table if exists public.posthog_paid_lifecycle_outbox")).toBeLessThan(
+      sql.indexOf("drop table if exists public.posthog_paid_lifecycle_evidence"),
+    );
     for (const unrelated of ["public.users", "public.stripe_events", "public.analytics_events"])
       expect(sql).not.toContain(`drop table if exists ${unrelated}`);
     expect(sql).not.toContain("drop schema analytics_private");

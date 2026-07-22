@@ -47,8 +47,7 @@ export const WARM_UP_POSTS_FR = [
     title: "Le marché de l'emploi est tellement nul…",
     exampleLabel: "Vidéo de Sofia — 303K vues",
     exampleUrl: "https://www.tiktok.com/@careerwithsofia/video/7594694796975934751",
-    audioUrl:
-      "https://www.tiktok.com/music/NOT-CUTE-ANYMORE-Sped-up-7574691807540398081",
+    audioUrl: "https://www.tiktok.com/music/NOT-CUTE-ANYMORE-Sped-up-7574691807540398081",
     guidelines: ["Souris, cligne des yeux souvent, thumbs up"],
     script:
       "Le marché de l'emploi est tellement nul que je passe des entretiens pour être hôtesse avec un diplôme de grande école",
@@ -110,8 +109,7 @@ export const WARM_UP_POSTS_FR = [
     exampleUrl: "https://www.instagram.com/reel/DZP8VA9BIwo/?igsh=NTc4MTIwNjQ2YQ==",
     audioUrl: "https://www.tiktok.com/music/original-sound-7251705883959528238",
     guidelines: ["Filme-toi en marchant dans la rue"],
-    script:
-      "Moi qui essaie de ne pas m'attacher à un poste après un bon entretien",
+    script: "Moi qui essaie de ne pas m'attacher à un poste après un bon entretien",
     caption: frCaption(
       "je choisis juste d'apprécier le trajet du retour 😢",
       ...["entretien", "emploi", "rechercheemploi", "cv", "carriere"],

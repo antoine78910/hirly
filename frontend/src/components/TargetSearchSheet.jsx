@@ -10,9 +10,10 @@ import { isResolvedLocation } from "../lib/locationSearch";
 import { MATCHING_INDUSTRIES, MATCHING_SECTORS } from "../lib/matchingFacets";
 
 function FacetPicker({ label, options, values, onChange }) {
-  const toggle = (value) => onChange((current) => current.includes(value)
-    ? current.filter((entry) => entry !== value)
-    : [...current, value]);
+  const toggle = (value) =>
+    onChange((current) =>
+      current.includes(value) ? current.filter((entry) => entry !== value) : [...current, value],
+    );
 
   return (
     <div className="space-y-2">
@@ -23,9 +24,11 @@ function FacetPicker({ label, options, values, onChange }) {
             key={value}
             type="button"
             onClick={() => toggle(value)}
-            className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${values.includes(value)
-              ? "border-violet-500 bg-violet-50 text-violet-700"
-              : "border-zinc-200 text-zinc-600 hover:border-zinc-300"}`}
+            className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
+              values.includes(value)
+                ? "border-violet-500 bg-violet-50 text-violet-700"
+                : "border-zinc-200 text-zinc-600 hover:border-zinc-300"
+            }`}
           >
             {text}
           </button>
@@ -57,19 +60,29 @@ export default function TargetSearchSheet({
 
   useEffect(() => {
     if (!open) return;
-    const roles = Array.isArray(initialRoles) && initialRoles.length
-      ? initialRoles
-      : [initialRole];
-    setTargetRoles([...new Set(roles.map((role) => String(role || "").trim()).filter(Boolean))].slice(0, 3));
+    const roles = Array.isArray(initialRoles) && initialRoles.length ? initialRoles : [initialRole];
+    setTargetRoles(
+      [...new Set(roles.map((role) => String(role || "").trim()).filter(Boolean))].slice(0, 3),
+    );
     setRoleDraft("");
     setSectorIds(Array.isArray(initialSectorIds) ? initialSectorIds : []);
     setIndustryIds(Array.isArray(initialIndustryIds) ? initialIndustryIds : []);
     setTargetLocation(initialLocation);
     setTargetLocationData(initialLocationData);
-  }, [open, initialRole, initialRoles, initialSectorIds, initialIndustryIds, initialLocation, initialLocationData]);
+  }, [
+    open,
+    initialRole,
+    initialRoles,
+    initialSectorIds,
+    initialIndustryIds,
+    initialLocation,
+    initialLocationData,
+  ]);
 
   const save = async () => {
-    const roles = [...new Set([...targetRoles, ...(roleDraft.trim() ? [roleDraft.trim()] : [])])].slice(0, 3);
+    const roles = [
+      ...new Set([...targetRoles, ...(roleDraft.trim() ? [roleDraft.trim()] : [])]),
+    ].slice(0, 3);
     if (!roles.length) {
       toast.error(lang === "fr" ? "Saisissez un métier" : "Enter a job title");
       return;
@@ -79,7 +92,11 @@ export default function TargetSearchSheet({
       const trimmedLocation = (targetLocation || "").trim();
       const normalizedData = normalizeLocationData(trimmedLocation, targetLocationData);
       if (trimmedLocation && !isResolvedLocation(normalizedData, trimmedLocation)) {
-        toast.error(lang === "fr" ? "Choisissez une ville dans les suggestions" : "Select a location from the suggestions");
+        toast.error(
+          lang === "fr"
+            ? "Choisissez une ville dans les suggestions"
+            : "Select a location from the suggestions",
+        );
         return;
       }
       const locationLabel = normalizedData?.location_label || trimmedLocation || "Anywhere";
@@ -121,7 +138,9 @@ export default function TargetSearchSheet({
           >
             <div className="mx-auto w-full max-w-md px-5 pb-safe pt-4">
               <div className="flex items-center justify-between gap-3 border-b border-zinc-100 pb-3">
-                <h2 className="font-display text-lg font-bold tracking-tight">{lang === "fr" ? "Que recherchez-vous ?" : "What are you looking for?"}</h2>
+                <h2 className="font-display text-lg font-bold tracking-tight">
+                  {lang === "fr" ? "Que recherchez-vous ?" : "What are you looking for?"}
+                </h2>
                 <button
                   type="button"
                   onClick={onClose}
@@ -147,17 +166,22 @@ export default function TargetSearchSheet({
                     <button
                       key={role}
                       type="button"
-                      onClick={() => setTargetRoles((roles) => roles.filter((entry) => entry !== role))}
+                      onClick={() =>
+                        setTargetRoles((roles) => roles.filter((entry) => entry !== role))
+                      }
                       className="inline-flex items-center gap-1 rounded-full bg-violet-100 px-3 py-1 text-sm text-violet-800"
                     >
-                      {role}<X className="h-3.5 w-3.5" />
+                      {role}
+                      <X className="h-3.5 w-3.5" />
                     </button>
                   ))}
                   {roleDraft.trim() && targetRoles.length < 3 && (
                     <button
                       type="button"
                       onClick={() => {
-                        setTargetRoles((roles) => [...new Set([...roles, roleDraft.trim()])].slice(0, 3));
+                        setTargetRoles((roles) =>
+                          [...new Set([...roles, roleDraft.trim()])].slice(0, 3),
+                        );
                         setRoleDraft("");
                       }}
                       className="rounded-full border border-zinc-200 px-3 py-1 text-sm text-zinc-700 hover:border-zinc-300"
@@ -167,7 +191,9 @@ export default function TargetSearchSheet({
                   )}
                 </div>
                 <p className="text-xs text-zinc-500">
-                  {lang === "fr" ? "Ajoutez jusqu’à 3 métiers. Les offres correspondant à l’un d’eux seront classées ensemble." : "Add up to 3 roles. Jobs matching any role are ranked together."}
+                  {lang === "fr"
+                    ? "Ajoutez jusqu’à 3 métiers. Les offres correspondant à l’un d’eux seront classées ensemble."
+                    : "Add up to 3 roles. Jobs matching any role are ranked together."}
                 </p>
                 <FacetPicker
                   label={lang === "fr" ? "Secteurs" : "Sectors"}
@@ -207,7 +233,13 @@ export default function TargetSearchSheet({
                 className="mb-4 flex h-12 w-full items-center justify-center rounded-full gradient-linkedin text-base font-semibold text-white hover:opacity-90 disabled:opacity-60"
                 data-testid="target-search-save"
               >
-                {saving ? <Loader2 className="h-5 w-5 animate-spin" /> : (lang === "fr" ? "Mettre à jour la recherche" : "Update search")}
+                {saving ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : lang === "fr" ? (
+                  "Mettre à jour la recherche"
+                ) : (
+                  "Update search"
+                )}
               </button>
             </div>
           </motion.div>

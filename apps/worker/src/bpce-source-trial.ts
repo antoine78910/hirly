@@ -15,16 +15,11 @@ import {
 } from "@hirly/ingestion";
 import { classifyAtsUrl } from "@hirly/ingestion/ats";
 import { stableDataGouvExternalId } from "@hirly/ingestion/data-gouv";
-import {
-  AtsTrialTransportError,
-  type AtsTrialFetch,
-} from "./providers/ats-trial-transport";
+import { AtsTrialTransportError, type AtsTrialFetch } from "./providers/ats-trial-transport";
 import type { SourceTrialEvidenceRepository } from "./source-trial";
 
-export const BPCE_DATASET_ID =
-  "groupe-bpce-offres-emploi-publiques" as const;
-export const BPCE_RESOURCE_ID =
-  "dc0d68bd-993f-48c1-b645-dbc91c6745b1" as const;
+export const BPCE_DATASET_ID = "groupe-bpce-offres-emploi-publiques" as const;
+export const BPCE_RESOURCE_ID = "dc0d68bd-993f-48c1-b645-dbc91c6745b1" as const;
 export const BPCE_RESOURCE_URL =
   "https://bpce.opendatasoft.com/api/explore/v2.1/catalog/datasets/groupe-bpce-offres-emploi/exports/json" as const;
 export const BPCE_DATASET_PAGE =
@@ -58,13 +53,7 @@ const optionalText = z
   .optional();
 const safeHttpsUrl = z.url().superRefine((value, context) => {
   const url = new URL(value);
-  if (
-    url.protocol !== "https:" ||
-    url.username ||
-    url.password ||
-    url.port ||
-    url.hash
-  ) {
+  if (url.protocol !== "https:" || url.username || url.password || url.port || url.hash) {
     context.addIssue({
       code: "custom",
       message: "BPCE URLs must be credential-free HTTPS URLs",
@@ -157,9 +146,7 @@ const manifestSchema = manifestBaseSchema
     }
   });
 
-export type BpceTrialResourceManifestInput = z.input<
-  typeof manifestBaseSchema
->;
+export type BpceTrialResourceManifestInput = z.input<typeof manifestBaseSchema>;
 export type BpceTrialResourceManifest = z.output<typeof manifestSchema>;
 
 export interface SanitizedBpceRecord {
@@ -242,9 +229,7 @@ export interface BoundBpceTrialTransport {
   }>;
 }
 
-export function sanitizeBpceUpstreamSnapshot(
-  input: unknown,
-): SanitizedBpceSnapshot {
+export function sanitizeBpceUpstreamSnapshot(input: unknown): SanitizedBpceSnapshot {
   const rows = bpceUpstreamSnapshotSchema.parse(input);
   return {
     schemaVersion: "hirly.bpce-sanitized-snapshot.v1",
@@ -270,9 +255,7 @@ export function sealBpceTrialResourceManifest(
   );
 }
 
-export function parseBpceTrialResourceManifest(
-  input: unknown,
-): BpceTrialResourceManifest {
+export function parseBpceTrialResourceManifest(input: unknown): BpceTrialResourceManifest {
   return deepFreeze(manifestSchema.parse(input));
 }
 
@@ -281,9 +264,7 @@ export function createBpceTrialTransport(input: {
   approvedManifestDigests: readonly string[];
   fetch?: AtsTrialFetch;
 }): BoundBpceTrialTransport {
-  const resourceManifest = parseBpceTrialResourceManifest(
-    input.resourceManifest,
-  );
+  const resourceManifest = parseBpceTrialResourceManifest(input.resourceManifest);
   if (!input.approvedManifestDigests.includes(resourceManifest.manifestDigest)) {
     throw new AtsTrialTransportError(
       "permanent",
@@ -313,10 +294,7 @@ export function createBpceTrialTransport(input: {
           "BPCE trial record count does not match its sealed manifest",
         );
       }
-      if (
-        sha256(stableJson(snapshot)) !==
-        resourceManifest.sanitizedContentSha256
-      ) {
+      if (sha256(stableJson(snapshot)) !== resourceManifest.sanitizedContentSha256) {
         throw new AtsTrialTransportError(
           "malformed",
           "BPCE sanitized response digest does not match its sealed manifest",
@@ -340,9 +318,7 @@ export async function previewBpceSourceTrial(input: {
   const now = input.now?.() ?? new Date();
   assertTrialBinding(manifest, input.resourceManifest, now);
   const transport = createBpceTrialTransport(input);
-  const fetched = await transport.fetch(
-    input.signal ?? new AbortController().signal,
-  );
+  const fetched = await transport.fetch(input.signal ?? new AbortController().signal);
   if (fetched.snapshot.records.length > manifest.budget.maxCandidates) {
     throw new Error("trial_budget_exceeded:maxCandidates");
   }
@@ -403,9 +379,7 @@ export async function previewBpceSourceTrial(input: {
     normalized: candidates.length,
     rejected,
     deduplicated,
-    actionable: candidates.filter(
-      (candidate) => candidate.candidate.manualFulfillmentReady,
-    ).length,
+    actionable: candidates.filter((candidate) => candidate.candidate.manualFulfillmentReady).length,
     resourceManifest: transport.resourceManifest,
     evidencePage,
     candidates,
@@ -526,11 +500,7 @@ function normalizedJob(record: SanitizedBpceRecord): NormalizedProviderJob {
   return {
     envelope: {
       provider: "data_gouv",
-      externalId: stableDataGouvExternalId(
-        BPCE_DATASET_ID,
-        BPCE_RESOURCE_ID,
-        record.reference,
-      ),
+      externalId: stableDataGouvExternalId(BPCE_DATASET_ID, BPCE_RESOURCE_ID, record.reference),
       payload: {
         datasetId: BPCE_DATASET_ID,
         resourceId: BPCE_RESOURCE_ID,
@@ -550,23 +520,14 @@ function normalizedJob(record: SanitizedBpceRecord): NormalizedProviderJob {
 
 function parseBpceTimestamp(value: string | null | undefined): string | null {
   if (!value) return null;
-  const match = value.match(
-    /^(\d{2})\/(\d{2})\/(\d{4})\s+(\d{1,2}):(\d{2}):(\d{2})\s*([AP]M)$/i,
-  );
+  const match = value.match(/^(\d{2})\/(\d{2})\/(\d{4})\s+(\d{1,2}):(\d{2}):(\d{2})\s*([AP]M)$/i);
   if (!match) return null;
   const [, day, month, year, rawHour, minute, second, period] = match;
   let hour = Number(rawHour);
   if (period?.toUpperCase() === "PM" && hour !== 12) hour += 12;
   if (period?.toUpperCase() === "AM" && hour === 12) hour = 0;
   return new Date(
-    Date.UTC(
-      Number(year),
-      Number(month) - 1,
-      Number(day),
-      hour,
-      Number(minute),
-      Number(second),
-    ),
+    Date.UTC(Number(year), Number(month) - 1, Number(day), hour, Number(minute), Number(second)),
   ).toISOString();
 }
 
@@ -603,12 +564,9 @@ async function fetchBpceJson(input: {
       );
     } catch (error) {
       if (input.signal.aborted) {
-        throw new AtsTrialTransportError(
-          "cancelled",
-          "BPCE trial request cancelled",
-          null,
-          { cause: error },
-        );
+        throw new AtsTrialTransportError("cancelled", "BPCE trial request cancelled", null, {
+          cause: error,
+        });
       }
       throw new AtsTrialTransportError(
         controller.signal.aborted ? "budget_exceeded" : "retryable",
@@ -621,9 +579,7 @@ async function fetchBpceJson(input: {
     }
     if (!response.ok) throw classifyHttpStatus(response.status);
     const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
-    if (
-      !/^application\/(?:[a-z0-9.+-]+\+)?json(?:\s*;|$)/.test(contentType)
-    ) {
+    if (!/^application\/(?:[a-z0-9.+-]+\+)?json(?:\s*;|$)/.test(contentType)) {
       throw new AtsTrialTransportError(
         "malformed",
         "BPCE trial response must use a JSON content type",
@@ -633,8 +589,7 @@ async function fetchBpceJson(input: {
     const declaredLength = response.headers.get("content-length");
     if (
       declaredLength !== null &&
-      (!/^\d+$/.test(declaredLength) ||
-        Number(declaredLength) > input.maxBytes)
+      (!/^\d+$/.test(declaredLength) || Number(declaredLength) > input.maxBytes)
     ) {
       throw new AtsTrialTransportError(
         "budget_exceeded",
@@ -644,11 +599,7 @@ async function fetchBpceJson(input: {
     }
     let bytes: Uint8Array;
     try {
-      bytes = await readBoundedBody(
-        response,
-        input.maxBytes,
-        controller.signal,
-      );
+      bytes = await readBoundedBody(response, input.maxBytes, controller.signal);
     } catch (error) {
       if (error instanceof AtsTrialTransportError) throw error;
       if (input.signal.aborted) {
@@ -734,10 +685,7 @@ async function readBoundedBody(
   return body;
 }
 
-async function awaitWithAbort<T>(
-  promise: Promise<T>,
-  signal: AbortSignal,
-): Promise<T> {
+async function awaitWithAbort<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
   if (signal.aborted) throw signal.reason;
   return await new Promise<T>((resolve, reject) => {
     const onAbort = () => reject(signal.reason);
@@ -765,11 +713,7 @@ function classifyHttpStatus(status: number): AtsTrialTransportError {
   if (status >= 500) {
     return new AtsTrialTransportError("retryable", "BPCE provider failed", status);
   }
-  return new AtsTrialTransportError(
-    "permanent",
-    "BPCE provider rejected the request",
-    status,
-  );
+  return new AtsTrialTransportError("permanent", "BPCE provider rejected the request", status);
 }
 
 function assertTrialBinding(
@@ -792,10 +736,7 @@ function assertTrialBinding(
   }
   const requestedAt = new Date(manifest.requestedAt);
   const expiresAt = new Date(manifest.expiresAt);
-  if (
-    requestedAt.getTime() > now.getTime() ||
-    expiresAt.getTime() <= now.getTime()
-  ) {
+  if (requestedAt.getTime() > now.getTime() || expiresAt.getTime() <= now.getTime()) {
     throw new Error("trial_policy_window_invalid");
   }
 }
@@ -827,10 +768,7 @@ function classifyFailure(
   }
   if (error instanceof AtsTrialTransportError) {
     return {
-      status:
-        error.classification === "budget_exceeded"
-          ? "budget_exhausted"
-          : "failed",
+      status: error.classification === "budget_exceeded" ? "budget_exhausted" : "failed",
       stopReason: error.classification,
     };
   }
@@ -838,9 +776,7 @@ function classifyFailure(
   if (message.startsWith("trial_budget_exceeded:")) {
     return {
       status: "budget_exhausted",
-      stopReason: sourceTrialBudgetStopReasonSchema.parse(
-        message.slice("trial_".length),
-      ),
+      stopReason: sourceTrialBudgetStopReasonSchema.parse(message.slice("trial_".length)),
     };
   }
   if (message === "trial_policy_window_invalid") {

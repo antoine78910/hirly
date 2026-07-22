@@ -41,9 +41,9 @@ export function shouldPrefetchSwipeFeedPage(input: {
   inFlightCursor?: string | null;
 }): boolean {
   return Boolean(
-    input.nextCursor
-    && input.remainingJobs <= SWIPE_FEED_PREFETCH_THRESHOLD
-    && input.inFlightCursor !== input.nextCursor,
+    input.nextCursor &&
+      input.remainingJobs <= SWIPE_FEED_PREFETCH_THRESHOLD &&
+      input.inFlightCursor !== input.nextCursor,
   );
 }
 
@@ -56,7 +56,7 @@ type FeedMeta = {
 
 function toEmptyReason(value: unknown): SwipeFeedEmptyReason | null {
   return typeof value === "string" && SWIPE_FEED_EMPTY_REASONS.has(value as SwipeFeedEmptyReason)
-    ? value as SwipeFeedEmptyReason
+    ? (value as SwipeFeedEmptyReason)
     : null;
 }
 
@@ -86,9 +86,9 @@ export function resolveSwipeFeedViewState(input: {
   const reason = emptyReason(input.feedMeta);
   const inventoryState = input.feedMeta?.inventoryState ?? input.feedMeta?.inventory_state;
   if (
-    inventoryState === "matching_pending"
-    || reason === "MATCHING_PENDING"
-    || reason === "PROJECTION_LAG"
+    inventoryState === "matching_pending" ||
+    reason === "MATCHING_PENDING" ||
+    reason === "PROJECTION_LAG"
   ) {
     return { kind: "projection_lag", emptyReason: reason ?? "PROJECTION_LAG" };
   }
@@ -107,7 +107,12 @@ export function resolveSwipeFeedViewState(input: {
   return { kind: "legacy_empty", emptyReason: reason };
 }
 
-export type SwipeFeedSuggestionId = "preferences" | "location" | "radius" | "filters" | "revisit_later";
+export type SwipeFeedSuggestionId =
+  | "preferences"
+  | "location"
+  | "radius"
+  | "filters"
+  | "revisit_later";
 
 export type SwipeFeedSuggestion = { id: SwipeFeedSuggestionId };
 
@@ -124,22 +129,33 @@ export function resolveSwipeFeedSuggestions(input: {
   const locations = Array.isArray(filters.locations) ? filters.locations : [];
   const locationsData = Array.isArray(filters.locationsData) ? filters.locationsData : [];
   const hasLocation = Boolean(
-    input.targetLocationData || filters.locationData || locationsData.length || locations.length
-    || (input.targetLocation && input.targetLocation !== "Anywhere"),
+    input.targetLocationData ||
+      filters.locationData ||
+      locationsData.length ||
+      locations.length ||
+      (input.targetLocation && input.targetLocation !== "Anywhere"),
   );
   const radius = String(filters.searchRadius || "50km").toLowerCase();
   const radiusIsWorldwide = radius === "worldwide" || Number.parseInt(radius, 10) >= 500;
-  const arrays = ["workLocations", "jobTypes", "experience", "onlyCompanies", "hideCompanies", "onlyIndustries", "hideIndustries"];
+  const arrays = [
+    "workLocations",
+    "jobTypes",
+    "experience",
+    "onlyCompanies",
+    "hideCompanies",
+    "onlyIndustries",
+    "hideIndustries",
+  ];
   const hasBroadenableFilter = Boolean(
-    Number(filters.minSalary || 0) > 0
-    || (filters.postedDate && filters.postedDate !== "any")
-    || arrays.some((key) => {
-      const value = filters[key];
-      return Array.isArray(value) && value.length > 0;
-    })
-    || filters.includeUnknownLocation === false
-    || filters.includeUnknownSalary === false
-    || filters.onlyMyCountry === true,
+    Number(filters.minSalary || 0) > 0 ||
+      (filters.postedDate && filters.postedDate !== "any") ||
+      arrays.some((key) => {
+        const value = filters[key];
+        return Array.isArray(value) && value.length > 0;
+      }) ||
+      filters.includeUnknownLocation === false ||
+      filters.includeUnknownSalary === false ||
+      filters.onlyMyCountry === true,
   );
   const suggestions: SwipeFeedSuggestion[] = [{ id: "preferences" }];
   if (hasLocation) suggestions.push({ id: "location" });
@@ -171,12 +187,7 @@ export function deriveFinalCursorActionedReason(input: {
 
 export function sanitizeSwipeFeedParams(params: URLSearchParams): URLSearchParams {
   const safe = new URLSearchParams(params);
-  for (const key of [
-    "prefetch",
-    "refresh",
-    "provider_refresh",
-    "background_refresh",
-  ]) {
+  for (const key of ["prefetch", "refresh", "provider_refresh", "background_refresh"]) {
     safe.delete(key);
   }
   return safe;

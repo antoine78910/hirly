@@ -1,9 +1,4 @@
-import type {
-  ClaimedTask,
-  Lease,
-  ProviderWorkClaim,
-  WorkerRepository,
-} from "@hirly/db";
+import type { ClaimedTask, Lease, ProviderWorkClaim, WorkerRepository } from "@hirly/db";
 import type {
   CanonicalJob,
   EnqueueRun,
@@ -36,14 +31,8 @@ export interface RuntimeStore {
     providerClaim: ProviderWorkClaim,
     leaseSeconds: number,
   ): Promise<boolean>;
-  finishProviderWork?(
-    lease: Lease,
-    providerClaim: ProviderWorkClaim,
-  ): Promise<boolean>;
-  releaseProviderWork?(
-    lease: Lease,
-    providerClaim: ProviderWorkClaim,
-  ): Promise<boolean>;
+  finishProviderWork?(lease: Lease, providerClaim: ProviderWorkClaim): Promise<boolean>;
+  releaseProviderWork?(lease: Lease, providerClaim: ProviderWorkClaim): Promise<boolean>;
   writeJobsAndComplete?(
     lease: Lease,
     providerClaim: ProviderWorkClaim,
@@ -80,10 +69,7 @@ export interface DueSchedule {
 }
 
 export interface TaskHandler {
-  (
-    task: ClaimedTask,
-    signal: AbortSignal,
-  ): Promise<TaskHandlerResult | void>;
+  (task: ClaimedTask, signal: AbortSignal): Promise<TaskHandlerResult | void>;
 }
 
 export interface TaskHandlerResult {

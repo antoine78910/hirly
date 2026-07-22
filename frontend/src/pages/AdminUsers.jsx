@@ -11,7 +11,12 @@ const fmtDate = (value) => {
   if (!value) return "";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return String(value);
-  return date.toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  return date.toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 };
 
 const PLAN_LABELS = {
@@ -24,11 +29,17 @@ const PLAN_LABELS = {
 
 function PlanBadge({ plan, isPremium }) {
   if (!isPremium) {
-    return <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-500">Free</span>;
+    return (
+      <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-500">
+        Free
+      </span>
+    );
   }
   const label = PLAN_LABELS[plan] || plan || "Paid";
   return (
-    <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700">{label}</span>
+    <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700">
+      {label}
+    </span>
   );
 }
 
@@ -163,7 +174,7 @@ export default function AdminUsers() {
     <AdminShell
       title="Users"
       subtitle="Account management, billing, and profile status. For onboarding insights see User Analytics."
-      actions={(
+      actions={
         <div className="flex items-center gap-3">
           <button
             type="button"
@@ -179,12 +190,23 @@ export default function AdminUsers() {
           >
             Paying only ({payingCount})
           </button>
-          <Button variant="outline" onClick={load} disabled={loading}>{loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}Refresh</Button>
+          <Button variant="outline" onClick={load} disabled={loading}>
+            {loading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <RefreshCw className="h-4 w-4" />
+            )}
+            Refresh
+          </Button>
         </div>
-      )}
+      }
     >
-      {accessDenied ? <AdminAccessDenied /> : error ? (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">{error}</div>
+      {accessDenied ? (
+        <AdminAccessDenied />
+      ) : error ? (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+          {error}
+        </div>
       ) : null}
 
       {!accessDenied ? (
@@ -197,7 +219,9 @@ export default function AdminUsers() {
               placeholder="Search by email, name, or user ID…"
               className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm outline-none ring-violet-200 focus:ring-2 sm:max-w-sm"
             />
-            <p className="text-xs text-zinc-500 sm:ml-auto">{pagination.total || 0} user(s) match</p>
+            <p className="text-xs text-zinc-500 sm:ml-auto">
+              {pagination.total || 0} user(s) match
+            </p>
           </div>
 
           <div className="rounded-lg border border-violet-200 bg-violet-50 p-4 shadow-sm">
@@ -265,30 +289,51 @@ export default function AdminUsers() {
             </thead>
             <tbody className="divide-y divide-zinc-100">
               {loading ? (
-                <tr><td className="px-4 py-8 text-center text-zinc-500" colSpan={10}><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>
-              ) : users.length ? users.map((user) => (
-                <tr key={user.user_id} className="hover:bg-zinc-50">
-                  <td className="px-4 py-3">
-                    <Link className="font-semibold text-linkedin hover:underline" to={`/admin/users/${user.user_id}`}>{user.email || user.user_id}</Link>
-                    <p className="mt-0.5 text-xs text-zinc-400">{user.user_id}</p>
+                <tr>
+                  <td className="px-4 py-8 text-center text-zinc-500" colSpan={10}>
+                    <Loader2 className="mx-auto h-5 w-5 animate-spin" />
                   </td>
-                  <td className="px-4 py-3">{user.name || "Unknown"}</td>
-                  <td className="px-4 py-3"><PlanBadge plan={user.plan} isPremium={user.is_premium} /></td>
-                  <td className="px-4 py-3 text-zinc-600">
-                    {user.is_premium ? `${user.credits_remaining ?? 0} / ${user.credits_total ?? 0}` : "—"}
-                  </td>
-                  <td className="px-4 py-3">{user.profile_completion || 0}%</td>
-                  <td className="px-4 py-3">{user.cv_uploaded ? "Yes" : "No"}</td>
-                  <td className="px-4 py-3">{user.total_applications || 0}</td>
-                  <td className="px-4 py-3">
-                    <span className="font-semibold text-zinc-800">{user.total_swipes || 0}</span>
-                    <p className="mt-0.5 text-xs text-zinc-400">{user.right_swipes || 0} right · {user.left_swipes || 0} left</p>
-                  </td>
-                  <td className="px-4 py-3">{user.demo_account ? "Yes" : "—"}</td>
-                  <td className="px-4 py-3">{fmtDate(user.last_active_at || user.created_at)}</td>
                 </tr>
-              )) : (
-                <tr><td className="px-4 py-8 text-center text-zinc-500" colSpan={10}>No users found.</td></tr>
+              ) : users.length ? (
+                users.map((user) => (
+                  <tr key={user.user_id} className="hover:bg-zinc-50">
+                    <td className="px-4 py-3">
+                      <Link
+                        className="font-semibold text-linkedin hover:underline"
+                        to={`/admin/users/${user.user_id}`}
+                      >
+                        {user.email || user.user_id}
+                      </Link>
+                      <p className="mt-0.5 text-xs text-zinc-400">{user.user_id}</p>
+                    </td>
+                    <td className="px-4 py-3">{user.name || "Unknown"}</td>
+                    <td className="px-4 py-3">
+                      <PlanBadge plan={user.plan} isPremium={user.is_premium} />
+                    </td>
+                    <td className="px-4 py-3 text-zinc-600">
+                      {user.is_premium
+                        ? `${user.credits_remaining ?? 0} / ${user.credits_total ?? 0}`
+                        : "—"}
+                    </td>
+                    <td className="px-4 py-3">{user.profile_completion || 0}%</td>
+                    <td className="px-4 py-3">{user.cv_uploaded ? "Yes" : "No"}</td>
+                    <td className="px-4 py-3">{user.total_applications || 0}</td>
+                    <td className="px-4 py-3">
+                      <span className="font-semibold text-zinc-800">{user.total_swipes || 0}</span>
+                      <p className="mt-0.5 text-xs text-zinc-400">
+                        {user.right_swipes || 0} right · {user.left_swipes || 0} left
+                      </p>
+                    </td>
+                    <td className="px-4 py-3">{user.demo_account ? "Yes" : "—"}</td>
+                    <td className="px-4 py-3">{fmtDate(user.last_active_at || user.created_at)}</td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td className="px-4 py-8 text-center text-zinc-500" colSpan={10}>
+                    No users found.
+                  </td>
+                </tr>
               )}
             </tbody>
           </table>

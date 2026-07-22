@@ -1,19 +1,12 @@
 import { z } from "zod";
-import {
-  DisabledProviderTransport,
-  type ProviderCore,
-} from "../core";
+import { DisabledProviderTransport, type ProviderCore } from "../core";
 import {
   FixtureOnlyAtsSourceAdapter,
   requireBoundAtsUrl,
   type AtsFixtureCursor,
   type AtsFixtureScope,
 } from "../ats-fixture";
-import {
-  IngestionError,
-  type SourceAdapter,
-  type SourceContext,
-} from "@hirly/ingestion";
+import { IngestionError, type SourceAdapter, type SourceContext } from "@hirly/ingestion";
 import {
   fetchBoundedAtsJson,
   parseAtsTrialOptions,
@@ -54,11 +47,7 @@ export type LeverTrialRegion = "global" | "eu";
 // This is a fixture safety ceiling, not a claim about a vendor quota.
 const rateLimit = { requestsPerMinute: 1, concurrency: 1 } as const;
 
-function normalized(
-  rawValue: LeverRawJob,
-  tenantKey: string,
-  fallbackCountryCode: string,
-) {
+function normalized(rawValue: LeverRawJob, tenantKey: string, fallbackCountryCode: string) {
   const raw = leverRawJobSchema.parse(rawValue);
   const allowedHosts = ["jobs.lever.co", "jobs.eu.lever.co"] as const;
   const hostedUrl = requireBoundAtsUrl({
@@ -84,13 +73,8 @@ function normalized(
     );
   }
   const countryCode = raw.country?.toUpperCase() ?? fallbackCountryCode;
-  const location =
-    raw.categories.location ??
-    raw.categories.allLocations?.join(", ") ??
-    "Remote";
-  const description = [raw.descriptionPlain, raw.additionalPlain]
-    .filter(Boolean)
-    .join("\n\n");
+  const location = raw.categories.location ?? raw.categories.allLocations?.join(", ") ?? "Remote";
+  const description = [raw.descriptionPlain, raw.additionalPlain].filter(Boolean).join("\n\n");
   return {
     envelope: {
       provider: "lever" as const,
@@ -138,13 +122,11 @@ export const leverProvider: ProviderCore<LeverRawJob> = {
 };
 
 class LeverFixtureSourceAdapter extends FixtureOnlyAtsSourceAdapter<LeverRawJob> {
-  protected readonly documentationUrl =
-    "https://github.com/lever/postings-api";
+  protected readonly documentationUrl = "https://github.com/lever/postings-api";
 
   normalize(rawValue: LeverRawJob, context: SourceContext) {
     const raw = leverRawJobSchema.parse(rawValue);
-    const tenantKey =
-      context.source.tenantKey ?? context.source.sourceKey;
+    const tenantKey = context.source.tenantKey ?? context.source.sourceKey;
     const countryCode = context.source.countryCodes[0] ?? "ZZ";
     const job = normalized(raw, tenantKey, countryCode);
     return {
@@ -165,12 +147,7 @@ export function createLeverFixtureSourceAdapter(
   rows: readonly LeverRawJob[],
   fixturePolicyId: string,
 ): SourceAdapter<LeverRawJob, AtsFixtureCursor, AtsFixtureScope> {
-  return new LeverFixtureSourceAdapter(
-    "lever",
-    rateLimit,
-    rows,
-    fixturePolicyId,
-  );
+  return new LeverFixtureSourceAdapter("lever", rateLimit, rows, fixturePolicyId);
 }
 
 export function createLeverTrialTransport(
@@ -180,11 +157,8 @@ export function createLeverTrialTransport(
   fetch(signal: AbortSignal): Promise<readonly LeverRawJob[]>;
 } {
   const parsed = parseAtsTrialOptions(options);
-  const host =
-    options.region === "eu" ? "api.eu.lever.co" : "api.lever.co";
-  const url = new URL(
-    `https://${host}/v0/postings/${encodeURIComponent(parsed.approvedTenantId)}`,
-  );
+  const host = options.region === "eu" ? "api.eu.lever.co" : "api.lever.co";
+  const url = new URL(`https://${host}/v0/postings/${encodeURIComponent(parsed.approvedTenantId)}`);
   url.searchParams.set("mode", "json");
   return {
     trialOnly: true,

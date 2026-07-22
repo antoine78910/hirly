@@ -3,8 +3,9 @@ import { createRoot, type Root } from "react-dom/client";
 
 import FrontendVersionChecker from "./FrontendVersionChecker";
 
-(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean })
-  .IS_REACT_ACT_ENVIRONMENT = true;
+(
+  globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
+).IS_REACT_ACT_ENVIRONMENT = true;
 
 let mockLang: "en" | "fr" = "en";
 
@@ -45,12 +46,7 @@ describe("FrontendVersionChecker", () => {
     const onRefresh = jest.fn();
     mockLang = "fr";
     await act(async () => {
-      root.render(
-        <FrontendVersionChecker
-          checkForUpdate={checkForUpdate}
-          onRefresh={onRefresh}
-        />,
-      );
+      root.render(<FrontendVersionChecker checkForUpdate={checkForUpdate} onRefresh={onRefresh} />);
     });
 
     expect(document.body.textContent).toContain("Une nouvelle version de Hirly");
@@ -68,12 +64,7 @@ describe("FrontendVersionChecker", () => {
   it("lets a user dismiss the update for this session without checking or reopening again", async () => {
     const checkForUpdate = jest.fn().mockResolvedValue(true);
     await act(async () => {
-      root.render(
-        <FrontendVersionChecker
-          checkForUpdate={checkForUpdate}
-          intervalMs={1000}
-        />,
-      );
+      root.render(<FrontendVersionChecker checkForUpdate={checkForUpdate} intervalMs={1000} />);
     });
 
     const cancel = document.querySelector(
@@ -98,12 +89,7 @@ describe("FrontendVersionChecker", () => {
   it("lets a user dismiss the update with Escape without checking or reopening again", async () => {
     const checkForUpdate = jest.fn().mockResolvedValue(true);
     await act(async () => {
-      root.render(
-        <FrontendVersionChecker
-          checkForUpdate={checkForUpdate}
-          intervalMs={1000}
-        />,
-      );
+      root.render(<FrontendVersionChecker checkForUpdate={checkForUpdate} intervalMs={1000} />);
     });
 
     act(() => {
@@ -123,17 +109,9 @@ describe("FrontendVersionChecker", () => {
   });
 
   it("checks again on the polling interval without requiring navigation", async () => {
-    const checkForUpdate = jest
-      .fn()
-      .mockResolvedValueOnce(false)
-      .mockResolvedValueOnce(true);
+    const checkForUpdate = jest.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true);
     await act(async () => {
-      root.render(
-        <FrontendVersionChecker
-          checkForUpdate={checkForUpdate}
-          intervalMs={1000}
-        />,
-      );
+      root.render(<FrontendVersionChecker checkForUpdate={checkForUpdate} intervalMs={1000} />);
     });
 
     await act(async () => {
@@ -146,17 +124,9 @@ describe("FrontendVersionChecker", () => {
   });
 
   it("closes a shown update dialog once the backend reports the matching version", async () => {
-    const checkForUpdate = jest
-      .fn()
-      .mockResolvedValueOnce(true)
-      .mockResolvedValueOnce(false);
+    const checkForUpdate = jest.fn().mockResolvedValueOnce(true).mockResolvedValueOnce(false);
     await act(async () => {
-      root.render(
-        <FrontendVersionChecker
-          checkForUpdate={checkForUpdate}
-          intervalMs={1000}
-        />,
-      );
+      root.render(<FrontendVersionChecker checkForUpdate={checkForUpdate} intervalMs={1000} />);
     });
 
     expect(document.querySelector("[data-testid='frontend-update-dialog']")).not.toBeNull();

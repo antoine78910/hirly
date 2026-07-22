@@ -32,7 +32,10 @@ export function normalizeLocationData(location, locationData) {
   const trimmed = (location || "").trim();
   if (!trimmed) return null;
 
-  const parts = trimmed.split(",").map((part) => part.trim()).filter(Boolean);
+  const parts = trimmed
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
   const country = parts.length > 1 ? parts[parts.length - 1] : "";
 
   return enrichLocationData({
@@ -46,11 +49,21 @@ export function normalizeLocationData(location, locationData) {
   });
 }
 
-export async function saveTargetPreferences({ role, roles, sectorIds, industryIds, location, locationData }) {
-  const selectedRoles = [...new Set([
-    ...(Array.isArray(roles) ? roles : []),
-    role,
-  ].map((value) => String(value || "").trim()).filter(Boolean))].slice(0, 3);
+export async function saveTargetPreferences({
+  role,
+  roles,
+  sectorIds,
+  industryIds,
+  location,
+  locationData,
+}) {
+  const selectedRoles = [
+    ...new Set(
+      [...(Array.isArray(roles) ? roles : []), role]
+        .map((value) => String(value || "").trim())
+        .filter(Boolean),
+    ),
+  ].slice(0, 3);
   const primaryRole = selectedRoles[0] || "";
   if (!primaryRole) {
     toast.error("Please enter a job title");

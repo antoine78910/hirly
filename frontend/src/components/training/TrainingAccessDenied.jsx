@@ -15,8 +15,8 @@ export default function TrainingAccessDenied() {
         Training is invite-only
       </h1>
       <p className="mt-3 max-w-md text-sm leading-relaxed text-zinc-500">
-        You need a personal invitation link from the Hirly team to access the creator training.
-        Open the link you received by email, or ask your contact for a new one.
+        You need a personal invitation link from the Hirly team to access the creator training. Open
+        the link you received by email, or ask your contact for a new one.
       </p>
 
       {invitePath ? (
@@ -29,14 +29,12 @@ export default function TrainingAccessDenied() {
         </Link>
       ) : (
         <p className="mt-6 text-xs text-zinc-400">
-          If you already have a 6-digit code, complete onboarding or open your invitation link directly.
+          If you already have a 6-digit code, complete onboarding or open your invitation link
+          directly.
         </p>
       )}
 
-      <Link
-        to="/"
-        className="mt-8 text-sm font-semibold text-violet-600 hover:underline"
-      >
+      <Link to="/" className="mt-8 text-sm font-semibold text-violet-600 hover:underline">
         Back to Hirly
       </Link>
     </div>

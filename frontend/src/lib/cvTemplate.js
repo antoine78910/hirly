@@ -52,9 +52,15 @@ export function parseLanguageEntry(entry) {
 }
 
 export function contactInitials(name) {
-  const parts = String(name || "CV").trim().split(/\s+/).filter(Boolean);
+  const parts = String(name || "CV")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
   if (!parts.length) return "CV";
-  return parts.slice(0, 2).map((part) => part[0]?.toUpperCase() || "").join("");
+  return parts
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() || "")
+    .join("");
 }
 
 export function getContactPhotoUrl(contact = {}) {
@@ -91,7 +97,10 @@ export function socialLinksFromContact(contact = {}) {
   return links;
 }
 
-export function estimateProfessionalContentHeight({ contact = {}, resume = {} }, { contentStartPt } = {}) {
+export function estimateProfessionalContentHeight(
+  { contact = {}, resume = {} },
+  { contentStartPt } = {},
+) {
   const socialLinks = socialLinksFromContact(contact);
   const contactBlocks = [contact.location, contact.phone, contact.email].filter(Boolean).length;
   let height = 0;
@@ -126,11 +135,14 @@ export function estimateProfessionalContentHeight({ contact = {}, resume = {} },
   return height;
 }
 
-export function computeVerticalFillScale(contentHeight, {
-  contentStart = PRO_CV_LAYOUT_PHOTO.contentStartPt,
-  pageHeight = PRO_CV_PAGE.heightPt,
-  bottomMargin = 36,
-} = {}) {
+export function computeVerticalFillScale(
+  contentHeight,
+  {
+    contentStart = PRO_CV_LAYOUT_PHOTO.contentStartPt,
+    pageHeight = PRO_CV_PAGE.heightPt,
+    bottomMargin = 36,
+  } = {},
+) {
   const available = pageHeight - contentStart - bottomMargin;
   if (!contentHeight || contentHeight >= available) return 1;
   return Math.min(1.35, Math.max(1, available / contentHeight));

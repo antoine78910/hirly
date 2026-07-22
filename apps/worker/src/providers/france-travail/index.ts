@@ -1,8 +1,5 @@
 import { z } from "zod";
-import {
-  DisabledProviderTransport,
-  type ProviderCore,
-} from "../core";
+import { DisabledProviderTransport, type ProviderCore } from "../core";
 
 const optionalText = z.string().trim().min(1).nullable().optional();
 
@@ -50,13 +47,10 @@ export type FranceTravailRawJob = z.output<typeof franceTravailRawJobSchema>;
 
 function applyUrls(raw: FranceTravailRawJob): string[] {
   const detail =
-    `https://candidat.francetravail.fr/offres/recherche/detail/` +
-    encodeURIComponent(raw.id);
-  return [
-    raw.contact.urlPostulation,
-    raw.origineOffre.urlOrigine,
-    detail,
-  ].filter((value): value is string => Boolean(value));
+    `https://candidat.francetravail.fr/offres/recherche/detail/` + encodeURIComponent(raw.id);
+  return [raw.contact.urlPostulation, raw.origineOffre.urlOrigine, detail].filter(
+    (value): value is string => Boolean(value),
+  );
 }
 
 export const franceTravailProvider: ProviderCore<FranceTravailRawJob> = {
@@ -80,14 +74,8 @@ export const franceTravailProvider: ProviderCore<FranceTravailRawJob> = {
     provider: "france_travail",
     normalizeRaw(value) {
       const raw = franceTravailRawJobSchema.parse(value);
-      const company =
-        raw.entreprise.nom ??
-        raw.entreprise.enseigne ??
-        "Entreprise confidentielle";
-      const location =
-        raw.lieuTravail.libelle ??
-        raw.lieuTravail.commune ??
-        "France";
+      const company = raw.entreprise.nom ?? raw.entreprise.enseigne ?? "Entreprise confidentielle";
+      const location = raw.lieuTravail.libelle ?? raw.lieuTravail.commune ?? "France";
       return {
         envelope: {
           provider: "france_travail",
@@ -105,7 +93,5 @@ export const franceTravailProvider: ProviderCore<FranceTravailRawJob> = {
       };
     },
   },
-  transport: new DisabledProviderTransport<FranceTravailRawJob>(
-    "france_travail",
-  ),
+  transport: new DisabledProviderTransport<FranceTravailRawJob>("france_travail"),
 };

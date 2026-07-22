@@ -91,7 +91,12 @@ const fmtDateLong = (iso) => {
   if (!iso) return "";
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return String(iso);
-  return date.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" });
+  return date.toLocaleDateString("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  });
 };
 
 const fmtPostedAt = (value) => {
@@ -148,32 +153,57 @@ function DeltaBadge({ value, suffix = "" }) {
   const positive = num > 0;
   const Icon = positive ? TrendingUp : TrendingDown;
   return (
-    <span className={`inline-flex items-center gap-1 text-xs font-semibold ${positive ? "text-emerald-600" : "text-rose-600"}`}>
+    <span
+      className={`inline-flex items-center gap-1 text-xs font-semibold ${positive ? "text-emerald-600" : "text-rose-600"}`}
+    >
       <Icon className="h-3.5 w-3.5" />
-      {fmtSigned(num)}{suffix}
+      {fmtSigned(num)}
+      {suffix}
     </span>
   );
 }
 
-function KpiCard({ icon: Icon, label, value, delta, deltaSuffix, accent = "text-zinc-600", href, hint }) {
+function KpiCard({
+  icon: Icon,
+  label,
+  value,
+  delta,
+  deltaSuffix,
+  accent = "text-zinc-600",
+  href,
+  hint,
+}) {
   return (
     <div className="group relative overflow-hidden rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm transition hover:border-zinc-300 hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-zinc-700">
       <div className="flex items-start justify-between gap-3">
-        <div className={`flex h-9 w-9 items-center justify-center rounded-xl bg-zinc-100 dark:bg-zinc-800 ${accent}`}>
+        <div
+          className={`flex h-9 w-9 items-center justify-center rounded-xl bg-zinc-100 dark:bg-zinc-800 ${accent}`}
+        >
           <Icon className="h-4 w-4" />
         </div>
         {href ? (
-          <a href={href} target="_blank" rel="noreferrer" className="text-xs font-medium text-linkedin transition hover:text-linkedin-dark">
+          <a
+            href={href}
+            target="_blank"
+            rel="noreferrer"
+            className="text-xs font-medium text-linkedin transition hover:text-linkedin-dark"
+          >
             Open
           </a>
         ) : null}
       </div>
-      <p className="mt-4 text-xs font-medium uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{label}</p>
-      <p className="mt-1 font-display text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">{fmtCompact(value)}</p>
+      <p className="mt-4 text-xs font-medium uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+        {label}
+      </p>
+      <p className="mt-1 font-display text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
+        {fmtCompact(value)}
+      </p>
       <div className="mt-2">
         <DeltaBadge value={delta} suffix={deltaSuffix} />
       </div>
-      {hint ? <p className="mt-2 text-[11px] leading-snug text-zinc-500 dark:text-zinc-400">{hint}</p> : null}
+      {hint ? (
+        <p className="mt-2 text-[11px] leading-snug text-zinc-500 dark:text-zinc-400">{hint}</p>
+      ) : null}
     </div>
   );
 }
@@ -183,17 +213,29 @@ function ChartTooltip({ active, payload, usesLikesProxy }) {
   const row = payload[0]?.payload;
   return (
     <div className="rounded-xl border border-zinc-200 bg-white px-4 py-3 text-xs shadow-lg dark:border-zinc-700 dark:bg-zinc-900">
-      <p className="mb-2 font-semibold text-zinc-900 dark:text-zinc-100">{fmtDateLong(row?.date)}</p>
+      <p className="mb-2 font-semibold text-zinc-900 dark:text-zinc-100">
+        {fmtDateLong(row?.date)}
+      </p>
       <div className="space-y-1.5">
         <div className="flex items-center gap-2 text-zinc-600 dark:text-zinc-300">
-          <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: ORANGE }} />
+          <span
+            className="inline-block h-2.5 w-2.5 rounded-sm"
+            style={{ backgroundColor: ORANGE }}
+          />
           Posted videos
-          <span className="ml-auto font-semibold text-zinc-900 tabular-nums dark:text-zinc-100">{row?.posted_videos ?? 0}</span>
+          <span className="ml-auto font-semibold text-zinc-900 tabular-nums dark:text-zinc-100">
+            {row?.posted_videos ?? 0}
+          </span>
         </div>
         <div className="flex items-center gap-2 text-zinc-600 dark:text-zinc-300">
-          <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: BLUE }} />
+          <span
+            className="inline-block h-2.5 w-2.5 rounded-full"
+            style={{ backgroundColor: BLUE }}
+          />
           {usesLikesProxy ? "Likes" : "Views"}
-          <span className="ml-auto font-semibold text-zinc-900 tabular-nums dark:text-zinc-100">{fmtCompact(usesLikesProxy ? row?.likes : row?.views)}</span>
+          <span className="ml-auto font-semibold text-zinc-900 tabular-nums dark:text-zinc-100">
+            {fmtCompact(usesLikesProxy ? row?.likes : row?.views)}
+          </span>
         </div>
       </div>
     </div>
@@ -242,10 +284,11 @@ function videoEngagementRate(video, usesLikesProxy = false) {
   }
   const views = videoReachViews(video, usesLikesProxy);
   if (views <= 0) return 0;
-  const interactions = Number(video?.likes || 0)
-    + Number(video?.favorites || 0)
-    + Number(video?.comments || 0)
-    + Number(video?.shares || 0);
+  const interactions =
+    Number(video?.likes || 0) +
+    Number(video?.favorites || 0) +
+    Number(video?.comments || 0) +
+    Number(video?.shares || 0);
   return Math.round((interactions / views) * 10000) / 100;
 }
 
@@ -284,7 +327,9 @@ function TopVideoRow({ video, maxViews, usesLikesProxy, viewsLabel = "Views" }) 
         </p>
       </div>
       <div className="relative ml-auto shrink-0 pr-1 text-right">
-        <div className="font-mono text-sm font-semibold text-zinc-900 dark:text-zinc-100">{fmtCompact(views)}</div>
+        <div className="font-mono text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+          {fmtCompact(views)}
+        </div>
         <div className="text-[11px] text-zinc-500 dark:text-zinc-400">{viewsLabel}</div>
       </div>
     </a>
@@ -309,15 +354,23 @@ function TopAccountRow({ creator, maxViews, usesLikesProxy }) {
         />
       </div>
       {creator.avatar_url ? (
-        <img src={creator.avatar_url} alt="" className="relative h-10 w-10 shrink-0 rounded-full object-cover ring-2 ring-white" />
+        <img
+          src={creator.avatar_url}
+          alt=""
+          className="relative h-10 w-10 shrink-0 rounded-full object-cover ring-2 ring-white"
+        />
       ) : (
         <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-200 text-sm font-bold text-zinc-700">
           {(creator.name || "?").slice(0, 1)}
         </div>
       )}
       <div className="relative min-w-0 flex-1">
-        <p className="truncate text-sm font-semibold text-zinc-900 dark:text-zinc-100">{creator.name}</p>
-        <p className="mt-0.5 truncate text-xs text-zinc-500 dark:text-zinc-400">@{creator.handle}</p>
+        <p className="truncate text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+          {creator.name}
+        </p>
+        <p className="mt-0.5 truncate text-xs text-zinc-500 dark:text-zinc-400">
+          @{creator.handle}
+        </p>
       </div>
       <div className="relative ml-auto shrink-0 pr-1 font-mono text-sm font-semibold text-zinc-900 dark:text-zinc-100">
         {fmtCompact(views)}
@@ -388,10 +441,14 @@ function AccountSelector({ creators, selectedIds, onToggle, onSelectAll, onClear
                   type="button"
                   onClick={() => onToggle(creator.creator_id)}
                   className={`flex w-full cursor-pointer items-center gap-3 rounded-xl px-2.5 py-2 text-left text-sm transition ${
-                    selected ? "bg-linkedin/10 text-linkedin" : "text-zinc-700 hover:bg-zinc-50 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                    selected
+                      ? "bg-linkedin/10 text-linkedin"
+                      : "text-zinc-700 hover:bg-zinc-50 dark:text-zinc-300 dark:hover:bg-zinc-800"
                   }`}
                 >
-                  <span className={`flex h-5 w-5 items-center justify-center rounded-md border ${selected ? "border-linkedin bg-linkedin text-white" : "border-zinc-300 bg-white"}`}>
+                  <span
+                    className={`flex h-5 w-5 items-center justify-center rounded-md border ${selected ? "border-linkedin bg-linkedin text-white" : "border-zinc-300 bg-white"}`}
+                  >
                     {selected ? <Check className="h-3.5 w-3.5" /> : null}
                   </span>
                   <span className="min-w-0 flex-1 truncate font-medium">{creator.name}</span>
@@ -420,31 +477,34 @@ export default function AdminCreators() {
 
   selectedIdsRef.current = selectedIds;
 
-  const load = useCallback(async (rangeDays = days, creatorFilter = selectedIdsRef.current) => {
-    setLoading(true);
-    setError("");
-    setAccessDenied(false);
-    try {
-      const params = { days: rangeDays };
-      if (creatorFilter.length) params.creator_ids = creatorFilter.join(",");
-      const { data: payload } = await api.get("/admin/creator-social", { params });
-      setData(payload);
-      if (!creatorFilter.length && payload?.creators?.length) {
-        skipNextLoadRef.current = true;
-        setSelectedIds(payload.creators.map((item) => item.creator_id));
+  const load = useCallback(
+    async (rangeDays = days, creatorFilter = selectedIdsRef.current) => {
+      setLoading(true);
+      setError("");
+      setAccessDenied(false);
+      try {
+        const params = { days: rangeDays };
+        if (creatorFilter.length) params.creator_ids = creatorFilter.join(",");
+        const { data: payload } = await api.get("/admin/creator-social", { params });
+        setData(payload);
+        if (!creatorFilter.length && payload?.creators?.length) {
+          skipNextLoadRef.current = true;
+          setSelectedIds(payload.creators.map((item) => item.creator_id));
+        }
+      } catch (err) {
+        setData(null);
+        if (err?.response?.status === 403) {
+          setAccessDenied(true);
+          setError("Admin access denied");
+        } else {
+          setError(adminApiErrorMessage(err, "Could not load creator analytics"));
+        }
+      } finally {
+        setLoading(false);
       }
-    } catch (err) {
-      setData(null);
-      if (err?.response?.status === 403) {
-        setAccessDenied(true);
-        setError("Admin access denied");
-      } else {
-        setError(adminApiErrorMessage(err, "Could not load creator analytics"));
-      }
-    } finally {
-      setLoading(false);
-    }
-  }, [days]);
+    },
+    [days],
+  );
 
   const refresh = useCallback(async () => {
     setRefreshing(true);
@@ -564,109 +624,152 @@ export default function AdminCreators() {
       .slice(0, 5);
   }, [filteredCreators, usesLikesProxy]);
 
-  const handleCreatorAdded = useCallback(async (creator) => {
-    await load(days, selectedIdsRef.current);
-    if (creator?.creator_id) {
-      setSelectedIds((prev) => (prev.includes(creator.creator_id) ? prev : [...prev, creator.creator_id]));
-    }
-  }, [days, load]);
-
-  const postedVideoColumns = useMemo(() => [
-    columnHelper.accessor((row) => `${row.description || ""} ${row.creator_name || ""}`, {
-      id: "post",
-      header: "Post",
-      cell: (info) => {
-        const video = info.row.original;
-        return (
-          <a
-            href={video.url || undefined}
-            target="_blank"
-            rel="noreferrer"
-            className="flex min-w-[280px] items-center gap-3 text-zinc-900 hover:text-linkedin"
-          >
-            <div className="h-12 w-9 shrink-0 overflow-hidden rounded-md bg-zinc-900">
-              {video.cover_url ? (
-                <img src={video.cover_url} alt="" className="h-full w-full object-cover" />
-              ) : (
-                <div className="flex h-full w-full items-center justify-center text-white">
-                  <Play className="h-4 w-4 fill-current" />
-                </div>
-              )}
-            </div>
-            <span className="line-clamp-2 font-medium">{truncateText(video.description || "Untitled video", 96)}</span>
-          </a>
+  const handleCreatorAdded = useCallback(
+    async (creator) => {
+      await load(days, selectedIdsRef.current);
+      if (creator?.creator_id) {
+        setSelectedIds((prev) =>
+          prev.includes(creator.creator_id) ? prev : [...prev, creator.creator_id],
         );
-      },
-    }),
-    columnHelper.accessor((row) => row.creator_name || "Creator", {
-      id: "account",
-      header: "Account",
-      cell: (info) => <span className="text-zinc-700">{info.getValue()}</span>,
-    }),
-    columnHelper.accessor("posted_at", {
-      header: "Date",
-      cell: (info) => <span className="text-zinc-600">{fmtPostedAt(info.getValue())}</span>,
-    }),
-    columnHelper.accessor((row) => videoReachViews(row, usesLikesProxy), {
-      id: "views",
-      header: viewsLabel,
-      cell: (info) => <span className="font-mono font-semibold text-sky-700">{fmtCompact(info.getValue())}</span>,
-    }),
-    columnHelper.accessor("likes", {
-      header: "Likes",
-      cell: (info) => <span className="font-mono text-pink-600">{fmtCompact(info.getValue())}</span>,
-    }),
-    columnHelper.accessor("comments", {
-      header: "Comments",
-      cell: (info) => <span className="font-mono text-emerald-600">{fmtCompact(info.getValue())}</span>,
-    }),
-    columnHelper.accessor("shares", {
-      header: "Shares",
-      cell: (info) => <span className="font-mono text-violet-600">{fmtCompact(info.getValue())}</span>,
-    }),
-    columnHelper.accessor("favorites", {
-      id: "saves",
-      header: "Saves",
-      cell: (info) => <span className="font-mono text-amber-600">{fmtCompact(info.getValue())}</span>,
-    }),
-    columnHelper.accessor((row) => videoEngagementRate(row, usesLikesProxy), {
-      id: "engagement",
-      header: "Engagement",
-      cell: (info) => <span className="font-mono font-semibold text-amber-700">{info.getValue()}%</span>,
-    }),
-  ], [usesLikesProxy, viewsLabel]);
+      }
+    },
+    [days, load],
+  );
 
-  const dailyBreakdownColumns = useMemo(() => [
-    columnHelper.accessor("date", {
-      header: "Date",
-      cell: (info) => <span className="font-medium text-zinc-900 dark:text-zinc-100">{fmtDateLong(info.getValue())}</span>,
-    }),
-    columnHelper.accessor("posted_videos", {
-      header: "Videos",
-      cell: (info) => <span className="tabular-nums text-orange-600">{info.getValue() || 0}</span>,
-    }),
-    columnHelper.accessor((row) => (usesLikesProxy ? row.likes : row.views), {
-      id: "views",
-      header: viewsLabel,
-      cell: (info) => <span className="tabular-nums text-sky-600">{fmtCompact(info.getValue())}</span>,
-    }),
-    columnHelper.accessor("likes", {
-      header: "Likes",
-      cell: (info) => <span className="tabular-nums text-pink-600">{fmtCompact(info.getValue())}</span>,
-    }),
-    columnHelper.accessor("comments", {
-      header: "Comments",
-      cell: (info) => <span className="tabular-nums text-emerald-600">{fmtCompact(info.getValue())}</span>,
-    }),
-    columnHelper.accessor("engagement_rate", {
-      header: "Engagement",
-      cell: (info) => <span className="tabular-nums font-semibold text-amber-700">{info.getValue() ?? 0}%</span>,
-    }),
-    columnHelper.accessor("followers", {
-      header: "Followers",
-      cell: (info) => <span className="tabular-nums text-zinc-700">{fmtCompact(info.getValue())}</span>,
-    }),
-  ], [usesLikesProxy, viewsLabel]);
+  const postedVideoColumns = useMemo(
+    () => [
+      columnHelper.accessor((row) => `${row.description || ""} ${row.creator_name || ""}`, {
+        id: "post",
+        header: "Post",
+        cell: (info) => {
+          const video = info.row.original;
+          return (
+            <a
+              href={video.url || undefined}
+              target="_blank"
+              rel="noreferrer"
+              className="flex min-w-[280px] items-center gap-3 text-zinc-900 hover:text-linkedin"
+            >
+              <div className="h-12 w-9 shrink-0 overflow-hidden rounded-md bg-zinc-900">
+                {video.cover_url ? (
+                  <img src={video.cover_url} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center text-white">
+                    <Play className="h-4 w-4 fill-current" />
+                  </div>
+                )}
+              </div>
+              <span className="line-clamp-2 font-medium">
+                {truncateText(video.description || "Untitled video", 96)}
+              </span>
+            </a>
+          );
+        },
+      }),
+      columnHelper.accessor((row) => row.creator_name || "Creator", {
+        id: "account",
+        header: "Account",
+        cell: (info) => <span className="text-zinc-700">{info.getValue()}</span>,
+      }),
+      columnHelper.accessor("posted_at", {
+        header: "Date",
+        cell: (info) => <span className="text-zinc-600">{fmtPostedAt(info.getValue())}</span>,
+      }),
+      columnHelper.accessor((row) => videoReachViews(row, usesLikesProxy), {
+        id: "views",
+        header: viewsLabel,
+        cell: (info) => (
+          <span className="font-mono font-semibold text-sky-700">
+            {fmtCompact(info.getValue())}
+          </span>
+        ),
+      }),
+      columnHelper.accessor("likes", {
+        header: "Likes",
+        cell: (info) => (
+          <span className="font-mono text-pink-600">{fmtCompact(info.getValue())}</span>
+        ),
+      }),
+      columnHelper.accessor("comments", {
+        header: "Comments",
+        cell: (info) => (
+          <span className="font-mono text-emerald-600">{fmtCompact(info.getValue())}</span>
+        ),
+      }),
+      columnHelper.accessor("shares", {
+        header: "Shares",
+        cell: (info) => (
+          <span className="font-mono text-violet-600">{fmtCompact(info.getValue())}</span>
+        ),
+      }),
+      columnHelper.accessor("favorites", {
+        id: "saves",
+        header: "Saves",
+        cell: (info) => (
+          <span className="font-mono text-amber-600">{fmtCompact(info.getValue())}</span>
+        ),
+      }),
+      columnHelper.accessor((row) => videoEngagementRate(row, usesLikesProxy), {
+        id: "engagement",
+        header: "Engagement",
+        cell: (info) => (
+          <span className="font-mono font-semibold text-amber-700">{info.getValue()}%</span>
+        ),
+      }),
+    ],
+    [usesLikesProxy, viewsLabel],
+  );
+
+  const dailyBreakdownColumns = useMemo(
+    () => [
+      columnHelper.accessor("date", {
+        header: "Date",
+        cell: (info) => (
+          <span className="font-medium text-zinc-900 dark:text-zinc-100">
+            {fmtDateLong(info.getValue())}
+          </span>
+        ),
+      }),
+      columnHelper.accessor("posted_videos", {
+        header: "Videos",
+        cell: (info) => (
+          <span className="tabular-nums text-orange-600">{info.getValue() || 0}</span>
+        ),
+      }),
+      columnHelper.accessor((row) => (usesLikesProxy ? row.likes : row.views), {
+        id: "views",
+        header: viewsLabel,
+        cell: (info) => (
+          <span className="tabular-nums text-sky-600">{fmtCompact(info.getValue())}</span>
+        ),
+      }),
+      columnHelper.accessor("likes", {
+        header: "Likes",
+        cell: (info) => (
+          <span className="tabular-nums text-pink-600">{fmtCompact(info.getValue())}</span>
+        ),
+      }),
+      columnHelper.accessor("comments", {
+        header: "Comments",
+        cell: (info) => (
+          <span className="tabular-nums text-emerald-600">{fmtCompact(info.getValue())}</span>
+        ),
+      }),
+      columnHelper.accessor("engagement_rate", {
+        header: "Engagement",
+        cell: (info) => (
+          <span className="tabular-nums font-semibold text-amber-700">{info.getValue() ?? 0}%</span>
+        ),
+      }),
+      columnHelper.accessor("followers", {
+        header: "Followers",
+        cell: (info) => (
+          <span className="tabular-nums text-zinc-700">{fmtCompact(info.getValue())}</span>
+        ),
+      }),
+    ],
+    [usesLikesProxy, viewsLabel],
+  );
 
   const maxTopVideoViews = topVideos[0]?.reach || 0;
   const maxTopAccountViews = topAccounts[0]?.reach || 0;
@@ -674,19 +777,29 @@ export default function AdminCreators() {
   const maintenance = data?.maintenance;
   const trackingIntervalHours = maintenance?.interval_hours || 6;
   const trackingEnabled = maintenance?.loop_enabled !== false;
-  const trackingStale = maintenance?.stale ?? isRefreshStale(data?.last_refreshed_at, trackingIntervalHours);
+  const trackingStale =
+    maintenance?.stale ?? isRefreshStale(data?.last_refreshed_at, trackingIntervalHours);
 
   return (
     <AdminShell
       enableDarkMode
       title="Creators"
       subtitle="TikTok and Instagram performance tracking for Hirly content creators."
-      actions={(
-        <Button variant="outline" onClick={refresh} disabled={loading || refreshing} className="cursor-pointer dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100">
-          {refreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+      actions={
+        <Button
+          variant="outline"
+          onClick={refresh}
+          disabled={loading || refreshing}
+          className="cursor-pointer dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+        >
+          {refreshing ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <RefreshCw className="h-4 w-4" />
+          )}
           Refresh stats
         </Button>
-      )}
+      }
     >
       {accessDenied ? <AdminAccessDenied /> : null}
 
@@ -723,7 +836,11 @@ export default function AdminCreators() {
                     {platformLabel(platform)}
                   </div>
                 ))}
-                <div className="inline-flex rounded-full border border-zinc-200 bg-zinc-50 p-1 dark:border-zinc-700 dark:bg-zinc-950" role="group" aria-label="Date range">
+                <div
+                  className="inline-flex rounded-full border border-zinc-200 bg-zinc-50 p-1 dark:border-zinc-700 dark:bg-zinc-950"
+                  role="group"
+                  aria-label="Date range"
+                >
                   {RANGE_OPTIONS.map((option) => (
                     <button
                       key={option.id}
@@ -747,9 +864,13 @@ export default function AdminCreators() {
               {trackingEnabled
                 ? ` · Auto-tracking every ${trackingIntervalHours}h`
                 : " · Auto-tracking disabled on server"}
-              {maintenance?.next_due_at ? ` · Next scheduled refresh ${fmtDateTime(maintenance.next_due_at)}` : ""}
+              {maintenance?.next_due_at
+                ? ` · Next scheduled refresh ${fmtDateTime(maintenance.next_due_at)}`
+                : ""}
               {trackingStale ? " · Data is stale, refresh recommended." : ""}
-              {usesLikesProxy ? " · Per-video views unavailable from TikTok — showing likes as reach proxy." : ""}
+              {usesLikesProxy
+                ? " · Per-video views unavailable from TikTok — showing likes as reach proxy."
+                : ""}
             </p>
           </div>
 
@@ -766,11 +887,42 @@ export default function AdminCreators() {
           ) : (
             <div className="space-y-6 p-5 sm:p-6">
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                <KpiCard icon={Video} label="Tracked videos" value={summary.posted_videos} delta={summary.posted_videos_delta} accent="text-orange-500" hint="Posts loaded from the latest refresh" />
-                <KpiCard icon={AtSign} label="Active accounts" value={summary.active_accounts} delta={0} accent="text-violet-500" />
-                <KpiCard icon={Play} label={viewsLabel} value={summary.views} delta={summary.views_delta} accent="text-sky-500" />
-                <KpiCard icon={Heart} label="Likes" value={summary.likes} delta={summary.likes_delta} accent="text-pink-500" />
-                <KpiCard icon={MessageCircle} label="Comments" value={summary.comments} delta={summary.comments_period} accent="text-emerald-500" />
+                <KpiCard
+                  icon={Video}
+                  label="Tracked videos"
+                  value={summary.posted_videos}
+                  delta={summary.posted_videos_delta}
+                  accent="text-orange-500"
+                  hint="Posts loaded from the latest refresh"
+                />
+                <KpiCard
+                  icon={AtSign}
+                  label="Active accounts"
+                  value={summary.active_accounts}
+                  delta={0}
+                  accent="text-violet-500"
+                />
+                <KpiCard
+                  icon={Play}
+                  label={viewsLabel}
+                  value={summary.views}
+                  delta={summary.views_delta}
+                  accent="text-sky-500"
+                />
+                <KpiCard
+                  icon={Heart}
+                  label="Likes"
+                  value={summary.likes}
+                  delta={summary.likes_delta}
+                  accent="text-pink-500"
+                />
+                <KpiCard
+                  icon={MessageCircle}
+                  label="Comments"
+                  value={summary.comments}
+                  delta={summary.comments_period}
+                  accent="text-emerald-500"
+                />
                 <KpiCard
                   icon={BarChart3}
                   label="Engagement"
@@ -779,18 +931,37 @@ export default function AdminCreators() {
                   accent="text-amber-500"
                   hint="(likes + favorites + comments + shares) / views"
                 />
-                <KpiCard icon={Users} label="Followers" value={summary.followers} delta={summary.followers_delta} accent="text-cyan-600" />
-                <KpiCard icon={Calendar} label={`Posted (${days}d)`} value={summary.posted_videos_period} delta={0} accent="text-orange-400" hint="New posts published in the selected period" />
+                <KpiCard
+                  icon={Users}
+                  label="Followers"
+                  value={summary.followers}
+                  delta={summary.followers_delta}
+                  accent="text-cyan-600"
+                />
+                <KpiCard
+                  icon={Calendar}
+                  label={`Posted (${days}d)`}
+                  value={summary.posted_videos_period}
+                  delta={0}
+                  accent="text-orange-400"
+                  hint="New posts published in the selected period"
+                />
               </div>
 
               <div className="grid gap-4 lg:grid-cols-2">
                 <section className="overflow-hidden rounded-2xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
                   <div className="flex items-center justify-between border-b border-zinc-200 px-5 py-4 dark:border-zinc-800">
                     <div>
-                      <h2 className="font-display text-lg font-bold text-zinc-900 dark:text-zinc-100">Top videos</h2>
-                      <p className="text-sm text-zinc-500 dark:text-zinc-400">Highest {viewsLabel.toLowerCase()} in the selected period.</p>
+                      <h2 className="font-display text-lg font-bold text-zinc-900 dark:text-zinc-100">
+                        Top videos
+                      </h2>
+                      <p className="text-sm text-zinc-500 dark:text-zinc-400">
+                        Highest {viewsLabel.toLowerCase()} in the selected period.
+                      </p>
                     </div>
-                    <span className="rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-1 text-xs font-medium text-zinc-600 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-300">By {viewsLabel.toLowerCase()}</span>
+                    <span className="rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-1 text-xs font-medium text-zinc-600 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-300">
+                      By {viewsLabel.toLowerCase()}
+                    </span>
                   </div>
                   {topVideos.length ? (
                     <div>
@@ -805,17 +976,25 @@ export default function AdminCreators() {
                       ))}
                     </div>
                   ) : (
-                    <p className="px-5 py-8 text-sm text-zinc-500">No video stats yet. Refresh stats to load views.</p>
+                    <p className="px-5 py-8 text-sm text-zinc-500">
+                      No video stats yet. Refresh stats to load views.
+                    </p>
                   )}
                 </section>
 
                 <section className="overflow-hidden rounded-2xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
                   <div className="flex items-center justify-between border-b border-zinc-200 px-5 py-4 dark:border-zinc-800">
                     <div>
-                      <h2 className="font-display text-lg font-bold text-zinc-900 dark:text-zinc-100">Top accounts</h2>
-                      <p className="text-sm text-zinc-500 dark:text-zinc-400">Accounts ranked by total {viewsLabel.toLowerCase()}.</p>
+                      <h2 className="font-display text-lg font-bold text-zinc-900 dark:text-zinc-100">
+                        Top accounts
+                      </h2>
+                      <p className="text-sm text-zinc-500 dark:text-zinc-400">
+                        Accounts ranked by total {viewsLabel.toLowerCase()}.
+                      </p>
                     </div>
-                    <span className="rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-1 text-xs font-medium text-zinc-600 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-300">By {viewsLabel.toLowerCase()}</span>
+                    <span className="rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-1 text-xs font-medium text-zinc-600 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-300">
+                      By {viewsLabel.toLowerCase()}
+                    </span>
                   </div>
                   {topAccounts.length ? (
                     <div>
@@ -836,8 +1015,13 @@ export default function AdminCreators() {
 
               <section className="overflow-hidden rounded-2xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
                 <div className="border-b border-zinc-200 px-5 py-4 dark:border-zinc-800">
-                  <h2 className="font-display text-lg font-bold text-zinc-900 dark:text-zinc-100">Posted videos</h2>
-                  <p className="text-sm text-zinc-500 dark:text-zinc-400">All tracked posts with publish date (UTC), {viewsLabel.toLowerCase()}, likes, comments, shares, saves, and engagement.</p>
+                  <h2 className="font-display text-lg font-bold text-zinc-900 dark:text-zinc-100">
+                    Posted videos
+                  </h2>
+                  <p className="text-sm text-zinc-500 dark:text-zinc-400">
+                    All tracked posts with publish date (UTC), {viewsLabel.toLowerCase()}, likes,
+                    comments, shares, saves, and engagement.
+                  </p>
                 </div>
                 {recentVideos.length ? (
                   <div className="p-5">
@@ -850,15 +1034,21 @@ export default function AdminCreators() {
                     />
                   </div>
                 ) : (
-                  <p className="px-5 py-8 text-sm text-zinc-500">No posts loaded yet. Click Refresh stats to fetch per-post metrics.</p>
+                  <p className="px-5 py-8 text-sm text-zinc-500">
+                    No posts loaded yet. Click Refresh stats to fetch per-post metrics.
+                  </p>
                 )}
               </section>
 
               <section className="rounded-2xl border border-zinc-200 bg-zinc-50/60 p-4 sm:p-5 dark:border-zinc-800 dark:bg-zinc-950/40">
                 <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <h2 className="font-display text-lg font-bold text-zinc-900 dark:text-zinc-100">Metrics</h2>
-                    <p className="text-sm text-zinc-500 dark:text-zinc-400">Daily posted videos and {viewsLabel.toLowerCase()} over the selected period.</p>
+                    <h2 className="font-display text-lg font-bold text-zinc-900 dark:text-zinc-100">
+                      Metrics
+                    </h2>
+                    <p className="text-sm text-zinc-500 dark:text-zinc-400">
+                      Daily posted videos and {viewsLabel.toLowerCase()} over the selected period.
+                    </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <span className="inline-flex items-center gap-2 rounded-full border border-orange-200 bg-orange-50 px-3 py-1 text-xs font-medium text-orange-700">
@@ -874,9 +1064,17 @@ export default function AdminCreators() {
 
                 <div className="h-[320px] w-full min-w-0 rounded-xl bg-white p-2 dark:bg-zinc-900">
                   <ResponsiveContainer width="100%" height="100%">
-                    <ComposedChart data={chartData} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+                    <ComposedChart
+                      data={chartData}
+                      margin={{ top: 8, right: 12, left: 0, bottom: 0 }}
+                    >
                       <CartesianGrid stroke="#e4e4e7" vertical={false} />
-                      <XAxis dataKey="label" tick={{ fill: "#71717a", fontSize: 12 }} axisLine={false} tickLine={false} />
+                      <XAxis
+                        dataKey="label"
+                        tick={{ fill: "#71717a", fontSize: 12 }}
+                        axisLine={false}
+                        tickLine={false}
+                      />
                       <YAxis
                         yAxisId="left"
                         tick={{ fill: "#71717a", fontSize: 12 }}
@@ -894,8 +1092,17 @@ export default function AdminCreators() {
                         domain={[0, maxVideos + 1]}
                         allowDecimals={false}
                       />
-                      <Tooltip content={<ChartTooltip usesLikesProxy={usesLikesProxy} />} cursor={{ fill: "rgba(10, 102, 194, 0.06)" }} />
-                      <Bar yAxisId="right" dataKey="posted_videos" fill={ORANGE} radius={[6, 6, 0, 0]} maxBarSize={28} />
+                      <Tooltip
+                        content={<ChartTooltip usesLikesProxy={usesLikesProxy} />}
+                        cursor={{ fill: "rgba(10, 102, 194, 0.06)" }}
+                      />
+                      <Bar
+                        yAxisId="right"
+                        dataKey="posted_videos"
+                        fill={ORANGE}
+                        radius={[6, 6, 0, 0]}
+                        maxBarSize={28}
+                      />
                       <Area
                         yAxisId="left"
                         type="monotone"
@@ -914,8 +1121,13 @@ export default function AdminCreators() {
 
               <section className="overflow-hidden rounded-2xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
                 <div className="border-b border-zinc-200 px-5 py-4 dark:border-zinc-800">
-                  <h2 className="font-display text-lg font-bold text-zinc-900 dark:text-zinc-100">Daily breakdown</h2>
-                  <p className="text-sm text-zinc-500 dark:text-zinc-400">One row per UTC day — posts counted by each video's published date, not refresh time.</p>
+                  <h2 className="font-display text-lg font-bold text-zinc-900 dark:text-zinc-100">
+                    Daily breakdown
+                  </h2>
+                  <p className="text-sm text-zinc-500 dark:text-zinc-400">
+                    One row per UTC day — posts counted by each video's published date, not refresh
+                    time.
+                  </p>
                 </div>
                 <div className="p-5">
                   <AdminDataTable
@@ -931,15 +1143,26 @@ export default function AdminCreators() {
 
               <section className="overflow-hidden rounded-2xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
                 <div className="border-b border-zinc-200 px-5 py-4 dark:border-zinc-800">
-                  <h2 className="font-display text-lg font-bold text-zinc-900 dark:text-zinc-100">Accounts</h2>
-                  <p className="text-sm text-zinc-500 dark:text-zinc-400">Linked TikTok and Instagram profiles with live totals.</p>
+                  <h2 className="font-display text-lg font-bold text-zinc-900 dark:text-zinc-100">
+                    Accounts
+                  </h2>
+                  <p className="text-sm text-zinc-500 dark:text-zinc-400">
+                    Linked TikTok and Instagram profiles with live totals.
+                  </p>
                 </div>
                 <div className="grid gap-4 p-5 lg:grid-cols-2">
                   {filteredCreators.map((creator) => (
-                    <div key={creator.creator_id} className="rounded-2xl border border-zinc-200 bg-zinc-50/50 p-4 dark:border-zinc-800 dark:bg-zinc-950/50">
+                    <div
+                      key={creator.creator_id}
+                      className="rounded-2xl border border-zinc-200 bg-zinc-50/50 p-4 dark:border-zinc-800 dark:bg-zinc-950/50"
+                    >
                       <div className="flex items-start gap-4">
                         {creator.avatar_url ? (
-                          <img src={creator.avatar_url} alt="" className="h-14 w-14 rounded-2xl object-cover ring-2 ring-white" />
+                          <img
+                            src={creator.avatar_url}
+                            alt=""
+                            className="h-14 w-14 rounded-2xl object-cover ring-2 ring-white"
+                          />
                         ) : (
                           <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-zinc-200 text-lg font-bold text-zinc-700">
                             {(creator.name || "?").slice(0, 1)}
@@ -947,8 +1170,13 @@ export default function AdminCreators() {
                         )}
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2">
-                            <h3 className="font-display text-lg font-bold text-zinc-900 dark:text-zinc-100">{creator.name}</h3>
-                            <PlatformIcon platform={creator.platform} className="h-4 w-4 text-zinc-500" />
+                            <h3 className="font-display text-lg font-bold text-zinc-900 dark:text-zinc-100">
+                              {creator.name}
+                            </h3>
+                            <PlatformIcon
+                              platform={creator.platform}
+                              className="h-4 w-4 text-zinc-500"
+                            />
                           </div>
                           <a
                             href={creator.profile_url}
@@ -962,12 +1190,34 @@ export default function AdminCreators() {
                           <div className="mt-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-5">
                             <div>
                               <p className="text-zinc-500">{viewsLabel}</p>
-                              <p className="font-semibold text-sky-700">{fmtCompact(creatorReachViews(creator, usesLikesProxy))}</p>
+                              <p className="font-semibold text-sky-700">
+                                {fmtCompact(creatorReachViews(creator, usesLikesProxy))}
+                              </p>
                             </div>
-                            <div><p className="text-zinc-500">Followers</p><p className="font-semibold text-zinc-900">{fmtCompact(creator.current?.followers)}</p></div>
-                            <div><p className="text-zinc-500">Videos</p><p className="font-semibold text-zinc-900">{creator.current?.videos ?? 0}</p></div>
-                            <div><p className="text-zinc-500">Likes</p><p className="font-semibold text-zinc-900">{fmtCompact(creator.current?.likes)}</p></div>
-                            <div><p className="text-zinc-500">Updated</p><p className="font-semibold text-zinc-600">{fmtDateTime(creator.last_refreshed_at)}</p></div>
+                            <div>
+                              <p className="text-zinc-500">Followers</p>
+                              <p className="font-semibold text-zinc-900">
+                                {fmtCompact(creator.current?.followers)}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-zinc-500">Videos</p>
+                              <p className="font-semibold text-zinc-900">
+                                {creator.current?.videos ?? 0}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-zinc-500">Likes</p>
+                              <p className="font-semibold text-zinc-900">
+                                {fmtCompact(creator.current?.likes)}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-zinc-500">Updated</p>
+                              <p className="font-semibold text-zinc-600">
+                                {fmtDateTime(creator.last_refreshed_at)}
+                              </p>
+                            </div>
                           </div>
                         </div>
                       </div>

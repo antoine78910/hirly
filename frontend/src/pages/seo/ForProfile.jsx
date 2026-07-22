@@ -15,19 +15,19 @@ export default function ForProfile() {
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "WebPage",
-    "name": page.title,
-    "description": page.metaDescription,
-    "url": `https://tryhirly.com/for/${page.slug}`,
-    "publisher": { "@type": "Organization", "name": "Hirly", "url": "https://tryhirly.com" },
+    name: page.title,
+    description: page.metaDescription,
+    url: `https://tryhirly.com/for/${page.slug}`,
+    publisher: { "@type": "Organization", name: "Hirly", url: "https://tryhirly.com" },
   };
 
   const faqLd = {
     "@context": "https://schema.org",
     "@type": "FAQPage",
-    "mainEntity": page.faq.map((q) => ({
+    mainEntity: page.faq.map((q) => ({
       "@type": "Question",
-      "name": q.question,
-      "acceptedAnswer": { "@type": "Answer", "text": q.answer },
+      name: q.question,
+      acceptedAnswer: { "@type": "Answer", text: q.answer },
     })),
   };
 
@@ -82,13 +82,18 @@ export default function ForProfile() {
       <section className="max-w-5xl mx-auto px-6 py-16">
         <div className="grid md:grid-cols-2 gap-10 items-start">
           <div>
-            <p className="text-xs font-semibold text-zinc-400 uppercase tracking-widest mb-3">Le problème</p>
+            <p className="text-xs font-semibold text-zinc-400 uppercase tracking-widest mb-3">
+              Le problème
+            </p>
             <h2 className="font-display font-bold text-2xl sm:text-3xl tracking-tight mb-6">
               Les obstacles que vous rencontrez
             </h2>
             <ul className="space-y-3">
               {page.challenges.map((c, i) => (
-                <li key={i} className="flex items-start gap-3 text-zinc-600 text-sm leading-relaxed">
+                <li
+                  key={i}
+                  className="flex items-start gap-3 text-zinc-600 text-sm leading-relaxed"
+                >
                   <span className="mt-1 w-1.5 h-1.5 rounded-full bg-zinc-300 flex-shrink-0" />
                   {c}
                 </li>
@@ -96,7 +101,9 @@ export default function ForProfile() {
             </ul>
           </div>
           <div>
-            <p className="text-xs font-semibold text-linkedin uppercase tracking-widest mb-3">La solution Hirly</p>
+            <p className="text-xs font-semibold text-linkedin uppercase tracking-widest mb-3">
+              La solution Hirly
+            </p>
             <h2 className="font-display font-bold text-2xl sm:text-3xl tracking-tight mb-6">
               Ce que Hirly fait pour vous
             </h2>
@@ -120,7 +127,9 @@ export default function ForProfile() {
         <div className="rounded-3xl gradient-linkedin text-white px-8 py-10 flex flex-col sm:flex-row items-center gap-6 text-center sm:text-left">
           <div className="flex-1">
             <h2 className="font-display font-bold text-xl mb-1">Essayer Hirly gratuitement</h2>
-            <p className="text-white/70 text-sm">Créez votre profil en 2 minutes. Commencez à swiper.</p>
+            <p className="text-white/70 text-sm">
+              Créez votre profil en 2 minutes. Commencez à swiper.
+            </p>
           </div>
           <Link
             to="/onboarding"

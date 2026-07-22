@@ -134,7 +134,10 @@ export default function OnboardingContactPhoneStep({
   return (
     <div className="w-full" data-testid="onboarding-phone-field">
       {showLabel ? (
-        <label htmlFor="onboarding-phone-input" className="mb-2 block text-sm font-medium text-zinc-800">
+        <label
+          htmlFor="onboarding-phone-input"
+          className="mb-2 block text-sm font-medium text-zinc-800"
+        >
           {copy.label}
         </label>
       ) : null}

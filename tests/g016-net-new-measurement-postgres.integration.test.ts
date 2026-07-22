@@ -7,10 +7,10 @@ const runIntegration = databaseUrl ? test : test.skip;
 
 async function psql(args: string[]): Promise<string> {
   if (!databaseUrl) throw new Error("G016_TEST_DATABASE_URL is required");
-  const process = Bun.spawn(
-    ["psql", databaseUrl, "-X", "-v", "ON_ERROR_STOP=1", ...args],
-    { stdout: "pipe", stderr: "pipe" },
-  );
+  const process = Bun.spawn(["psql", databaseUrl, "-X", "-v", "ON_ERROR_STOP=1", ...args], {
+    stdout: "pipe",
+    stderr: "pipe",
+  });
   const [exitCode, stdout, stderr] = await Promise.all([
     process.exited,
     new Response(process.stdout).text(),
@@ -50,7 +50,10 @@ describe("G016 PostgreSQL measurement provenance", () => {
   beforeAll(async () => {
     if (!databaseUrl) return;
     const schemaPresent = await psql([
-      "-A", "-t", "-q", "-c",
+      "-A",
+      "-t",
+      "-q",
+      "-c",
       "SELECT to_regclass('public.source_trial_runs') IS NOT NULL",
     ]);
     if (schemaPresent !== "t") {
@@ -72,7 +75,10 @@ describe("G016 PostgreSQL measurement provenance", () => {
       }
     }
 
-    await psql(["-q", "-c", `
+    await psql([
+      "-q",
+      "-c",
+      `
       TRUNCATE TABLE
         public.source_trial_scorecards,
         public.source_trial_candidates,
@@ -286,12 +292,12 @@ describe("G016 PostgreSQL measurement provenance", () => {
         '00000000-0000-4000-8000-000000000033'::uuid,
         '00000000-0000-4000-8000-000000000034'::uuid
       ]) AS run_id;
-    `]);
+    `,
+    ]);
   });
 
   runIntegration("accepts only bound paid-inventory coverage evidence", async () => {
-    expect((await measure("00000000-0000-4000-8000-000000000031")).status)
-      .toBe("COMPLETE");
+    expect((await measure("00000000-0000-4000-8000-000000000031")).status).toBe("COMPLETE");
     for (const coverageRunId of [
       "00000000-0000-4000-8000-000000000030",
       "00000000-0000-4000-8000-000000000032",
@@ -305,21 +311,22 @@ describe("G016 PostgreSQL measurement provenance", () => {
 
   runIntegration("blocks missing, nonterminal and duplicate trial evidence", async () => {
     const coverageRunId = "00000000-0000-4000-8000-000000000031";
-    expect((await measure(
-      coverageRunId,
-      "00000000-0000-4000-8000-000000000099",
-    )).status).toBe("BLOCKED_EXTERNAL");
-    expect((await measure(
-      coverageRunId,
-      "00000000-0000-4000-8000-000000000021",
-    )).status).toBe("BLOCKED_EXTERNAL");
-    expect((await measure(
-      coverageRunId,
-      "00000000-0000-4000-8000-000000000024",
-    )).status).toBe("BLOCKED_EXTERNAL");
-    expect((await measure(
-      coverageRunId,
-      "00000000-0000-4000-8000-000000000020,00000000-0000-4000-8000-000000000020",
-    )).status).toBe("BLOCKED_EXTERNAL");
+    expect((await measure(coverageRunId, "00000000-0000-4000-8000-000000000099")).status).toBe(
+      "BLOCKED_EXTERNAL",
+    );
+    expect((await measure(coverageRunId, "00000000-0000-4000-8000-000000000021")).status).toBe(
+      "BLOCKED_EXTERNAL",
+    );
+    expect((await measure(coverageRunId, "00000000-0000-4000-8000-000000000024")).status).toBe(
+      "BLOCKED_EXTERNAL",
+    );
+    expect(
+      (
+        await measure(
+          coverageRunId,
+          "00000000-0000-4000-8000-000000000020,00000000-0000-4000-8000-000000000020",
+        )
+      ).status,
+    ).toBe("BLOCKED_EXTERNAL");
   });
 });

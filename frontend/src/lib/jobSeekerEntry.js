@@ -37,7 +37,9 @@ export async function fetchJobSeekerProfile() {
 
 export async function fetchJobSeekerEntryState({ includeBilling = true } = {}) {
   const profilePromise = api.get("/profile");
-  const billingPromise = includeBilling ? api.get("/billing/status") : Promise.resolve({ data: null });
+  const billingPromise = includeBilling
+    ? api.get("/billing/status")
+    : Promise.resolve({ data: null });
   const [profileRes, billingRes] = await Promise.all([profilePromise, billingPromise]);
   return {
     profile: profileRes.data || null,

@@ -1,7 +1,5 @@
 import { createHash } from "node:crypto";
-import type {
-  SourceRegistryEntry,
-} from "@hirly/contracts";
+import type { SourceRegistryEntry } from "@hirly/contracts";
 import {
   IngestionError,
   normalizeCountryCode,
@@ -15,8 +13,7 @@ import {
   type SourcePage,
 } from "./index";
 
-export const DATA_GOUV_FIXTURE_CURSOR_VERSION =
-  "data-gouv-fixture.v1" as const;
+export const DATA_GOUV_FIXTURE_CURSOR_VERSION = "data-gouv-fixture.v1" as const;
 
 export interface DataGouvFixtureCursor {
   version: typeof DATA_GOUV_FIXTURE_CURSOR_VERSION;
@@ -78,31 +75,19 @@ export function dataGouvHttpsUrlIssue(value: string): string | null {
   return null;
 }
 
-export function requireSafeDataGouvHttpsUrl(
-  value: string,
-  label: string,
-): string {
+export function requireSafeDataGouvHttpsUrl(value: string, label: string): string {
   const issue = dataGouvHttpsUrlIssue(value);
   if (issue) {
-    throw new IngestionError(
-      "invalid_input",
-      `${label} ${issue}`,
-    );
+    throw new IngestionError("invalid_input", `${label} ${issue}`);
   }
   return value;
 }
 
 type SourceErrorClass = ReturnType<
-  SourceAdapter<
-    DataGouvRawJob,
-    DataGouvFixtureCursor,
-    DataGouvFixtureScope
-  >["classifyError"]
+  SourceAdapter<DataGouvRawJob, DataGouvFixtureCursor, DataGouvFixtureScope>["classifyError"]
 >;
 
-export function classifyDataGouvSourceError(
-  error: unknown,
-): SourceErrorClass {
+export function classifyDataGouvSourceError(error: unknown): SourceErrorClass {
   if (error instanceof DataGouvFixtureHttpError) {
     if (error.status === 429) return "rate_limited";
     if (error.status === 408 || error.status >= 500) return "retryable";
@@ -117,11 +102,7 @@ export function classifyDataGouvSourceError(
 
 function identityPart(label: string, value: string): string {
   const normalized = value.trim();
-  if (
-    normalized.length === 0 ||
-    normalized.length > 512 ||
-    normalized.includes(":")
-  ) {
+  if (normalized.length === 0 || normalized.length > 512 || normalized.includes(":")) {
     throw new IngestionError(
       "invalid_input",
       `${label} must be a non-empty colon-free stable identifier`,
@@ -145,9 +126,9 @@ export function stableDataGouvExternalId(
 function fixturePageSize(source: SourceRegistryEntry): number {
   const configured = source.checkpoint?.fixturePageSize;
   return typeof configured === "number" &&
-      Number.isInteger(configured) &&
-      configured > 0 &&
-      configured <= 500
+    Number.isInteger(configured) &&
+    configured > 0 &&
+    configured <= 500
     ? configured
     : 100;
 }
@@ -166,30 +147,17 @@ function canonicalJson(value: unknown): string {
 }
 
 function stableSnapshotDigest(rows: readonly DataGouvRawJob[]): string {
-  return createHash("sha256")
-    .update(canonicalJson(rows), "utf8")
-    .digest("hex");
+  return createHash("sha256").update(canonicalJson(rows), "utf8").digest("hex");
 }
 
-export type DisabledDataGouvSourceAdapter<
-  RawJob extends DataGouvRawJob = DataGouvRawJob,
-> = SourceAdapter<
-  RawJob,
-  DataGouvFixtureCursor,
-  DataGouvFixtureScope
-> & {
-  readonly canonicalWriteReady: false;
-  readonly sourcePolicyEligible: false;
-};
+export type DisabledDataGouvSourceAdapter<RawJob extends DataGouvRawJob = DataGouvRawJob> =
+  SourceAdapter<RawJob, DataGouvFixtureCursor, DataGouvFixtureScope> & {
+    readonly canonicalWriteReady: false;
+    readonly sourcePolicyEligible: false;
+  };
 
-export class FixtureOnlyDataGouvSourceAdapter<
-  RawJob extends DataGouvRawJob = DataGouvRawJob,
-> implements
-    SourceAdapter<
-      RawJob,
-      DataGouvFixtureCursor,
-      DataGouvFixtureScope
-    >
+export class FixtureOnlyDataGouvSourceAdapter<RawJob extends DataGouvRawJob = DataGouvRawJob>
+  implements SourceAdapter<RawJob, DataGouvFixtureCursor, DataGouvFixtureScope>
 {
   readonly provider = "data_gouv" as const;
   readonly enabled = false as const;
@@ -209,10 +177,7 @@ export class FixtureOnlyDataGouvSourceAdapter<
     this.datasetId = first?.datasetId ?? "empty-fixture";
     this.resourceId = first?.resourceId ?? "empty-fixture";
     for (const row of rows) {
-      if (
-        row.datasetId !== this.datasetId ||
-        row.resourceId !== this.resourceId
-      ) {
+      if (row.datasetId !== this.datasetId || row.resourceId !== this.resourceId) {
         throw new IngestionError(
           "invalid_input",
           "a data.gouv fixture adapter must bind exactly one dataset resource",
@@ -221,10 +186,7 @@ export class FixtureOnlyDataGouvSourceAdapter<
       stableDataGouvExternalId(row.datasetId, row.resourceId, row.recordId);
       requireSafeDataGouvHttpsUrl(row.sourceUrl, "data.gouv source URL");
       for (const applyUrl of row.applyUrls) {
-        requireSafeDataGouvHttpsUrl(
-          applyUrl,
-          "data.gouv apply URL",
-        );
+        requireSafeDataGouvHttpsUrl(applyUrl, "data.gouv apply URL");
       }
     }
     this.snapshotDigest = stableSnapshotDigest(rows);
@@ -251,9 +213,7 @@ export class FixtureOnlyDataGouvSourceAdapter<
     mode: "full" | "incremental";
     cursor: DataGouvFixtureCursor | null;
     signal: AbortSignal;
-  }): AsyncIterable<
-    SourcePage<RawJob, DataGouvFixtureCursor, DataGouvFixtureScope>
-  > {
+  }): AsyncIterable<SourcePage<RawJob, DataGouvFixtureCursor, DataGouvFixtureScope>> {
     this.assertSource(input.source);
     const pageSize = fixturePageSize(input.source);
     let offset = this.cursorOffset(input.cursor);
@@ -305,11 +265,7 @@ export class FixtureOnlyDataGouvSourceAdapter<
   normalize(raw: RawJob, context: SourceContext): NormalizedOccurrence {
     this.assertSource(context.source);
     this.assertRow(raw);
-    const externalId = stableDataGouvExternalId(
-      raw.datasetId,
-      raw.resourceId,
-      raw.recordId,
-    );
+    const externalId = stableDataGouvExternalId(raw.datasetId, raw.resourceId, raw.recordId);
     const countryCode = normalizeCountryCode(raw.countryCode);
     if (!context.source.countryCodes.includes(countryCode)) {
       throw new IngestionError(
@@ -350,13 +306,9 @@ export class FixtureOnlyDataGouvSourceAdapter<
 
   validateActive(raw: RawJob, now: Date): SourceLifecycleEvidence {
     this.assertRow(raw);
-    const explicitExpiry = raw.expiresAt
-      ? new Date(raw.expiresAt)
-      : null;
+    const explicitExpiry = raw.expiresAt ? new Date(raw.expiresAt) : null;
     if (
-      ["expired", "closed", "inactive", "archived"].includes(
-        raw.status?.toLowerCase() ?? "",
-      ) ||
+      ["expired", "closed", "inactive", "archived"].includes(raw.status?.toLowerCase() ?? "") ||
       (explicitExpiry !== null &&
         !Number.isNaN(explicitExpiry.getTime()) &&
         explicitExpiry.getTime() <= now.getTime())
@@ -404,10 +356,7 @@ export class FixtureOnlyDataGouvSourceAdapter<
   }
 
   private assertRow(raw: DataGouvRawJob): void {
-    if (
-      raw.datasetId !== this.datasetId ||
-      raw.resourceId !== this.resourceId
-    ) {
+    if (raw.datasetId !== this.datasetId || raw.resourceId !== this.resourceId) {
       throw new IngestionError(
         "invalid_input",
         "data.gouv fixture row does not match the bound dataset resource",
@@ -424,10 +373,7 @@ export class FixtureOnlyDataGouvSourceAdapter<
       cursor.offset < 0 ||
       cursor.offset > this.rows.length
     ) {
-      throw new IngestionError(
-        "invalid_input",
-        "invalid or stale data.gouv fixture checkpoint",
-      );
+      throw new IngestionError("invalid_input", "invalid or stale data.gouv fixture checkpoint");
     }
     return cursor.offset;
   }

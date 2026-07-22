@@ -1,9 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import {
-  JobProjectionRepository,
-  type Database,
-  type JobProjectionLease,
-} from "../src";
+import { JobProjectionRepository, type Database, type JobProjectionLease } from "../src";
 
 function databaseReturning(rows: unknown[]) {
   const statements: string[] = [];
@@ -50,25 +46,15 @@ describe("job projection repository", () => {
         max_attempts: 8,
       },
     ]);
-    const claimed = await new JobProjectionRepository(database.tag).claim(
-      "projection-1",
-      10,
-      60,
-    );
-    expect(database.statements[0]).toContain(
-      "worker_private.claim_job_projection_tasks",
-    );
+    const claimed = await new JobProjectionRepository(database.tag).claim("projection-1", 10, 60);
+    expect(database.statements[0]).toContain("worker_private.claim_job_projection_tasks");
     expect(database.values[0]).toEqual(["projection-1", 10, 60]);
     expect(claimed[0]).toMatchObject({ entityVersion: 42n, claimGeneration: 3n });
   });
 
   test("persists documents only through the fenced completion RPC", async () => {
-    const database = databaseReturning([
-      { complete_job_projection_upsert_with_facets: true },
-    ]);
-    const completed = await new JobProjectionRepository(
-      database.tag,
-    ).completeUpsert(
+    const database = databaseReturning([{ complete_job_projection_upsert_with_facets: true }]);
+    const completed = await new JobProjectionRepository(database.tag).completeUpsert(
       lease,
       {
         schema_version: "hirly.matching.v1",

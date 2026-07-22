@@ -28,7 +28,9 @@ export async function syncBillingAfterCheckout({
 
   if (resolvedSessionId) {
     try {
-      const { data } = await api.post("/billing/confirm-checkout", { session_id: resolvedSessionId });
+      const { data } = await api.post("/billing/confirm-checkout", {
+        session_id: resolvedSessionId,
+      });
       if (data) {
         notifyBillingUpdated(data);
         if (hasGrantedCredits(data)) {

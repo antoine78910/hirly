@@ -33,7 +33,8 @@ export default function ImpersonationBanner() {
       <div className="flex min-w-0 items-center gap-2">
         <UserCheck className="h-4 w-4 shrink-0" />
         <span className="truncate text-sm font-semibold">
-          Viewing as{user?.name ? ` ${user.name}` : ""}{user?.email ? ` (${user.email})` : ""}
+          Viewing as{user?.name ? ` ${user.name}` : ""}
+          {user?.email ? ` (${user.email})` : ""}
         </span>
         <span className="hidden rounded-full bg-white/20 px-2 py-0.5 text-xs font-medium sm:inline">
           Admin impersonation

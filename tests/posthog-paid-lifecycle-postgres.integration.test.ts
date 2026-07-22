@@ -59,11 +59,13 @@ describePostgres("paid lifecycle migration on disposable PostgreSQL", () => {
       ),
     );
     await Promise.all(calls);
-    const [counts] = await sql<{
-      paid: number;
-      activation: number;
-      activation_outbox: number;
-    }[]>`
+    const [counts] = await sql<
+      {
+        paid: number;
+        activation: number;
+        activation_outbox: number;
+      }[]
+    >`
       SELECT
         count(*) FILTER (WHERE evidence_type = 'paid_generation')::int AS paid,
         count(*) FILTER (WHERE evidence_type = 'activation')::int AS activation,
@@ -82,30 +84,67 @@ describePostgres("paid lifecycle migration on disposable PostgreSQL", () => {
         `SELECT * FROM analytics_private.record_posthog_paid_invoice(
           $1,$2,$3,$4,$5,$6,$7,$8,$9,$10
         )`,
-        [userId, subscription, `in_${event}`, event, "invoice.payment_succeeded", at, "eur", "29", null, null],
+        [
+          userId,
+          subscription,
+          `in_${event}`,
+          event,
+          "invoice.payment_succeeded",
+          at,
+          "eur",
+          "29",
+          null,
+          null,
+        ],
       );
     const terminal = async (event: string, sourceAt: string, lossAt: string) =>
       sql.unsafe(
         `SELECT * FROM analytics_private.record_posthog_subscription_state(
           $1,$2,$3,$4,$5,$6,$7,$8
         )`,
-        [userId, subscription, event, "customer.subscription.deleted", sourceAt, "canceled", lossAt, "customer_requested"],
+        [
+          userId,
+          subscription,
+          event,
+          "customer.subscription.deleted",
+          sourceAt,
+          "canceled",
+          lossAt,
+          "customer_requested",
+        ],
       );
 
     await invoice(`evt_${randomUUID()}`, "2026-06-01T00:00:00Z");
-    await Promise.all(Array.from({ length: 10 }, () =>
-      terminal(`evt_${randomUUID()}`, "2026-06-20T00:00:00Z", "2026-06-20T00:00:00Z"),
-    ));
+    await Promise.all(
+      Array.from({ length: 10 }, () =>
+        terminal(`evt_${randomUUID()}`, "2026-06-20T00:00:00Z", "2026-06-20T00:00:00Z"),
+      ),
+    );
     await sql.unsafe(
       `SELECT * FROM analytics_private.record_posthog_subscription_state(
         $1,$2,$3,$4,$5,$6,$7,$8
       )`,
-      [userId, subscription, `evt_${randomUUID()}`, "customer.subscription.updated", "2026-06-21T00:00:00Z", "active", null, null],
+      [
+        userId,
+        subscription,
+        `evt_${randomUUID()}`,
+        "customer.subscription.updated",
+        "2026-06-21T00:00:00Z",
+        "active",
+        null,
+        null,
+      ],
     );
     await invoice(`evt_${randomUUID()}`, "2026-06-22T00:00:00Z");
     await terminal(`evt_${randomUUID()}`, "2026-06-30T00:00:00Z", "2026-06-30T00:00:00Z");
 
-    const rows = await sql<{ generation: number; posthog_uuid: string; payload: { properties: { generation: number } } }[]>`
+    const rows = await sql<
+      {
+        generation: number;
+        posthog_uuid: string;
+        payload: { properties: { generation: number } };
+      }[]
+    >`
       SELECT evidence.generation, outbox.posthog_uuid::text, outbox.payload
       FROM public.posthog_paid_lifecycle_evidence AS evidence
       JOIN public.posthog_paid_lifecycle_outbox AS outbox
@@ -117,15 +156,19 @@ describePostgres("paid lifecycle migration on disposable PostgreSQL", () => {
     expect(rows.map((row) => row.generation)).toEqual([1, 2]);
     for (const row of rows) {
       expect(row.payload.properties.generation).toBe(row.generation);
-      expect(row.posthog_uuid).toBe(uuid5(
-        "69fbb143-6b0b-42ca-8a9b-7f2c1b41c041",
-        `subscription_churned:subscription:${subscription}:generation:${row.generation}`,
-      ));
+      expect(row.posthog_uuid).toBe(
+        uuid5(
+          "69fbb143-6b0b-42ca-8a9b-7f2c1b41c041",
+          `subscription_churned:subscription:${subscription}:generation:${row.generation}`,
+        ),
+      );
     }
   });
 
   test("claims disjoint leases, rejects stale fences, and rolls back/reapplies", async () => {
-    const first = await sql<{ fact_key: string; lease_owner: string; lease_token: string; lease_generation: number }[]>`
+    const first = await sql<
+      { fact_key: string; lease_owner: string; lease_token: string; lease_generation: number }[]
+    >`
       SELECT fact_key, lease_owner, lease_token::text, lease_generation
       FROM analytics_private.claim_posthog_paid_lifecycle_deliveries('worker-a', 1, 60)
     `;
@@ -133,8 +176,9 @@ describePostgres("paid lifecycle migration on disposable PostgreSQL", () => {
       SELECT fact_key
       FROM analytics_private.claim_posthog_paid_lifecycle_deliveries('worker-b', 100, 60)
     `;
-    expect(new Set([...first, ...second].map((row) => row.fact_key)).size)
-      .toBe(first.length + second.length);
+    expect(new Set([...first, ...second].map((row) => row.fact_key)).size).toBe(
+      first.length + second.length,
+    );
     if (first[0]) {
       const [stale] = await sql<{ changed: boolean }[]>`
         SELECT analytics_private.mark_posthog_paid_lifecycle_sent(
@@ -152,9 +196,11 @@ describePostgres("paid lifecycle migration on disposable PostgreSQL", () => {
       expect(sent.changed).toBe(true);
     }
 
-    await expect(sql.unsafe(
-      "UPDATE public.posthog_paid_lifecycle_evidence SET status = 'tampered' WHERE evidence_type = 'end'",
-    )).rejects.toThrow("append-only");
+    await expect(
+      sql.unsafe(
+        "UPDATE public.posthog_paid_lifecycle_evidence SET status = 'tampered' WHERE evidence_type = 'end'",
+      ),
+    ).rejects.toThrow("append-only");
 
     await sql.unsafe(down);
     const [rolledBack] = await sql<{ evidence: string | null; functions: number }[]>`
@@ -176,4 +222,3 @@ if (!databaseUrl) {
     expect(databaseUrl).toBeUndefined();
   });
 }
-

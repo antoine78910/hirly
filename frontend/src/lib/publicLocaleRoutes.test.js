@@ -45,7 +45,9 @@ describe("public locale route matrix", () => {
 
   test("requires route owners to declare the locales with authored content", () => {
     expect(() => publicHreflangLinks("/blog")).toThrow("non-empty explicitly available locale set");
-    expect(() => publicHreflangLinks("/blog", "https://tryhirly.com", [])).toThrow("non-empty explicitly available locale set");
+    expect(() => publicHreflangLinks("/blog", "https://tryhirly.com", [])).toThrow(
+      "non-empty explicitly available locale set",
+    );
     expect(publicHreflangLinks("/blog", "https://tryhirly.com", ["en"])).toEqual([
       { hrefLang: "en", href: "https://tryhirly.com/blog" },
       { hrefLang: "x-default", href: "https://tryhirly.com/blog" },

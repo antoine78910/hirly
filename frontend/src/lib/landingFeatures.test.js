@@ -3,8 +3,18 @@ import { getLandingFeaturesCopy } from "./landingFeatures";
 describe("getLandingFeaturesCopy", () => {
   it.each([
     ["de", "Entdecke Hirly", "Deine Jobsuche, überall dabei.", "Deine Bewerbung wurde versendet!"],
-    ["es", "Descubre Hirly", "Tu búsqueda de empleo, siempre contigo.", "¡Tu candidatura se ha enviado!"],
-    ["it", "Scopri Hirly", "La tua ricerca di lavoro, sempre con te.", "La tua candidatura è stata inviata!"],
+    [
+      "es",
+      "Descubre Hirly",
+      "Tu búsqueda de empleo, siempre contigo.",
+      "¡Tu candidatura se ha enviado!",
+    ],
+    [
+      "it",
+      "Scopri Hirly",
+      "La tua ricerca di lavoro, sempre con te.",
+      "La tua candidatura è stata inviata!",
+    ],
   ])("uses an explicit authored %s catalog", (locale, badge, title, aiApplySuccess) => {
     const copy = getLandingFeaturesCopy(locale);
     expect(copy).toMatchObject({ badge, title, aiApplySuccess });
@@ -27,7 +37,9 @@ describe("getLandingFeaturesCopy", () => {
     ["es", ["Entrevista", "Solicitud enviada", "Oferta", "Pendiente"]],
     ["it", ["Colloquio", "Candidatura inviata", "Offerta", "In attesa"]],
   ])("translates visible %s tracker-card statuses", (locale, statuses) => {
-    expect(getLandingFeaturesCopy(locale).trackerCards.map((card) => card.status)).toEqual(statuses);
+    expect(getLandingFeaturesCopy(locale).trackerCards.map((card) => card.status)).toEqual(
+      statuses,
+    );
   });
 
   it("retains English as the fallback only for unsupported locales", () => {

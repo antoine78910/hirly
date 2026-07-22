@@ -111,12 +111,8 @@ describe("PostHog Customer Analytics local contract", () => {
       "utf8",
     );
     expect(backendEnvironment).toContain("POSTHOG_PAID_LIFECYCLE_ENABLED=false");
-    expect(frontendEnvironment).toContain(
-      "REACT_APP_ADMIN_POSTHOG_ANALYTICS_ENABLED=false",
-    );
-    expect(frontendEnvironment).toMatch(
-      /^REACT_APP_POSTHOG_ADMIN_DASHBOARD_URL=$/m,
-    );
+    expect(frontendEnvironment).toContain("REACT_APP_ADMIN_POSTHOG_ANALYTICS_ENABLED=false");
+    expect(frontendEnvironment).toMatch(/^REACT_APP_POSTHOG_ADMIN_DASHBOARD_URL=$/m);
   });
 
   test("defines explicit non-cumulative half-open J0/J1/W1/M1 windows", () => {
@@ -180,10 +176,7 @@ describe("PostHog Customer Analytics local contract", () => {
       "cv_uploaded",
       "onboarding_completed",
     ]);
-    expect(manifest.selectors.passiveActivityExcluded).toEqual([
-      "$pageview",
-      "job_card_viewed",
-    ]);
+    expect(manifest.selectors.passiveActivityExcluded).toEqual(["$pageview", "job_card_viewed"]);
     expect(manifest.selectors.warehouseActivityFacts).toEqual([
       "public__swipes.created_at",
       "public__applications.created_at",
@@ -223,9 +216,7 @@ describe("PostHog Customer Analytics local contract", () => {
     expect(paid).toContain("event = 'subscription_churned'");
     expect(paid).toContain("paid_churn.distinct_id = eligible.distinct_id");
     expect(paid).not.toContain("engagement_churn");
-    expect(manifest.queries.paidSubscriptionChurn.title).toBe(
-      "First-paid activation-cohort loss",
-    );
+    expect(manifest.queries.paidSubscriptionChurn.title).toBe("First-paid activation-cohort loss");
   });
 
   test("renders every horizon from the governed window and paid-source parameters", () => {
@@ -233,9 +224,7 @@ describe("PostHog Customer Analytics local contract", () => {
       ["engagement", queryText("engagement")],
       ["paidSubscriptionChurn", queryText("paidSubscriptionChurn")],
     ] as const) {
-      const placeholders = [...query.matchAll(/\{\{([a-z0-9_]+)\}\}/g)].map(
-        (match) => match[1],
-      );
+      const placeholders = [...query.matchAll(/\{\{([a-z0-9_]+)\}\}/g)].map((match) => match[1]);
       const expected = ["start_day", "end_day", "j0_start_at_signup"];
       if (key === "paidSubscriptionChurn") expected.push("paid_source_start_at");
       expect(new Set(placeholders)).toEqual(new Set(expected));

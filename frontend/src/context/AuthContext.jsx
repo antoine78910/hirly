@@ -48,8 +48,9 @@ export const AuthProvider = ({ children }) => {
       // Only sync billing after a Stripe checkout redirect — not on every login.
       const isRealUser = data.user && !data.user.demo_account && !Boolean(data.is_admin);
       if (isRealUser && peekCheckoutSessionId()) {
-        resumePendingCheckoutSync({ maxAttempts: 15, delayMs: 1500 })
-          .catch(() => syncBillingStatus().catch(() => {}));
+        resumePendingCheckoutSync({ maxAttempts: 15, delayMs: 1500 }).catch(() =>
+          syncBillingStatus().catch(() => {}),
+        );
       }
     } catch (e) {
       setUser(null);
@@ -165,23 +166,25 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{
-      user,
-      hasProfile,
-      hasPreferences,
-      isTrainingCreator,
-      setIsTrainingCreator,
-      hasTrainingAccess,
-      setHasTrainingAccess,
-      isAdmin,
-      setIsAdmin,
-      loading,
-      checkAuth,
-      setUser,
-      setHasProfile,
-      setHasPreferences,
-      logout,
-    }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        hasProfile,
+        hasPreferences,
+        isTrainingCreator,
+        setIsTrainingCreator,
+        hasTrainingAccess,
+        setHasTrainingAccess,
+        isAdmin,
+        setIsAdmin,
+        loading,
+        checkAuth,
+        setUser,
+        setHasProfile,
+        setHasPreferences,
+        logout,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

@@ -1,10 +1,6 @@
 import type { Logger } from "@hirly/observability";
 import type { ClaimedTask } from "@hirly/db";
-import {
-  PermanentTaskError,
-  retryDelayMs,
-  safeErrorMessage,
-} from "./retry";
+import { PermanentTaskError, retryDelayMs, safeErrorMessage } from "./retry";
 import type { ConsumerRepository, TaskHandlers } from "./types";
 
 export interface ConsumerOptions {
@@ -77,9 +73,7 @@ export class Consumer {
         continue;
       }
       for (const task of tasks) {
-        const execution = this.execute(task).finally(() =>
-          this.active.delete(execution),
-        );
+        const execution = this.execute(task).finally(() => this.active.delete(execution));
         this.active.add(execution);
       }
     }
@@ -100,10 +94,7 @@ export class Consumer {
     this.taskControllers.add(taskController);
     const heartbeat = setInterval(async () => {
       try {
-        const current = await this.repository.heartbeat(
-          task,
-          this.options.leaseSeconds,
-        );
+        const current = await this.repository.heartbeat(task, this.options.leaseSeconds);
         if (!current) taskController.abort(new Error("lease_lost"));
       } catch {
         taskController.abort(new Error("lease_lost"));
@@ -121,19 +112,13 @@ export class Consumer {
     } catch (error) {
       const permanent = error instanceof PermanentTaskError;
       const exhausted = task.attempts >= task.maxAttempts;
-      reasonCode = permanent
-        ? error.code
-        : exhausted
-          ? "retry_exhausted"
-          : "provider_transient";
+      reasonCode = permanent ? error.code : exhausted ? "retry_exhausted" : "provider_transient";
       outcome = permanent || exhausted ? "failed" : "retryable";
       const current = await this.repository.finish(task, outcome, {
         errorCode: reasonCode,
         errorMessage: safeErrorMessage(error),
         retryAt:
-          outcome === "retryable"
-            ? new Date(Date.now() + retryDelayMs(task.attempts))
-            : undefined,
+          outcome === "retryable" ? new Date(Date.now() + retryDelayMs(task.attempts)) : undefined,
       });
       if (!current) {
         outcome = "failed";
@@ -176,8 +161,8 @@ export class Consumer {
     this.stopClaiming();
     const active = () =>
       Promise.allSettled(
-        [...this.active, this.runPromise].filter(
-          (promise): promise is Promise<void> => Boolean(promise),
+        [...this.active, this.runPromise].filter((promise): promise is Promise<void> =>
+          Boolean(promise),
         ),
       );
     const drained = await Promise.race([

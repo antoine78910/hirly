@@ -8,15 +8,8 @@ import {
 } from "@hirly/contracts";
 import type { Logger } from "@hirly/observability";
 import type { ClaimedTask } from "@hirly/db";
-import {
-  IngestionError,
-  ProviderRateGate,
-  runIngestion,
-} from "@hirly/ingestion";
-import {
-  getProviderModule,
-  providerModules,
-} from "../providers";
+import { IngestionError, ProviderRateGate, runIngestion } from "@hirly/ingestion";
+import { getProviderModule, providerModules } from "../providers";
 import type { ProviderCore } from "../providers/core";
 import {
   SPROUT_FRANCE_DISABLED_REGISTRATION,
@@ -144,11 +137,17 @@ export function environmentSproutSession(
     return await loadInFlight;
   }
 
-  async function persist(session: SproutSession, expectedVersion: bigint | null): Promise<VersionedSession> {
+  async function persist(
+    session: SproutSession,
+    expectedVersion: bigint | null,
+  ): Promise<VersionedSession> {
     if (!cipher || !store?.compareAndSwapSproutAuthSession || !store.getSproutAuthSession) {
       return { ...session, version: expectedVersion };
     }
-    const version = await store.compareAndSwapSproutAuthSession(expectedVersion, cipher.encrypt(session));
+    const version = await store.compareAndSwapSproutAuthSession(
+      expectedVersion,
+      cipher.encrypt(session),
+    );
     if (version !== null) return { ...session, version };
 
     // Another worker rotated the one-time refresh token first. Load its
@@ -183,7 +182,11 @@ export function environmentSproutSession(
               "https://qxkswyqmsisjdtmywnow.supabase.co/auth/v1/token?grant_type=refresh_token",
               {
                 method: "POST",
-                headers: { apikey: apiKey, authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
+                headers: {
+                  apikey: apiKey,
+                  authorization: `Bearer ${apiKey}`,
+                  "content-type": "application/json",
+                },
                 body: JSON.stringify({ refresh_token: refreshToken }),
                 signal,
               },
@@ -201,9 +204,16 @@ export function environmentSproutSession(
               }
               throw new Error("sprout_refresh_rejected");
             }
-            const body = (await response.json()) as { access_token?: string; refresh_token?: string };
-            if (!body.access_token || !body.refresh_token) throw new Error("sprout_refresh_response_invalid");
-            const next = { accessToken: body.access_token.trim(), refreshToken: body.refresh_token.trim() };
+            const body = (await response.json()) as {
+              access_token?: string;
+              refresh_token?: string;
+            };
+            if (!body.access_token || !body.refresh_token)
+              throw new Error("sprout_refresh_response_invalid");
+            const next = {
+              accessToken: body.access_token.trim(),
+              refreshToken: body.refresh_token.trim(),
+            };
             current = await persist(next, existing.version);
             return { accessToken: current.accessToken, refreshToken: current.refreshToken };
           })().finally(() => {
@@ -220,7 +230,11 @@ export function sproutDiscoveryProfile(sourceKey: string): {
   filterVariant: "qualified_radius" | "country_only" | "global_unfiltered";
   includeUnknownWorkLocation: boolean;
 } {
-  if (sourceKey === "sprout:france" || sourceKey === "sprout:france:country-only" || /^sprout:country:[A-Z]{2}$/.test(sourceKey)) {
+  if (
+    sourceKey === "sprout:france" ||
+    sourceKey === "sprout:france:country-only" ||
+    /^sprout:country:[A-Z]{2}$/.test(sourceKey)
+  ) {
     // The API does not accept the otherwise-empty country-location shape.
     // Fetch globally, then reject rows lacking this lane's verified country
     // before the canonical source writer runs.
@@ -250,10 +264,7 @@ export function createTaskHandlers(
     "provider.fetch_page": async (task, signal) => {
       signal.throwIfAborted();
       if (!task.provider) {
-        throw new PermanentTaskError(
-          "invalid_input",
-          "provider task is missing provider",
-        );
+        throw new PermanentTaskError("invalid_input", "provider task is missing provider");
       }
       const provider = providerSchema.parse(task.provider);
       let sproutSourceId: string | null = null;
@@ -267,9 +278,7 @@ export function createTaskHandlers(
             module.rateLimit,
             undefined,
             undefined,
-            provider === "sprout"
-              ? { startIntervalMs: { min: 3_000, max: 6_000 } }
-              : undefined,
+            provider === "sprout" ? { startIntervalMs: { min: 3_000, max: 6_000 } } : undefined,
           );
           rateGates.set(provider, rateGate);
         }
@@ -300,432 +309,396 @@ export function createTaskHandlers(
           providerOperationGates.set(provider, providerOperationGate);
         }
         return await providerOperationGate.run(async () => {
-        const providerClaim = await claimProviderWork(
-          task,
-          provider,
-          leaseSeconds,
-        );
-        const heartbeatClaim = heartbeatProviderWork.bind(store);
-        const finishClaim = finishProviderWork.bind(store);
-        const releaseClaim = releaseProviderWork.bind(store);
-        const writeClaim = writeJobsAndComplete.bind(store);
-        const claimAbort = new AbortController();
-        const forwardAbort = () => claimAbort.abort(signal.reason);
-        signal.addEventListener("abort", forwardAbort, { once: true });
-        let claimCompleted = false;
-        let claimCompleting = false;
-        let heartbeatPromise: Promise<void> | null = null;
-        let heartbeatError: IngestionError | null = null;
-        const heartbeatMs =
-          options.providerClaimHeartbeatMs ??
-          Math.max(250, Math.floor((leaseSeconds * 1_000) / 3));
-        const heartbeat = setInterval(async () => {
-          if (
-            heartbeatPromise ||
-            claimCompleting ||
-            claimCompleted ||
-            heartbeatError
-          ) return;
-          heartbeatPromise = (async () => {
-            try {
-              const current = await heartbeatClaim(
-                  task,
-                  providerClaim,
-                  leaseSeconds,
-                );
-              if (claimCompleted) return;
-              if (!current) {
+          const providerClaim = await claimProviderWork(task, provider, leaseSeconds);
+          const heartbeatClaim = heartbeatProviderWork.bind(store);
+          const finishClaim = finishProviderWork.bind(store);
+          const releaseClaim = releaseProviderWork.bind(store);
+          const writeClaim = writeJobsAndComplete.bind(store);
+          const claimAbort = new AbortController();
+          const forwardAbort = () => claimAbort.abort(signal.reason);
+          signal.addEventListener("abort", forwardAbort, { once: true });
+          let claimCompleted = false;
+          let claimCompleting = false;
+          let heartbeatPromise: Promise<void> | null = null;
+          let heartbeatError: IngestionError | null = null;
+          const heartbeatMs =
+            options.providerClaimHeartbeatMs ??
+            Math.max(250, Math.floor((leaseSeconds * 1_000) / 3));
+          const heartbeat = setInterval(async () => {
+            if (heartbeatPromise || claimCompleting || claimCompleted || heartbeatError) return;
+            heartbeatPromise = (async () => {
+              try {
+                const current = await heartbeatClaim(task, providerClaim, leaseSeconds);
+                if (claimCompleted) return;
+                if (!current) {
+                  heartbeatError = new IngestionError(
+                    "integrity_error",
+                    "provider ownership claim became stale",
+                  );
+                  claimAbort.abort(heartbeatError);
+                }
+              } catch {
+                if (claimCompleted) return;
                 heartbeatError = new IngestionError(
                   "integrity_error",
-                  "provider ownership claim became stale",
+                  "provider ownership claim heartbeat failed",
                 );
                 claimAbort.abort(heartbeatError);
+              } finally {
+                heartbeatPromise = null;
               }
-            } catch {
-              if (claimCompleted) return;
-              heartbeatError = new IngestionError(
-                "integrity_error",
-                "provider ownership claim heartbeat failed",
-              );
-              claimAbort.abort(heartbeatError);
-            } finally {
-              heartbeatPromise = null;
-            }
-          })();
-          await heartbeatPromise;
-        }, heartbeatMs);
-        try {
-          if (provider === "sprout") {
-            if (!store.getSproutSourceRuntime || !store.commitSproutSourcePage) {
-              throw new IngestionError(
-                "integrity_error",
-                "Sprout source runtime persistence is unavailable",
-              );
-            }
-            const payload = sproutTaskPayloadSchema.parse(task.payload);
-            sproutSourceId = payload.sourceId;
-            if (!store.bindSproutSourceRun) {
-              throw new IngestionError(
-                "integrity_error",
-                "sprout_source_run_binding_is_unavailable",
-              );
-            }
-            // Schedule-created runs have no career_source_id until the worker
-            // has fenced the active task and provider claim. Bind it before
-            // reading or committing a source checkpoint; this preserves the
-            // source ownership invariant without rewinding incremental scans.
-            await store.bindSproutSourceRun(
-              task,
-              providerClaim,
-              payload.sourceId,
-              payload.mode,
-            );
-            if (payload.cycleStart) {
-              if (payload.mode !== "incremental" || !store.beginSproutIncrementalCycle) {
+            })();
+            await heartbeatPromise;
+          }, heartbeatMs);
+          try {
+            if (provider === "sprout") {
+              if (!store.getSproutSourceRuntime || !store.commitSproutSourcePage) {
                 throw new IngestionError(
                   "integrity_error",
-                  "sprout_incremental_cycle_start_invalid",
+                  "Sprout source runtime persistence is unavailable",
                 );
               }
-              await store.beginSproutIncrementalCycle(
-                task,
-                providerClaim,
-                payload.sourceId,
-              );
-            }
-            const runtime = await store.getSproutSourceRuntime(
-              payload.sourceId,
-              payload.mode,
-            );
-            if (!runtime) {
-              throw new IngestionError(
-                "authorization_blocked",
-                "sprout_source_activation_blocked",
-              );
-            }
-            const checkpoint = sproutCheckpointSchema.parse(runtime.checkpoint);
-            const discoveryProfile = sproutDiscoveryProfile(runtime.sourceKey);
-            sproutRequestDocument = {
-              countryCode: runtime.countryCode,
-              mode: payload.mode,
-              offset: checkpoint.offset,
-              pageSize: checkpoint.pageSize,
-              filterVariant: discoveryProfile.filterVariant,
-              includeQualifiedRadius: discoveryProfile.filterVariant === "qualified_radius",
-              includeUnknownWorkLocation: discoveryProfile.includeUnknownWorkLocation,
-            };
-            const configuredOrigins =
-              options.sproutAllowedOrigins ??
-              (process.env.SPROUT_ALLOWED_ORIGIN
-                ? [process.env.SPROUT_ALLOWED_ORIGIN]
-                : []);
-            if (configuredOrigins.length === 0) {
-              throw new IngestionError(
-                "authorization_blocked",
-                "sprout_transport_allowlist_missing",
-              );
-            }
-            const transport = new SproutHttpTransport({
-              endpoint: runtime.endpoint,
-              allowedOrigins: configuredOrigins,
-              secrets: options.sproutSecretResolver ?? sproutEnvironmentSession.secrets,
-              tokenRefresher: sproutEnvironmentSession.tokenRefresher,
-              fetch: options.sproutFetch,
-              maxResponseBytes: payload.maxResponseBytes,
-              onOperation(operation) {
-                if (operation.type === "fetch_response") {
-                  emitSproutOperation(logger, task, {
-                    event: "sprout.fetch_response",
-                    severity: "info",
-                    outcome: "succeeded",
-                    details: operation,
-                  });
-                  return;
-                }
-                if (operation.type === "schema_drift") {
-                  emitSproutOperation(logger, task, {
-                    event: "sprout.schema_drift",
-                    severity: "error",
-                    outcome: "failed",
-                    reasonCode: "provider_permanent",
-                    details: operation,
-                  });
-                  return;
-                }
-                emitSproutOperation(logger, task, {
-                  event: "sprout.retry_backoff",
-                  severity: "warn",
-                  outcome: "retrying",
-                  reasonCode: operation.classification,
-                  details: operation,
-                });
-              },
-            });
-            const commitSproutSourcePage = store.commitSproutSourcePage.bind(store);
-            const repository = createSproutCommitRepository({
-              sourceId: runtime.sourceId,
-              policyId: runtime.policyId,
-              countryCode: runtime.countryCode,
-              mode: payload.mode,
-              async commit(commit) {
-                claimCompleting = true;
-                await heartbeatPromise;
-                if (heartbeatError) throw heartbeatError;
-                const result = await commitSproutSourcePage(
-                  task,
-                  providerClaim,
-                  commit,
+              const payload = sproutTaskPayloadSchema.parse(task.payload);
+              sproutSourceId = payload.sourceId;
+              if (!store.bindSproutSourceRun) {
+                throw new IngestionError(
+                  "integrity_error",
+                  "sprout_source_run_binding_is_unavailable",
                 );
-                claimCompleted = true;
-                emitSproutOperation(logger, task, {
-                  event: "sprout.page_committed",
-                  severity: "info",
-                  outcome: "succeeded",
-                  details: {
-                    mode: payload.mode,
-                    itemCount: commit.entries.length,
-                    complete: commit.complete,
-                    checkpointInOffset: commit.checkpointIn.offset,
-                    checkpointOutOffset: commit.checkpointOut.offset,
-                    pageSize: commit.checkpointOut.pageSize,
-                    observedTotal: commit.checkpointOut.observedTotal,
-                    snapshotsInserted: result.snapshotsInserted,
-                    canonicalUpserts: result.canonicalUpserts,
-                    occurrencesUpserted: result.occurrencesUpserted,
-                    groupsCreated: result.groupsCreated,
-                    listingCounts: {
-                      fetched: commit.entries.length,
-                      // A canonical upsert may refresh an existing listing.
-                      // Keep the operational "added" counter aligned with
-                      // page_complete: only newly-created canonical groups
-                      // represent new inventory.
-                      added: result.groupsCreated,
-                      ignored: Math.max(0, commit.entries.length - result.groupsCreated),
-                      errors: 0,
-                    },
-                  },
-                });
-                return result;
-              },
-            });
-            emitSproutOperation(logger, task, {
-              event: "sprout.page_start",
-              severity: "info",
-              outcome: "started",
-              details: {
-                mode: payload.mode,
-                countryCode: runtime.countryCode,
-                sourceKey: runtime.sourceKey,
-                checkpointOffset: checkpoint.offset,
-                pageSize: checkpoint.pageSize,
-                filterVariant: discoveryProfile.filterVariant,
-                includeUnknownWorkLocation: discoveryProfile.includeUnknownWorkLocation,
-              },
-            });
-            const result = await runSproutPageTask<SproutRawJob>({
-              activation: {
-                ...SPROUT_FRANCE_DISABLED_REGISTRATION,
-                authorizationStatus: "authorized",
-                writerRuntime: "typescript",
-                policyStatus: "approved",
-                policyEvidenceRef: runtime.policyEvidenceRef,
-                redisplayAllowed: true,
-                fullTextRetentionAllowed: true,
-                credentialRef: runtime.credentialRef,
-                approvedPageSize: runtime.approvedPageSize,
-                enabled: true,
-                transportEnabled: true,
-                canaryEnabled: payload.mode === "canary",
-                incrementalEnabled: payload.mode === "incremental",
-                backfillEnabled: payload.mode === "backfill",
-                providerCountryKillSwitch: false,
-                sourceCountryKillSwitch: false,
-                canaryEvidence: runtime.canaryEvidence,
-                rollbackEvidence: runtime.rollbackEvidence,
-              },
-              mode: payload.mode,
-              checkpoint,
-              transport: {
-                fetchPage: (request, requestSignal) =>
-                  rateGate.run(
-                    () => transport.fetchPage(request, requestSignal),
-                    requestSignal,
-                  ),
-              },
-              repository,
-              countryCode: runtime.countryCode,
-              hasCountryLocation: hasSproutCountryLocation,
-              signal: claimAbort.signal,
-              maxResponseBytes: payload.maxResponseBytes,
-              includeQualifiedRadius: discoveryProfile.filterVariant === "qualified_radius",
-              includeUnknownWorkLocation: discoveryProfile.includeUnknownWorkLocation,
-            });
-            const nextPageCount = payload.pageCount + 1;
-            const reachedPageLimit =
-              payload.maxPages !== null && nextPageCount >= payload.maxPages;
-            if (!result.complete && payload.mode !== "canary" && !reachedPageLimit) {
-              const nextOffset = result.checkpoint.offset;
-              const nextPayload = {
-                ...payload,
-                // Only the first task in a scheduled incremental cycle may
-                // rewind the source. Follow-up pages must keep their freshly
-                // committed checkpoint.
-                cycleStart: false,
-                pageCount: nextPageCount,
-                // The source key, not a mutable task payload, selects the
-                // discovery query. Each lane owns its checkpoint so retries
-                // and chained pages cannot silently switch query semantics.
-                emptyInsertStreak: 0,
-              };
-              const nextRunId = await store.enqueue(enqueueRunSchema.parse({
-                kind: "provider_ingestion",
-                provider: "sprout",
-                // A continuation is idempotent within this cycle, not across
-                // every historical cycle. Reusing a source+offset key caused
-                // later scheduled scans to stop after their first page once a
-                // previous run had already visited that offset.
-                idempotencyKey: `sprout:${payload.sourceId}:${payload.mode}:${task.runId}:${nextOffset}`,
-                triggerSource: "cli",
-                tasks: [{
-                  taskKey: `sprout:page:${payload.mode}:${payload.sourceId}:${nextOffset}`,
-                  taskType: "provider.fetch_page",
-                  payload: nextPayload,
-                }],
-              }));
-              await store.attachCareerSource?.(nextRunId, payload.sourceId);
-            }
-            emitSproutOperation(logger, task, {
-              event: "sprout.page_complete",
-              severity: "info",
-              outcome: "succeeded",
-              details: {
-                mode: payload.mode,
-                fetched: result.fetched,
-                responseBytes: result.responseBytes,
-                complete: result.complete,
-                checkpointOffset: result.checkpoint.offset,
-                pageSize: result.checkpoint.pageSize,
-                observedTotal: result.checkpoint.observedTotal,
-                sourceKey: runtime.sourceKey,
-                filterVariant: discoveryProfile.filterVariant,
-                includeUnknownWorkLocation: discoveryProfile.includeUnknownWorkLocation,
-                emptyInsertStreak: 0,
-                cycleStart: payload.cycleStart,
-                pageCount: nextPageCount,
-                maxPages: payload.maxPages,
-                stoppedAtPageLimit: reachedPageLimit,
-                listingCounts: {
-                  fetched: result.fetched,
-                  added: result.inserted,
-                  ignored: Math.max(0, result.fetched - result.inserted - result.rejected),
-                  errors: result.rejected,
-                },
-              },
-            });
-            return { taskCompleted: true };
-          }
-          const request = providerSearchRequestSchema.parse({
-            provider,
-            ...task.payload,
-          });
-          const result = await runIngestion({
-            provider,
-            transport: module.transport,
-            adapter: module.adapter,
-            repository: {
-              async upsertCanonicalBatch(jobs) {
-                claimCompleting = true;
-                await heartbeatPromise;
-                if (heartbeatError) throw heartbeatError;
-                const current = await writeClaim(
-                  task,
-                  providerClaim,
-                  jobs,
-                );
-                if (!current) {
+              }
+              // Schedule-created runs have no career_source_id until the worker
+              // has fenced the active task and provider claim. Bind it before
+              // reading or committing a source checkpoint; this preserves the
+              // source ownership invariant without rewinding incremental scans.
+              await store.bindSproutSourceRun(task, providerClaim, payload.sourceId, payload.mode);
+              if (payload.cycleStart) {
+                if (payload.mode !== "incremental" || !store.beginSproutIncrementalCycle) {
                   throw new IngestionError(
                     "integrity_error",
-                    "lease lost before canonical batch write",
+                    "sprout_incremental_cycle_start_invalid",
                   );
                 }
-                claimCompleted = true;
-                return jobs.length;
-              },
-            },
-            request,
-            rateLimit: module.rateLimit,
-            rateGate,
-            signal: claimAbort.signal,
-            onMetrics(metrics) {
-              try {
-                logger?.emit({
-                  service: "hirly-worker",
-                  version: "0.1.0",
-                  environment: process.env.NODE_ENV ?? "development",
-                  event: "provider.ingestion_batch",
-                  severity: "info",
-                  runId: task.runId,
-                  taskId: task.taskId,
-                  taskType: task.taskType,
-                  provider,
-                  attempt: task.attempts,
-                  maxAttempts: task.maxAttempts,
-                  durationsMs: {
-                    queueWait: 0,
-                    fetch: metrics.durationsMs.fetch,
-                    normalization: metrics.durationsMs.normalization,
-                    validation: metrics.durationsMs.validation,
-                    database: metrics.durationsMs.database,
-                    total: metrics.durationsMs.total,
-                  },
-                  counts: {
-                    fetched: metrics.fetched,
-                    accepted: metrics.accepted,
-                    rejected: metrics.rejected,
-                    deduplicated: metrics.deduplicated,
-                    upserted: metrics.upserted,
-                  },
-                  outcome: "succeeded",
-                });
-              } catch {
-                // The canonical write completed atomically with the task. A
-                // metrics sink failure must not turn that success into a retry.
+                await store.beginSproutIncrementalCycle(task, providerClaim, payload.sourceId);
               }
-            },
-          });
-          if (heartbeatError) throw heartbeatError;
-          if (result.jobs.length === 0) {
-            claimCompleting = true;
-            await heartbeatPromise;
+              const runtime = await store.getSproutSourceRuntime(payload.sourceId, payload.mode);
+              if (!runtime) {
+                throw new IngestionError(
+                  "authorization_blocked",
+                  "sprout_source_activation_blocked",
+                );
+              }
+              const checkpoint = sproutCheckpointSchema.parse(runtime.checkpoint);
+              const discoveryProfile = sproutDiscoveryProfile(runtime.sourceKey);
+              sproutRequestDocument = {
+                countryCode: runtime.countryCode,
+                mode: payload.mode,
+                offset: checkpoint.offset,
+                pageSize: checkpoint.pageSize,
+                filterVariant: discoveryProfile.filterVariant,
+                includeQualifiedRadius: discoveryProfile.filterVariant === "qualified_radius",
+                includeUnknownWorkLocation: discoveryProfile.includeUnknownWorkLocation,
+              };
+              const configuredOrigins =
+                options.sproutAllowedOrigins ??
+                (process.env.SPROUT_ALLOWED_ORIGIN ? [process.env.SPROUT_ALLOWED_ORIGIN] : []);
+              if (configuredOrigins.length === 0) {
+                throw new IngestionError(
+                  "authorization_blocked",
+                  "sprout_transport_allowlist_missing",
+                );
+              }
+              const transport = new SproutHttpTransport({
+                endpoint: runtime.endpoint,
+                allowedOrigins: configuredOrigins,
+                secrets: options.sproutSecretResolver ?? sproutEnvironmentSession.secrets,
+                tokenRefresher: sproutEnvironmentSession.tokenRefresher,
+                fetch: options.sproutFetch,
+                maxResponseBytes: payload.maxResponseBytes,
+                onOperation(operation) {
+                  if (operation.type === "fetch_response") {
+                    emitSproutOperation(logger, task, {
+                      event: "sprout.fetch_response",
+                      severity: "info",
+                      outcome: "succeeded",
+                      details: operation,
+                    });
+                    return;
+                  }
+                  if (operation.type === "schema_drift") {
+                    emitSproutOperation(logger, task, {
+                      event: "sprout.schema_drift",
+                      severity: "error",
+                      outcome: "failed",
+                      reasonCode: "provider_permanent",
+                      details: operation,
+                    });
+                    return;
+                  }
+                  emitSproutOperation(logger, task, {
+                    event: "sprout.retry_backoff",
+                    severity: "warn",
+                    outcome: "retrying",
+                    reasonCode: operation.classification,
+                    details: operation,
+                  });
+                },
+              });
+              const commitSproutSourcePage = store.commitSproutSourcePage.bind(store);
+              const repository = createSproutCommitRepository({
+                sourceId: runtime.sourceId,
+                policyId: runtime.policyId,
+                countryCode: runtime.countryCode,
+                mode: payload.mode,
+                async commit(commit) {
+                  claimCompleting = true;
+                  await heartbeatPromise;
+                  if (heartbeatError) throw heartbeatError;
+                  const result = await commitSproutSourcePage(task, providerClaim, commit);
+                  claimCompleted = true;
+                  emitSproutOperation(logger, task, {
+                    event: "sprout.page_committed",
+                    severity: "info",
+                    outcome: "succeeded",
+                    details: {
+                      mode: payload.mode,
+                      itemCount: commit.entries.length,
+                      complete: commit.complete,
+                      checkpointInOffset: commit.checkpointIn.offset,
+                      checkpointOutOffset: commit.checkpointOut.offset,
+                      pageSize: commit.checkpointOut.pageSize,
+                      observedTotal: commit.checkpointOut.observedTotal,
+                      snapshotsInserted: result.snapshotsInserted,
+                      canonicalUpserts: result.canonicalUpserts,
+                      occurrencesUpserted: result.occurrencesUpserted,
+                      groupsCreated: result.groupsCreated,
+                      listingCounts: {
+                        fetched: commit.entries.length,
+                        // A canonical upsert may refresh an existing listing.
+                        // Keep the operational "added" counter aligned with
+                        // page_complete: only newly-created canonical groups
+                        // represent new inventory.
+                        added: result.groupsCreated,
+                        ignored: Math.max(0, commit.entries.length - result.groupsCreated),
+                        errors: 0,
+                      },
+                    },
+                  });
+                  return result;
+                },
+              });
+              emitSproutOperation(logger, task, {
+                event: "sprout.page_start",
+                severity: "info",
+                outcome: "started",
+                details: {
+                  mode: payload.mode,
+                  countryCode: runtime.countryCode,
+                  sourceKey: runtime.sourceKey,
+                  checkpointOffset: checkpoint.offset,
+                  pageSize: checkpoint.pageSize,
+                  filterVariant: discoveryProfile.filterVariant,
+                  includeUnknownWorkLocation: discoveryProfile.includeUnknownWorkLocation,
+                },
+              });
+              const result = await runSproutPageTask<SproutRawJob>({
+                activation: {
+                  ...SPROUT_FRANCE_DISABLED_REGISTRATION,
+                  authorizationStatus: "authorized",
+                  writerRuntime: "typescript",
+                  policyStatus: "approved",
+                  policyEvidenceRef: runtime.policyEvidenceRef,
+                  redisplayAllowed: true,
+                  fullTextRetentionAllowed: true,
+                  credentialRef: runtime.credentialRef,
+                  approvedPageSize: runtime.approvedPageSize,
+                  enabled: true,
+                  transportEnabled: true,
+                  canaryEnabled: payload.mode === "canary",
+                  incrementalEnabled: payload.mode === "incremental",
+                  backfillEnabled: payload.mode === "backfill",
+                  providerCountryKillSwitch: false,
+                  sourceCountryKillSwitch: false,
+                  canaryEvidence: runtime.canaryEvidence,
+                  rollbackEvidence: runtime.rollbackEvidence,
+                },
+                mode: payload.mode,
+                checkpoint,
+                transport: {
+                  fetchPage: (request, requestSignal) =>
+                    rateGate.run(() => transport.fetchPage(request, requestSignal), requestSignal),
+                },
+                repository,
+                countryCode: runtime.countryCode,
+                hasCountryLocation: hasSproutCountryLocation,
+                signal: claimAbort.signal,
+                maxResponseBytes: payload.maxResponseBytes,
+                includeQualifiedRadius: discoveryProfile.filterVariant === "qualified_radius",
+                includeUnknownWorkLocation: discoveryProfile.includeUnknownWorkLocation,
+              });
+              const nextPageCount = payload.pageCount + 1;
+              const reachedPageLimit =
+                payload.maxPages !== null && nextPageCount >= payload.maxPages;
+              if (!result.complete && payload.mode !== "canary" && !reachedPageLimit) {
+                const nextOffset = result.checkpoint.offset;
+                const nextPayload = {
+                  ...payload,
+                  // Only the first task in a scheduled incremental cycle may
+                  // rewind the source. Follow-up pages must keep their freshly
+                  // committed checkpoint.
+                  cycleStart: false,
+                  pageCount: nextPageCount,
+                  // The source key, not a mutable task payload, selects the
+                  // discovery query. Each lane owns its checkpoint so retries
+                  // and chained pages cannot silently switch query semantics.
+                  emptyInsertStreak: 0,
+                };
+                const nextRunId = await store.enqueue(
+                  enqueueRunSchema.parse({
+                    kind: "provider_ingestion",
+                    provider: "sprout",
+                    // A continuation is idempotent within this cycle, not across
+                    // every historical cycle. Reusing a source+offset key caused
+                    // later scheduled scans to stop after their first page once a
+                    // previous run had already visited that offset.
+                    idempotencyKey: `sprout:${payload.sourceId}:${payload.mode}:${task.runId}:${nextOffset}`,
+                    triggerSource: "cli",
+                    tasks: [
+                      {
+                        taskKey: `sprout:page:${payload.mode}:${payload.sourceId}:${nextOffset}`,
+                        taskType: "provider.fetch_page",
+                        payload: nextPayload,
+                      },
+                    ],
+                  }),
+                );
+                await store.attachCareerSource?.(nextRunId, payload.sourceId);
+              }
+              emitSproutOperation(logger, task, {
+                event: "sprout.page_complete",
+                severity: "info",
+                outcome: "succeeded",
+                details: {
+                  mode: payload.mode,
+                  fetched: result.fetched,
+                  responseBytes: result.responseBytes,
+                  complete: result.complete,
+                  checkpointOffset: result.checkpoint.offset,
+                  pageSize: result.checkpoint.pageSize,
+                  observedTotal: result.checkpoint.observedTotal,
+                  sourceKey: runtime.sourceKey,
+                  filterVariant: discoveryProfile.filterVariant,
+                  includeUnknownWorkLocation: discoveryProfile.includeUnknownWorkLocation,
+                  emptyInsertStreak: 0,
+                  cycleStart: payload.cycleStart,
+                  pageCount: nextPageCount,
+                  maxPages: payload.maxPages,
+                  stoppedAtPageLimit: reachedPageLimit,
+                  listingCounts: {
+                    fetched: result.fetched,
+                    added: result.inserted,
+                    ignored: Math.max(0, result.fetched - result.inserted - result.rejected),
+                    errors: result.rejected,
+                  },
+                },
+              });
+              return { taskCompleted: true };
+            }
+            const request = providerSearchRequestSchema.parse({
+              provider,
+              ...task.payload,
+            });
+            const result = await runIngestion({
+              provider,
+              transport: module.transport,
+              adapter: module.adapter,
+              repository: {
+                async upsertCanonicalBatch(jobs) {
+                  claimCompleting = true;
+                  await heartbeatPromise;
+                  if (heartbeatError) throw heartbeatError;
+                  const current = await writeClaim(task, providerClaim, jobs);
+                  if (!current) {
+                    throw new IngestionError(
+                      "integrity_error",
+                      "lease lost before canonical batch write",
+                    );
+                  }
+                  claimCompleted = true;
+                  return jobs.length;
+                },
+              },
+              request,
+              rateLimit: module.rateLimit,
+              rateGate,
+              signal: claimAbort.signal,
+              onMetrics(metrics) {
+                try {
+                  logger?.emit({
+                    service: "hirly-worker",
+                    version: "0.1.0",
+                    environment: process.env.NODE_ENV ?? "development",
+                    event: "provider.ingestion_batch",
+                    severity: "info",
+                    runId: task.runId,
+                    taskId: task.taskId,
+                    taskType: task.taskType,
+                    provider,
+                    attempt: task.attempts,
+                    maxAttempts: task.maxAttempts,
+                    durationsMs: {
+                      queueWait: 0,
+                      fetch: metrics.durationsMs.fetch,
+                      normalization: metrics.durationsMs.normalization,
+                      validation: metrics.durationsMs.validation,
+                      database: metrics.durationsMs.database,
+                      total: metrics.durationsMs.total,
+                    },
+                    counts: {
+                      fetched: metrics.fetched,
+                      accepted: metrics.accepted,
+                      rejected: metrics.rejected,
+                      deduplicated: metrics.deduplicated,
+                      upserted: metrics.upserted,
+                    },
+                    outcome: "succeeded",
+                  });
+                } catch {
+                  // The canonical write completed atomically with the task. A
+                  // metrics sink failure must not turn that success into a retry.
+                }
+              },
+            });
             if (heartbeatError) throw heartbeatError;
-            if (!(await finishClaim(task, providerClaim))) {
-              throw new IngestionError(
-                "integrity_error",
-                "lease lost before empty provider run completion",
-              );
+            if (result.jobs.length === 0) {
+              claimCompleting = true;
+              await heartbeatPromise;
+              if (heartbeatError) throw heartbeatError;
+              if (!(await finishClaim(task, providerClaim))) {
+                throw new IngestionError(
+                  "integrity_error",
+                  "lease lost before empty provider run completion",
+                );
+              }
+              claimCompleted = true;
             }
-            claimCompleted = true;
-          }
-          return { taskCompleted: true };
-        } finally {
-          clearInterval(heartbeat);
-          signal.removeEventListener("abort", forwardAbort);
-          await heartbeatPromise;
-          if (!claimCompleted) {
-            try {
-              await releaseClaim(task, providerClaim);
-            } catch {
-              // Claim expiry/reaping remains the crash-safe fallback. Cleanup
-              // failure must not replace the provider's original error.
+            return { taskCompleted: true };
+          } finally {
+            clearInterval(heartbeat);
+            signal.removeEventListener("abort", forwardAbort);
+            await heartbeatPromise;
+            if (!claimCompleted) {
+              try {
+                await releaseClaim(task, providerClaim);
+              } catch {
+                // Claim expiry/reaping remains the crash-safe fallback. Cleanup
+                // failure must not replace the provider's original error.
+              }
             }
           }
-        }
         }, signal);
       } catch (error) {
         if (provider === "sprout") {
-          const schemaDrift = error instanceof SproutSchemaDriftError
-            ? error
-            : null;
+          const schemaDrift = error instanceof SproutSchemaDriftError ? error : null;
           if (store.recordSproutIngestionError && sproutRequestDocument) {
             try {
               await store.recordSproutIngestionError(task, {
@@ -740,9 +713,11 @@ export function createTaskHandlers(
                 responseStatus: schemaDrift?.evidence.status ?? null,
                 responseBytes: schemaDrift?.evidence.responseBytes ?? null,
                 schemaDiagnostics:
-                  schemaDrift?.evidence.schemaDiagnostics.map(
-                    ({ itemIndex, code, path }) => ({ itemIndex, code, path }),
-                  ) ?? [],
+                  schemaDrift?.evidence.schemaDiagnostics.map(({ itemIndex, code, path }) => ({
+                    itemIndex,
+                    code,
+                    path,
+                  })) ?? [],
               });
             } catch {
               // Error-ledger failures must not hide the original ingestion failure.
@@ -752,8 +727,7 @@ export function createTaskHandlers(
             event: "sprout.page_terminal",
             severity: "error",
             outcome: "failed",
-            reasonCode:
-              error instanceof IngestionError ? error.code : "unexpected_error",
+            reasonCode: error instanceof IngestionError ? error.code : "unexpected_error",
             details: {
               message: safeErrorMessage(error),
               listingCounts: { fetched: 0, added: 0, ignored: 0, errors: 1 },
@@ -764,10 +738,7 @@ export function createTaskHandlers(
           error instanceof IngestionError ||
           (error instanceof Error && error.message === "authorization_blocked")
         ) {
-          const code =
-            error instanceof IngestionError
-              ? error.code
-              : "authorization_blocked";
+          const code = error instanceof IngestionError ? error.code : "authorization_blocked";
           throw new PermanentTaskError(code, error.message);
         }
         throw error;

@@ -64,9 +64,14 @@ export const DEMO_JOBS = [
     salary_min: 140_000,
     salary_max: 200_000,
     match_score: 94,
-    match_reasons: ["React + TypeScript match your stack", "Remote-friendly", "Strong product culture"],
+    match_reasons: [
+      "React + TypeScript match your stack",
+      "Remote-friendly",
+      "Strong product culture",
+    ],
     tech_stack: ["TypeScript", "React", "GraphQL"],
-    description: "Build the world's fastest issue tracker. Work on performance, animations, and complex UI state.",
+    description:
+      "Build the world's fastest issue tracker. Work on performance, animations, and complex UI state.",
   }),
   job({
     job_id: "demo_job_vercel",
@@ -80,7 +85,8 @@ export const DEMO_JOBS = [
     match_score: 91,
     match_reasons: ["Next.js experience aligns well", "DX-focused team", "Hybrid option in SF"],
     tech_stack: ["TypeScript", "Next.js", "Node.js"],
-    description: "Ship Next.js, Edge runtime, and developer-experience tools used by millions of developers.",
+    description:
+      "Ship Next.js, Edge runtime, and developer-experience tools used by millions of developers.",
     postedDaysAgo: 1,
   }),
   job({
@@ -95,7 +101,8 @@ export const DEMO_JOBS = [
     match_score: 88,
     match_reasons: ["AI product surface area", "High-impact role", "Top-tier compensation"],
     tech_stack: ["Python", "React", "TypeScript"],
-    description: "Work on Claude product surfaces — ship features that make AI safe and useful at scale.",
+    description:
+      "Work on Claude product surfaces — ship features that make AI safe and useful at scale.",
     postedDaysAgo: 5,
   }),
   job({
@@ -125,7 +132,8 @@ export const DEMO_JOBS = [
     match_score: 85,
     match_reasons: ["Postgres + TypeScript stack", "Open-source culture", "Global remote"],
     tech_stack: ["TypeScript", "Postgres", "Go"],
-    description: "Build the open-source Firebase alternative — Postgres, realtime, auth, edge functions.",
+    description:
+      "Build the open-source Firebase alternative — Postgres, realtime, auth, edge functions.",
     postedDaysAgo: 7,
   }),
   job({
@@ -155,7 +163,8 @@ export const DEMO_JOBS = [
     match_score: 80,
     match_reasons: ["Developer-facing role", "Strong writing + code", "Remote US"],
     tech_stack: ["TypeScript", "React", "Node.js"],
-    description: "Build demos, content, and tooling that helps developers integrate Stripe in minutes.",
+    description:
+      "Build demos, content, and tooling that helps developers integrate Stripe in minutes.",
     postedDaysAgo: 6,
   }),
   job({
@@ -233,7 +242,8 @@ function application({
     match_reasons,
     created_at: daysAgoIso(createdDaysAgo),
     tailored_resume: {
-      summary: "Product-focused frontend engineer with a track record of shipping fast, accessible UI.",
+      summary:
+        "Product-focused frontend engineer with a track record of shipping fast, accessible UI.",
       highlights: ["Led design system rollout", "Reduced bundle size by 38%", "Mentored 2 juniors"],
     },
     cover_letter: {
@@ -294,12 +304,36 @@ export const DEMO_APPLICATIONS = [
 
 export const DEMO_INTERVIEW_PREP = {
   likely_questions: [
-    { category: "Behavioral", q: "Tell me about a time you shipped under a tight deadline.", why: "Tests prioritization and communication under pressure." },
-    { category: "Technical", q: "How would you structure state in a complex React dashboard?", why: "Probes frontend architecture instincts." },
-    { category: "System Design", q: "Design a job feed that stays fast with millions of listings.", why: "Checks scalability thinking for Swiipr-like products." },
-    { category: "Role-fit", q: "Why frontend engineering at a product-led company?", why: "Validates motivation and craft alignment." },
-    { category: "Behavioral", q: "Describe feedback that changed how you build UI.", why: "Looks for growth mindset and collaboration." },
-    { category: "Technical", q: "Walk me through improving LCP on a marketing site.", why: "Performance is core to senior frontend roles." },
+    {
+      category: "Behavioral",
+      q: "Tell me about a time you shipped under a tight deadline.",
+      why: "Tests prioritization and communication under pressure.",
+    },
+    {
+      category: "Technical",
+      q: "How would you structure state in a complex React dashboard?",
+      why: "Probes frontend architecture instincts.",
+    },
+    {
+      category: "System Design",
+      q: "Design a job feed that stays fast with millions of listings.",
+      why: "Checks scalability thinking for Swiipr-like products.",
+    },
+    {
+      category: "Role-fit",
+      q: "Why frontend engineering at a product-led company?",
+      why: "Validates motivation and craft alignment.",
+    },
+    {
+      category: "Behavioral",
+      q: "Describe feedback that changed how you build UI.",
+      why: "Looks for growth mindset and collaboration.",
+    },
+    {
+      category: "Technical",
+      q: "Walk me through improving LCP on a marketing site.",
+      why: "Performance is core to senior frontend roles.",
+    },
   ],
   tips: [
     "Lead with metrics: users impacted, latency saved, revenue moved.",
@@ -326,7 +360,8 @@ export const DEMO_STREAK = {
 
 export const DEMO_IMPROVE = {
   recruiter_view: {
-    summary: "Recruiters see a strong product engineer profile with modern frontend skills and clear ownership stories. Adding more quantified impact and system-design depth would push you into the top tier for senior roles.",
+    summary:
+      "Recruiters see a strong product engineer profile with modern frontend skills and clear ownership stories. Adding more quantified impact and system-design depth would push you into the top tier for senior roles.",
     score: 78,
     label: "Solid",
   },
@@ -337,21 +372,64 @@ export const DEMO_IMPROVE = {
     "Tighten your headline to match target seniority.",
   ],
   resume_tips: [
-    { title: "Quantify every bullet", detail: "Replace 'improved performance' with 'cut LCP from 3.2s to 1.4s on mobile'." },
-    { title: "Lead with outcomes", detail: "Start bullets with impact, then mention the stack you used." },
-    { title: "Show design partnership", detail: "Add one line on how you work with Figma and design systems." },
-    { title: "Trim early roles", detail: "Keep internships to 2 bullets max — save space for recent wins." },
+    {
+      title: "Quantify every bullet",
+      detail: "Replace 'improved performance' with 'cut LCP from 3.2s to 1.4s on mobile'.",
+    },
+    {
+      title: "Lead with outcomes",
+      detail: "Start bullets with impact, then mention the stack you used.",
+    },
+    {
+      title: "Show design partnership",
+      detail: "Add one line on how you work with Figma and design systems.",
+    },
+    {
+      title: "Trim early roles",
+      detail: "Keep internships to 2 bullets max — save space for recent wins.",
+    },
   ],
   skill_gaps: [
-    { skill: "System design storytelling", why: "Senior loops often include architecture whiteboards.", impact: "high" },
-    { skill: "Web performance tooling", why: "Core Web Vitals fluency signals senior frontend depth.", impact: "medium" },
-    { skill: "GraphQL at scale", why: "Several target companies list GraphQL in their stack.", impact: "medium" },
-    { skill: "Public writing / talks", why: "DevRel-adjacent roles reward visible thought leadership.", impact: "low" },
+    {
+      skill: "System design storytelling",
+      why: "Senior loops often include architecture whiteboards.",
+      impact: "high",
+    },
+    {
+      skill: "Web performance tooling",
+      why: "Core Web Vitals fluency signals senior frontend depth.",
+      impact: "medium",
+    },
+    {
+      skill: "GraphQL at scale",
+      why: "Several target companies list GraphQL in their stack.",
+      impact: "medium",
+    },
+    {
+      skill: "Public writing / talks",
+      why: "DevRel-adjacent roles reward visible thought leadership.",
+      impact: "low",
+    },
   ],
   certifications: [
-    { name: "Frontend Masters — Advanced React", provider: "Frontend Masters", why: "Signals depth on patterns interviewers ask about.", duration: "2 weeks" },
-    { name: "AWS Cloud Practitioner", provider: "AWS", why: "Useful baseline for full-stack product teams.", duration: "3 weeks" },
-    { name: "Google UX Design Certificate", provider: "Coursera", why: "Supports product-designer crossover narratives.", duration: "6 weeks" },
+    {
+      name: "Frontend Masters — Advanced React",
+      provider: "Frontend Masters",
+      why: "Signals depth on patterns interviewers ask about.",
+      duration: "2 weeks",
+    },
+    {
+      name: "AWS Cloud Practitioner",
+      provider: "AWS",
+      why: "Useful baseline for full-stack product teams.",
+      duration: "3 weeks",
+    },
+    {
+      name: "Google UX Design Certificate",
+      provider: "Coursera",
+      why: "Supports product-designer crossover narratives.",
+      duration: "6 weeks",
+    },
   ],
 };
 
@@ -389,6 +467,4 @@ export const DEMO_HISTORY_RIGHT = [
   demoSwipeRow(DEMO_JOBS[6], "right", 4),
 ];
 
-export const DEMO_HISTORY_LEFT = [
-  demoSwipeRow(DEMO_JOBS[7], "left", 1),
-];
+export const DEMO_HISTORY_LEFT = [demoSwipeRow(DEMO_JOBS[7], "left", 1)];

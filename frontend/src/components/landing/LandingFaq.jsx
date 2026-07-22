@@ -26,18 +26,14 @@ function FaqBlock({ block }) {
   if (block.type === "li") {
     return (
       <li className="text-sm leading-relaxed text-zinc-600">
-        {block.parts
-          ? block.parts.map((part, i) => <FaqPart key={i} part={part} />)
-          : block.text}
+        {block.parts ? block.parts.map((part, i) => <FaqPart key={i} part={part} />) : block.text}
       </li>
     );
   }
 
   return (
     <p className="text-sm leading-relaxed text-zinc-600">
-      {block.parts
-        ? block.parts.map((part, i) => <FaqPart key={i} part={part} />)
-        : block.text}
+      {block.parts ? block.parts.map((part, i) => <FaqPart key={i} part={part} />) : block.text}
     </p>
   );
 }

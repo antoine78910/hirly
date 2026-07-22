@@ -1,23 +1,25 @@
 /** Normalize tailored resume / cover letter fields from API or demo payloads. */
 
 export function getApplicationResume(application) {
-  return application?.tailored_resume
-    || application?.tailored_resume_structured
-    || {};
+  return application?.tailored_resume || application?.tailored_resume_structured || {};
 }
 
 export function normalizeCoverLetter(letter = {}) {
   if (!letter || typeof letter !== "object") return {};
 
-  const paragraphs = Array.isArray(letter.paragraphs) && letter.paragraphs.length
-    ? letter.paragraphs.filter(Boolean)
-    : [letter.body].filter(Boolean);
+  const paragraphs =
+    Array.isArray(letter.paragraphs) && letter.paragraphs.length
+      ? letter.paragraphs.filter(Boolean)
+      : [letter.body].filter(Boolean);
 
   let signOff = letter.sign_off || "";
   let signatureName = letter.signature_name || null;
 
   if (!signOff && letter.closing) {
-    const parts = String(letter.closing).split("\n").map((line) => line.trim()).filter(Boolean);
+    const parts = String(letter.closing)
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
     signOff = parts[0] || "";
     signatureName = signatureName || parts[1] || null;
   }
@@ -31,11 +33,16 @@ export function normalizeCoverLetter(letter = {}) {
     ...letter,
     template,
     paragraphs,
-    sign_off: signOff || (edited ? "" : template === "french_formal"
-      ? "Je vous prie de recevoir, Madame, Monsieur, l'expression de mes sincères salutations."
-      : "Warm regards,"),
+    sign_off:
+      signOff ||
+      (edited
+        ? ""
+        : template === "french_formal"
+          ? "Je vous prie de recevoir, Madame, Monsieur, l'expression de mes sincères salutations."
+          : "Warm regards,"),
     signature_name: signatureName,
-    greeting: letter.greeting || (edited ? "" : template === "french_formal" ? "Madame, Monsieur," : ""),
+    greeting:
+      letter.greeting || (edited ? "" : template === "french_formal" ? "Madame, Monsieur," : ""),
   };
 }
 
@@ -52,22 +59,17 @@ export function getApplicationCoverLetter(application) {
 export function hasApplicationResume(application) {
   const resume = getApplicationResume(application);
   return Boolean(
-    resume.summary
-    || resume.skills?.length
-    || resume.experience?.length
-    || resume.education?.length
-    || resume.highlights?.length,
+    resume.summary ||
+      resume.skills?.length ||
+      resume.experience?.length ||
+      resume.education?.length ||
+      resume.highlights?.length,
   );
 }
 
 export function hasApplicationCoverLetter(application) {
   const letter = getApplicationCoverLetter(application);
-  return Boolean(
-    letter.greeting
-    || letter.paragraphs?.length
-    || letter.sign_off
-    || letter.subject,
-  );
+  return Boolean(letter.greeting || letter.paragraphs?.length || letter.sign_off || letter.subject);
 }
 
 export function hasApplicationDocuments(application) {
@@ -77,7 +79,9 @@ export function hasApplicationDocuments(application) {
 export function isApplicationGenerating(application) {
   const generationStatus = application?.generation_status;
   const packageStatus = application?.package_status;
-  return generationStatus === "pending_generation"
-    || generationStatus === "generating"
-    || packageStatus === "pending_generation";
+  return (
+    generationStatus === "pending_generation" ||
+    generationStatus === "generating" ||
+    packageStatus === "pending_generation"
+  );
 }

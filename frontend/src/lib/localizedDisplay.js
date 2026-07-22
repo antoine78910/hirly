@@ -168,7 +168,9 @@ function resolveCanonicalRole(value) {
 }
 
 export function isFrench(lang) {
-  return String(lang || "").toLowerCase().startsWith("fr");
+  return String(lang || "")
+    .toLowerCase()
+    .startsWith("fr");
 }
 
 export function translateRoleLabel(value, lang) {

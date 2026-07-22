@@ -2,8 +2,7 @@ import { useState } from "react";
 import { Video } from "lucide-react";
 import { resolveApiAssetUrl } from "../../lib/api";
 
-const CONTENT_BANK_MEDIA_PREFIX =
-  "/api/training/media/course_job_search_mastery/mod_content_bank";
+const CONTENT_BANK_MEDIA_PREFIX = "/api/training/media/course_job_search_mastery/mod_content_bank";
 
 function contentBankApiVideoUrl(uploadSlot, lang = "fr") {
   if (!uploadSlot) return "";
@@ -53,14 +52,10 @@ export default function TrainingShortVideo({ block, lang = "fr" }) {
       <p className="text-sm font-medium text-zinc-600">
         {lang === "fr" ? "Short 9:16 à venir" : "9:16 short coming soon"}
       </p>
-      {slotLabel ? (
-        <p className="text-xs text-zinc-400">{slotLabel}</p>
-      ) : null}
+      {slotLabel ? <p className="text-xs text-zinc-400">{slotLabel}</p> : null}
       {block.upload_slot && lang === "fr" ? (
         <p className="mt-1 max-w-[220px] text-[11px] leading-relaxed text-zinc-400">
-          Upload : Admin → Formation →
-          {" "}
-          {slotLabel || block.upload_slot}
+          Upload : Admin → Formation → {slotLabel || block.upload_slot}
         </p>
       ) : null}
     </div>

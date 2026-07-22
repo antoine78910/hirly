@@ -3,7 +3,7 @@ import { parseApiPath } from "./apiPath";
 
 /** Fixed local invite codes — must stay in sync with backend DEV_TEST_INVITE_SPECS. */
 export const DEV_INVITE_CODES = {
-  "123456": {
+  123456: {
     valid: true,
     reason: null,
     influencer_name: "Formation Hirly",
@@ -11,7 +11,7 @@ export const DEV_INVITE_CODES = {
     invite_type: "training",
     already_redeemed: false,
   },
-  "654321": {
+  654321: {
     valid: true,
     reason: null,
     influencer_name: "Démo Hirly",

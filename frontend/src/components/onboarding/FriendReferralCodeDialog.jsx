@@ -1,13 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Check, Copy, Loader2, Share2 } from "lucide-react";
 import { toast } from "sonner";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "../ui/sheet";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "../ui/sheet";
 import { Button } from "../ui/button";
 import {
   buildFriendReferralShareMessage,
@@ -156,7 +150,11 @@ export default function FriendReferralCodeDialog({
         share_url: result.url,
       });
       if (result.method === "clipboard") {
-        toast.success(lang === "fr" ? "Lien copié — partagez-le à vos amis" : "Link copied — share it with friends");
+        toast.success(
+          lang === "fr"
+            ? "Lien copié — partagez-le à vos amis"
+            : "Link copied — share it with friends",
+        );
       }
       return;
     }
@@ -172,55 +170,58 @@ export default function FriendReferralCodeDialog({
         data-testid="friend-referral-dialog"
       >
         <div className="mx-auto w-full max-w-sm">
-        <div className="mx-auto mb-5 h-1 w-10 rounded-full bg-zinc-300" aria-hidden />
+          <div className="mx-auto mb-5 h-1 w-10 rounded-full bg-zinc-300" aria-hidden />
 
-        <SheetHeader className="space-y-2 text-center">
-          <SheetTitle className="font-display text-2xl font-bold tracking-tight text-zinc-900">
-            {lang === "fr" ? "Partagez votre code" : "Share your invite code"}
-          </SheetTitle>
-          <SheetDescription className="text-sm leading-relaxed text-zinc-500">
-            {lang === "fr"
-              ? `Invitez ${FRIEND_REFERRAL_GOAL} amis pour débloquer l\u2019accès gratuit et recevoir ${FRIEND_REFERRAL_REWARD_CREDITS} candidatures.`
-              : `Invite ${FRIEND_REFERRAL_GOAL} friends to unlock free access and get ${FRIEND_REFERRAL_REWARD_CREDITS} applications.`}
-          </SheetDescription>
-        </SheetHeader>
+          <SheetHeader className="space-y-2 text-center">
+            <SheetTitle className="font-display text-2xl font-bold tracking-tight text-zinc-900">
+              {lang === "fr" ? "Partagez votre code" : "Share your invite code"}
+            </SheetTitle>
+            <SheetDescription className="text-sm leading-relaxed text-zinc-500">
+              {lang === "fr"
+                ? `Invitez ${FRIEND_REFERRAL_GOAL} amis pour débloquer l\u2019accès gratuit et recevoir ${FRIEND_REFERRAL_REWARD_CREDITS} candidatures.`
+                : `Invite ${FRIEND_REFERRAL_GOAL} friends to unlock free access and get ${FRIEND_REFERRAL_REWARD_CREDITS} applications.`}
+            </SheetDescription>
+          </SheetHeader>
 
-        <div className="relative mt-5 flex w-full items-center justify-center rounded-full border border-violet-200 bg-violet-50 px-14 py-3.5">
-          {loading ? (
-            <Loader2 className="h-5 w-5 animate-spin text-linkedin" />
-          ) : (
-            <SpacedReferralCode code={code} testId="friend-referral-code" />
-          )}
-          <div className="absolute right-2 top-1/2 -translate-y-1/2 sm:right-3">
-            <AnimatedCopyButton
-              copied={copied}
-              onClick={copyInviteMessage}
-              disabled={!code}
-              testId="friend-referral-copy"
-              copiedLabel={lang === "fr" ? "Copié" : "Copied"}
-              defaultLabel={lang === "fr" ? "Copier le message" : "Copy invite message"}
-            />
+          <div className="relative mt-5 flex w-full items-center justify-center rounded-full border border-violet-200 bg-violet-50 px-14 py-3.5">
+            {loading ? (
+              <Loader2 className="h-5 w-5 animate-spin text-linkedin" />
+            ) : (
+              <SpacedReferralCode code={code} testId="friend-referral-code" />
+            )}
+            <div className="absolute right-2 top-1/2 -translate-y-1/2 sm:right-3">
+              <AnimatedCopyButton
+                copied={copied}
+                onClick={copyInviteMessage}
+                disabled={!code}
+                testId="friend-referral-copy"
+                copiedLabel={lang === "fr" ? "Copié" : "Copied"}
+                defaultLabel={lang === "fr" ? "Copier le message" : "Copy invite message"}
+              />
+            </div>
           </div>
-        </div>
 
-        <Button
-          type="button"
-          variant="brand"
-          className="mt-4 h-12 w-full rounded-full text-base font-bold"
-          onClick={shareCode}
-          disabled={!code}
-          data-testid="friend-referral-share"
-        >
-          <Share2 className="mr-2 h-4 w-4" />
-          {lang === "fr" ? "Partager" : "Share"}
-        </Button>
+          <Button
+            type="button"
+            variant="brand"
+            className="mt-4 h-12 w-full rounded-full text-base font-bold"
+            onClick={shareCode}
+            disabled={!code}
+            data-testid="friend-referral-share"
+          >
+            <Share2 className="mr-2 h-4 w-4" />
+            {lang === "fr" ? "Partager" : "Share"}
+          </Button>
 
-        <p className="mt-5 text-center text-sm text-zinc-600" data-testid="friend-referral-progress">
-          {lang === "fr" ? "Amis inscrits" : "Total friends joined"}
-          {": "}
-          <span className="font-bold text-zinc-900">{usesCount}</span>
-          {goal ? ` / ${goal}` : ""}
-        </p>
+          <p
+            className="mt-5 text-center text-sm text-zinc-600"
+            data-testid="friend-referral-progress"
+          >
+            {lang === "fr" ? "Amis inscrits" : "Total friends joined"}
+            {": "}
+            <span className="font-bold text-zinc-900">{usesCount}</span>
+            {goal ? ` / ${goal}` : ""}
+          </p>
         </div>
       </SheetContent>
     </Sheet>

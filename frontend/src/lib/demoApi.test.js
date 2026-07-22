@@ -42,10 +42,12 @@ describe("demo admin pagination contracts", () => {
     expect(applications.previous_cursor).toBeNull();
     expect(applications.next_cursor).toBeNull();
     expect(applications.applications).toEqual([]);
-    expect(applications.queue).toEqual(expect.objectContaining({
-      active_count: expect.any(Number),
-      items: expect.any(Array),
-    }));
+    expect(applications.queue).toEqual(
+      expect.objectContaining({
+        active_count: expect.any(Number),
+        items: expect.any(Array),
+      }),
+    );
   });
 
   test("applications cursor rejects tampering and scope reuse", () => {
@@ -62,13 +64,17 @@ describe("demo admin pagination contracts", () => {
     expect(second.applications).toHaveLength(1);
     expect(second.applications[0].application_id).not.toBe(first.applications[0].application_id);
 
-    expect(() => getDemoResponse({
-      method: "get",
-      url: `/admin/applications?limit=1&cursor=${encodeURIComponent(`${first.next_cursor}x`)}`,
-    })).toThrow("Invalid admin cursor");
-    expect(() => getDemoResponse({
-      method: "get",
-      url: `/admin/applications?filter=prepared&limit=1&cursor=${encodeURIComponent(first.next_cursor)}`,
-    })).toThrow("Invalid admin cursor");
+    expect(() =>
+      getDemoResponse({
+        method: "get",
+        url: `/admin/applications?limit=1&cursor=${encodeURIComponent(`${first.next_cursor}x`)}`,
+      }),
+    ).toThrow("Invalid admin cursor");
+    expect(() =>
+      getDemoResponse({
+        method: "get",
+        url: `/admin/applications?filter=prepared&limit=1&cursor=${encodeURIComponent(first.next_cursor)}`,
+      }),
+    ).toThrow("Invalid admin cursor");
   });
 });

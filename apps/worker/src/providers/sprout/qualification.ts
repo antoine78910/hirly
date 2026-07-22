@@ -6,7 +6,10 @@ const VISIBLE_EXPERIENCE = ["ENTRY", "MID", "SENIOR", "EXECUTIVE"] as const;
 const VISIBLE_WORK_LOCATIONS = ["IN_PERSON", "HYBRID", "REMOTE"] as const;
 
 export interface SproutQualificationRequester {
-  request(query: URLSearchParams, signal: AbortSignal): Promise<{
+  request(
+    query: URLSearchParams,
+    signal: AbortSignal,
+  ): Promise<{
     parsed: ParsedSproutResponse;
     responseBytes: number;
   }>;

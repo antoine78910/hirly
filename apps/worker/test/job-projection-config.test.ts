@@ -16,8 +16,6 @@ describe("job projection runtime configuration", () => {
   });
 
   test("rejects ambiguous rollout flag values", () => {
-    expect(() =>
-      parseRuntimeConfig({ ...base, JOB_PROJECTION_ENABLED: "yes" }),
-    ).toThrow();
+    expect(() => parseRuntimeConfig({ ...base, JOB_PROJECTION_ENABLED: "yes" })).toThrow();
   });
 });

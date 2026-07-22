@@ -1,8 +1,20 @@
 import { useEffect, useMemo, useState } from "react";
 import {
-  FileText, Info, Loader2, Mail, ArrowLeft,
-  MapPin, MessageSquare, Sparkles, UserRoundCheck, Wallet,
-  Bell, ShieldCheck, Clock3, AlertCircle, ExternalLink,
+  FileText,
+  Info,
+  Loader2,
+  Mail,
+  ArrowLeft,
+  MapPin,
+  MessageSquare,
+  Sparkles,
+  UserRoundCheck,
+  Wallet,
+  Bell,
+  ShieldCheck,
+  Clock3,
+  AlertCircle,
+  ExternalLink,
 } from "lucide-react";
 import { api } from "../../lib/api";
 import { formatCompactMoney } from "../../lib/currency";
@@ -171,7 +183,9 @@ export default function ApplicationDetailPanel({
         if (!cancelled) setLoadingEmails(false);
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [application?.application_id]);
 
   const timeline = useMemo(
@@ -186,26 +200,23 @@ export default function ApplicationDetailPanel({
   const salary = jobSalaryLabel(application.job, lang);
   const displayStatus = resolveDisplayStatus(application);
   const applyUrl = applicationApplyUrl(application);
-  const failureMessage = lang === "fr"
-    ? (application.failure_message_fr || application.failure_message_en)
-    : (application.failure_message_en || application.failure_message_fr);
+  const failureMessage =
+    lang === "fr"
+      ? application.failure_message_fr || application.failure_message_en
+      : application.failure_message_en || application.failure_message_fr;
   const showManualApplyCta = Boolean(
-    applyUrl
-    && (
-      displayStatus === "blocked_captcha"
-      || application.submission_status === "blocked_captcha"
-      || application.submission_status === "blocked"
-      || application.submission_status === "prepare_failed"
-      || displayStatus === "failed"
-    ),
+    applyUrl &&
+      (displayStatus === "blocked_captcha" ||
+        application.submission_status === "blocked_captcha" ||
+        application.submission_status === "blocked" ||
+        application.submission_status === "prepare_failed" ||
+        displayStatus === "failed"),
   );
-  const appliedDate = formatTimelineDate(
-    application.submitted_at || application.created_at,
-    lang,
-  );
-  const isExpired = application.user_facing_submission_status === "expired"
-    || application.submission_status === "expired"
-    || application.manual_status === "offer_expired";
+  const appliedDate = formatTimelineDate(application.submitted_at || application.created_at, lang);
+  const isExpired =
+    application.user_facing_submission_status === "expired" ||
+    application.submission_status === "expired" ||
+    application.manual_status === "offer_expired";
 
   if (!application) return null;
 
@@ -221,7 +232,9 @@ export default function ApplicationDetailPanel({
           >
             ← {t("emails.back")}
           </button>
-          <h2 className="mt-2 font-display text-lg font-bold text-zinc-900">{viewingEmail.subject}</h2>
+          <h2 className="mt-2 font-display text-lg font-bold text-zinc-900">
+            {viewingEmail.subject}
+          </h2>
           <p className="mt-1 text-sm text-zinc-600">
             {viewingEmail.from}
             {" · "}
@@ -290,14 +303,24 @@ export default function ApplicationDetailPanel({
           </p>
         ) : null}
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <ApplicationStatusPill application={application} variant="dark" displayStatuses={displayStatuses} />
+          <ApplicationStatusPill
+            application={application}
+            variant="dark"
+            displayStatuses={displayStatuses}
+          />
           {application.match_score ? (
-            <span className="text-xs font-semibold text-linkedin">{application.match_score}% match</span>
+            <span className="text-xs font-semibold text-linkedin">
+              {application.match_score}% match
+            </span>
           ) : null}
         </div>
         {isExpired ? (
           <div className="mt-3">
-            <OfferExpiredNotice application={application} compact testId="application-detail-expired-header" />
+            <OfferExpiredNotice
+              application={application}
+              compact
+              testId="application-detail-expired-header"
+            />
           </div>
         ) : null}
       </DialogHeader>
@@ -341,15 +364,27 @@ export default function ApplicationDetailPanel({
             <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-xs font-bold uppercase tracking-wider text-zinc-500">{t("tracker.nextAction")}</p>
-                  <p className="mt-1 text-sm font-semibold text-zinc-900">{statusMeta(application, displayStatuses).cta}</p>
+                  <p className="text-xs font-bold uppercase tracking-wider text-zinc-500">
+                    {t("tracker.nextAction")}
+                  </p>
+                  <p className="mt-1 text-sm font-semibold text-zinc-900">
+                    {statusMeta(application, displayStatuses).cta}
+                  </p>
                 </div>
-                <ApplicationStatusPill application={application} variant="dark" displayStatuses={displayStatuses} />
+                <ApplicationStatusPill
+                  application={application}
+                  variant="dark"
+                  displayStatuses={displayStatuses}
+                />
               </div>
               <p className="mt-2 text-sm text-zinc-700">
-                {applicationStatusMessage(application.user_facing_submission_status || application.submission_status, t)}
+                {applicationStatusMessage(
+                  application.user_facing_submission_status || application.submission_status,
+                  t,
+                )}
               </p>
-              {(application.submission_status === "ready" || application.submission_status === "prepared") && (
+              {(application.submission_status === "ready" ||
+                application.submission_status === "prepared") && (
                 <Button
                   disabled
                   className="mt-3 w-full rounded-full bg-linkedin text-white hover:opacity-90"
@@ -358,38 +393,47 @@ export default function ApplicationDetailPanel({
                   Ready to submit
                 </Button>
               )}
-              {canShowInternalSubmitTest
-                && application.job?.ats_provider === "greenhouse"
-                && (application.submission_status === "ready" || application.submission_status === "prepared") && (
-                <Button
-                  onClick={testFinalSubmit}
-                  disabled={submittingFinal}
-                  variant="outline"
-                  className="mt-2 w-full rounded-full"
-                  data-testid="test-final-submit-btn"
-                >
-                  {submittingFinal ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null}
-                  Test final submit
-                </Button>
-              )}
-              {application.job?.ats_provider === "greenhouse"
-                && ["ready", "prepared", "blocked", "action_required", "prepare_failed"].includes(application.submission_status) && (
-                <Button
-                  onClick={prepareGreenhouseAgain}
-                  disabled={preparingAgain}
-                  variant="outline"
-                  className="mt-3 w-full rounded-full"
-                  data-testid="prepare-greenhouse-again-top-btn"
-                >
-                  {preparingAgain ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null}
-                  Prepare again
-                </Button>
-              )}
+              {canShowInternalSubmitTest &&
+                application.job?.ats_provider === "greenhouse" &&
+                (application.submission_status === "ready" ||
+                  application.submission_status === "prepared") && (
+                  <Button
+                    onClick={testFinalSubmit}
+                    disabled={submittingFinal}
+                    variant="outline"
+                    className="mt-2 w-full rounded-full"
+                    data-testid="test-final-submit-btn"
+                  >
+                    {submittingFinal ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null}
+                    Test final submit
+                  </Button>
+                )}
+              {application.job?.ats_provider === "greenhouse" &&
+                ["ready", "prepared", "blocked", "action_required", "prepare_failed"].includes(
+                  application.submission_status,
+                ) && (
+                  <Button
+                    onClick={prepareGreenhouseAgain}
+                    disabled={preparingAgain}
+                    variant="outline"
+                    className="mt-3 w-full rounded-full"
+                    data-testid="prepare-greenhouse-again-top-btn"
+                  >
+                    {preparingAgain ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null}
+                    Prepare again
+                  </Button>
+                )}
             </div>
 
-            {(application.submission_status === "blocked_captcha" || displayStatus === "blocked_captcha") && (
-              <div className="rounded-2xl border border-orange-200 bg-orange-50 p-4" data-testid="captcha-required-state">
-                <p className="text-sm font-semibold text-orange-800">{t("tracker.securityCheck")}</p>
+            {(application.submission_status === "blocked_captcha" ||
+              displayStatus === "blocked_captcha") && (
+              <div
+                className="rounded-2xl border border-orange-200 bg-orange-50 p-4"
+                data-testid="captcha-required-state"
+              >
+                <p className="text-sm font-semibold text-orange-800">
+                  {t("tracker.securityCheck")}
+                </p>
                 <p className="mt-1 text-sm text-zinc-700">
                   {failureMessage || t("tracker.statusCaptcha")}
                 </p>
@@ -408,11 +452,14 @@ export default function ApplicationDetailPanel({
             )}
 
             {application.submission_status === "prepare_failed" && (
-              <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4" data-testid="prepare-failed-state">
-                <p className="text-sm font-semibold text-rose-800">{t("tracker.preparationFailed")}</p>
-                <p className="mt-1 text-sm text-zinc-700">
-                  {t("tracker.preparationFailedBody")}
+              <div
+                className="rounded-2xl border border-rose-200 bg-rose-50 p-4"
+                data-testid="prepare-failed-state"
+              >
+                <p className="text-sm font-semibold text-rose-800">
+                  {t("tracker.preparationFailed")}
                 </p>
+                <p className="mt-1 text-sm text-zinc-700">{t("tracker.preparationFailedBody")}</p>
                 {showManualApplyCta ? (
                   <Button
                     type="button"
@@ -428,92 +475,126 @@ export default function ApplicationDetailPanel({
               </div>
             )}
 
-            {application.submission_status === "blocked"
-              && !(application.prepared_missing_information || []).length
-              && displayStatus !== "blocked_captcha" && (
-              <div className="rounded-2xl border border-orange-200 bg-orange-50 p-4" data-testid="blocked-manual-apply-state">
-                <p className="text-sm font-semibold text-orange-800">{t("tracker.needsAttention")}</p>
-                <p className="mt-1 text-sm text-zinc-700">
-                  {failureMessage || t("tracker.manualApplyBlockedBody")}
-                </p>
-                {showManualApplyCta ? (
-                  <Button
-                    type="button"
-                    onClick={() => openExternalUrl(applyUrl)}
-                    className="mt-3 w-full rounded-full"
-                    data-testid="apply-on-company-site-blocked-btn"
-                  >
-                    <ExternalLink className="mr-1.5 h-4 w-4" />
-                    {t("tracker.applyOnCompanySite")}
-                  </Button>
-                ) : null}
-              </div>
-            )}
-
-            {(application.submission_status === "blocked" || application.submission_status === "action_required")
-              && (application.prepared_missing_information || []).length > 0 && (
-              <div className="rounded-2xl border border-orange-200 bg-orange-50 p-4" data-testid="missing-info-form">
-                <p className="text-sm font-semibold text-orange-800">{t("tracker.actionRequired")}</p>
-                <p className="mt-1 text-sm text-zinc-700">
-                  A few answers are needed to complete this application. It will not be submitted automatically.
-                </p>
-                <div className="mt-4 space-y-3">
-                  {missingFieldsForForm(application.prepared_missing_information || []).map((item) => {
-                    const options = item.options || [];
-                    const value = missingAnswers[item.field_name] || "";
-                    return (
-                      <label key={`${item.field_name}-${item.reason}`} className="block text-zinc-900">
-                        <span className="mb-1 block text-xs font-semibold text-zinc-800">{item.label || item.field_name}</span>
-                        {options.length > 0 ? (
-                          <select
-                            value={value}
-                            onChange={(e) => setMissingAnswers((prev) => ({ ...prev, [item.field_name]: e.target.value }))}
-                            className="h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm text-zinc-900"
-                            data-testid={`missing-field-${item.field_name}`}
-                          >
-                            <option value="">Select an answer</option>
-                            {options.map((opt) => (
-                              <option key={`${item.field_name}-${optionValue(opt)}`} value={optionValue(opt)}>
-                                {optionLabel(opt)}
-                              </option>
-                            ))}
-                          </select>
-                        ) : (
-                          <input
-                            value={value}
-                            onChange={(e) => setMissingAnswers((prev) => ({ ...prev, [item.field_name]: e.target.value }))}
-                            className="h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500"
-                            placeholder="Enter answer"
-                            data-testid={`missing-field-${item.field_name}`}
-                          />
-                        )}
-                      </label>
-                    );
-                  })}
-                </div>
-                <label className="mt-4 flex items-start gap-3 rounded-xl border border-zinc-200 bg-white/80 p-3 text-sm text-zinc-800">
-                  <input
-                    type="checkbox"
-                    checked={saveMissingToProfile}
-                    onChange={(e) => setSaveMissingToProfile(e.target.checked)}
-                    className="mt-1 h-4 w-4 accent-linkedin"
-                    data-testid="save-missing-to-profile-checkbox"
-                  />
-                  <span>
-                    <span className="block font-semibold text-zinc-900">Save these answers to my profile for future applications</span>
-                  </span>
-                </label>
-                <Button
-                  onClick={resolveMissingInfo}
-                  disabled={savingMissing}
-                  className="mt-4 w-full rounded-full bg-linkedin text-white hover:opacity-90"
-                  data-testid="save-missing-info-btn"
+            {application.submission_status === "blocked" &&
+              !(application.prepared_missing_information || []).length &&
+              displayStatus !== "blocked_captcha" && (
+                <div
+                  className="rounded-2xl border border-orange-200 bg-orange-50 p-4"
+                  data-testid="blocked-manual-apply-state"
                 >
-                  {savingMissing ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null}
-                  Save answers
-                </Button>
-              </div>
-            )}
+                  <p className="text-sm font-semibold text-orange-800">
+                    {t("tracker.needsAttention")}
+                  </p>
+                  <p className="mt-1 text-sm text-zinc-700">
+                    {failureMessage || t("tracker.manualApplyBlockedBody")}
+                  </p>
+                  {showManualApplyCta ? (
+                    <Button
+                      type="button"
+                      onClick={() => openExternalUrl(applyUrl)}
+                      className="mt-3 w-full rounded-full"
+                      data-testid="apply-on-company-site-blocked-btn"
+                    >
+                      <ExternalLink className="mr-1.5 h-4 w-4" />
+                      {t("tracker.applyOnCompanySite")}
+                    </Button>
+                  ) : null}
+                </div>
+              )}
+
+            {(application.submission_status === "blocked" ||
+              application.submission_status === "action_required") &&
+              (application.prepared_missing_information || []).length > 0 && (
+                <div
+                  className="rounded-2xl border border-orange-200 bg-orange-50 p-4"
+                  data-testid="missing-info-form"
+                >
+                  <p className="text-sm font-semibold text-orange-800">
+                    {t("tracker.actionRequired")}
+                  </p>
+                  <p className="mt-1 text-sm text-zinc-700">
+                    A few answers are needed to complete this application. It will not be submitted
+                    automatically.
+                  </p>
+                  <div className="mt-4 space-y-3">
+                    {missingFieldsForForm(application.prepared_missing_information || []).map(
+                      (item) => {
+                        const options = item.options || [];
+                        const value = missingAnswers[item.field_name] || "";
+                        return (
+                          <label
+                            key={`${item.field_name}-${item.reason}`}
+                            className="block text-zinc-900"
+                          >
+                            <span className="mb-1 block text-xs font-semibold text-zinc-800">
+                              {item.label || item.field_name}
+                            </span>
+                            {options.length > 0 ? (
+                              <select
+                                value={value}
+                                onChange={(e) =>
+                                  setMissingAnswers((prev) => ({
+                                    ...prev,
+                                    [item.field_name]: e.target.value,
+                                  }))
+                                }
+                                className="h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm text-zinc-900"
+                                data-testid={`missing-field-${item.field_name}`}
+                              >
+                                <option value="">Select an answer</option>
+                                {options.map((opt) => (
+                                  <option
+                                    key={`${item.field_name}-${optionValue(opt)}`}
+                                    value={optionValue(opt)}
+                                  >
+                                    {optionLabel(opt)}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              <input
+                                value={value}
+                                onChange={(e) =>
+                                  setMissingAnswers((prev) => ({
+                                    ...prev,
+                                    [item.field_name]: e.target.value,
+                                  }))
+                                }
+                                className="h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500"
+                                placeholder="Enter answer"
+                                data-testid={`missing-field-${item.field_name}`}
+                              />
+                            )}
+                          </label>
+                        );
+                      },
+                    )}
+                  </div>
+                  <label className="mt-4 flex items-start gap-3 rounded-xl border border-zinc-200 bg-white/80 p-3 text-sm text-zinc-800">
+                    <input
+                      type="checkbox"
+                      checked={saveMissingToProfile}
+                      onChange={(e) => setSaveMissingToProfile(e.target.checked)}
+                      className="mt-1 h-4 w-4 accent-linkedin"
+                      data-testid="save-missing-to-profile-checkbox"
+                    />
+                    <span>
+                      <span className="block font-semibold text-zinc-900">
+                        Save these answers to my profile for future applications
+                      </span>
+                    </span>
+                  </label>
+                  <Button
+                    onClick={resolveMissingInfo}
+                    disabled={savingMissing}
+                    className="mt-4 w-full rounded-full bg-linkedin text-white hover:opacity-90"
+                    data-testid="save-missing-info-btn"
+                  >
+                    {savingMissing ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null}
+                    Save answers
+                  </Button>
+                </div>
+              )}
 
             {application.match_reasons?.length > 0 && (
               <div className="rounded-2xl border border-linkedin/20 bg-linkedin/5 p-4">
@@ -534,10 +615,15 @@ export default function ApplicationDetailPanel({
 
             {application.interview_prep?.length > 0 ? (
               <div className="rounded-2xl border border-zinc-200 bg-white p-4">
-                <p className="text-sm font-semibold text-zinc-900">{t("interviews.likelyQuestions")}</p>
+                <p className="text-sm font-semibold text-zinc-900">
+                  {t("interviews.likelyQuestions")}
+                </p>
                 <ul className="mt-3 space-y-2">
                   {application.interview_prep.map((question, index) => (
-                    <li key={index} className="rounded-xl border border-zinc-200 bg-zinc-50 p-3 text-sm text-zinc-800">
+                    <li
+                      key={index}
+                      className="rounded-xl border border-zinc-200 bg-zinc-50 p-3 text-sm text-zinc-800"
+                    >
                       {question}
                     </li>
                   ))}
@@ -548,7 +634,9 @@ export default function ApplicationDetailPanel({
             {hasApplicationDocuments(application) ? (
               <div className="rounded-2xl border border-zinc-200 bg-white p-4">
                 <div className="mb-3 flex items-center justify-between gap-3">
-                  <p className="text-sm font-semibold text-zinc-900">{t("tracker.documentsSection")}</p>
+                  <p className="text-sm font-semibold text-zinc-900">
+                    {t("tracker.documentsSection")}
+                  </p>
                   <button
                     type="button"
                     onClick={() => onTabChange?.("documents")}
@@ -597,7 +685,9 @@ export default function ApplicationDetailPanel({
                 ))}
               </div>
             ) : (
-              <p className="py-10 text-center text-sm text-zinc-500">{t("tracker.timelineEmpty")}</p>
+              <p className="py-10 text-center text-sm text-zinc-500">
+                {t("tracker.timelineEmpty")}
+              </p>
             )}
           </TabsContent>
 

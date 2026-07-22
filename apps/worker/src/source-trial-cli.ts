@@ -5,10 +5,7 @@ import {
   type SourceTrialManifest,
   type SourceTrialResult,
 } from "@hirly/contracts";
-import {
-  createDatabase,
-  type Database,
-} from "@hirly/db";
+import { createDatabase, type Database } from "@hirly/db";
 import {
   persistAtsSourceTrial,
   previewAtsSourceTrial,
@@ -83,9 +80,7 @@ export function parseSourceTrialArgs(args: string[]): TrialCliCommand {
   };
 }
 
-export class PostgresSourceTrialEvidenceRepository
-  implements SourceTrialEvidenceRepository
-{
+export class PostgresSourceTrialEvidenceRepository implements SourceTrialEvidenceRepository {
   constructor(private readonly sql: Database) {}
 
   async close(): Promise<void> {
@@ -165,9 +160,7 @@ export async function runSourceTrialCli(
     JSON.parse(await readFile(resolve(command.manifestPath), "utf8")),
   );
   if (command.type === "preview") {
-    const response = JSON.parse(
-      await readFile(resolve(command.responsePath), "utf8"),
-    );
+    const response = JSON.parse(await readFile(resolve(command.responsePath), "utf8"));
     const preview = await previewAtsSourceTrial({
       manifest,
       leverRegion: command.leverRegion,
@@ -179,9 +172,7 @@ export async function runSourceTrialCli(
 
   const databaseUrl = environment.SOURCE_TRIAL_DATABASE_URL?.trim();
   if (!databaseUrl) {
-    throw new Error(
-      "SOURCE_TRIAL_DATABASE_URL is required for a policy-gated evidence run",
-    );
+    throw new Error("SOURCE_TRIAL_DATABASE_URL is required for a policy-gated evidence run");
   }
   const repository = new PostgresSourceTrialEvidenceRepository(
     createDatabase(databaseUrl, { max: 2 }),
@@ -212,9 +203,11 @@ async function writeOutput(path: string, value: unknown): Promise<void> {
 if (import.meta.main) {
   const command = parseSourceTrialArgs(process.argv.slice(2));
   const result = await runSourceTrialCli(command, process.env);
-  console.log(JSON.stringify({
-    runId: result.runId,
-    output: command.outputPath,
-    canonicalWrites: false,
-  }));
+  console.log(
+    JSON.stringify({
+      runId: result.runId,
+      output: command.outputPath,
+      canonicalWrites: false,
+    }),
+  );
 }

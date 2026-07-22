@@ -59,46 +59,52 @@ const faq = [
   {
     id: 1,
     question: "Faut-il déjà avoir beaucoup de followers pour candidater ?",
-    answer: "Non. Nos meilleures créatrices actuelles ont commencé avec moins de 200 followers. Ce qu'on regarde, c'est l'authenticité et la qualité du contenu — pas la taille de l'audience de départ.",
+    answer:
+      "Non. Nos meilleures créatrices actuelles ont commencé avec moins de 200 followers. Ce qu'on regarde, c'est l'authenticité et la qualité du contenu — pas la taille de l'audience de départ.",
   },
   {
     id: 2,
     question: "Comment est calculée la rémunération ?",
-    answer: "1$ de CPM (coût pour mille vues) sur chaque vidéo publiée dans le cadre du programme, sans plafond. Plus la vidéo performe, plus tu es payée — certaines de nos créatrices ont déjà touché plus de 200$ sur une seule vidéo.",
+    answer:
+      "1$ de CPM (coût pour mille vues) sur chaque vidéo publiée dans le cadre du programme, sans plafond. Plus la vidéo performe, plus tu es payée — certaines de nos créatrices ont déjà touché plus de 200$ sur une seule vidéo.",
   },
   {
     id: 3,
     question: "Sur quelles plateformes doit-on poster ?",
-    answer: "TikTok et Instagram (Reels) sont les deux plateformes du programme aujourd'hui. Tu peux poster sur l'une, l'autre, ou les deux.",
+    answer:
+      "TikTok et Instagram (Reels) sont les deux plateformes du programme aujourd'hui. Tu peux poster sur l'une, l'autre, ou les deux.",
   },
   {
     id: 4,
     question: "Est-ce qu'on doit suivre un script ?",
-    answer: "Non, aucun script imposé. On te donne des angles qui ont déjà bien marché (voir les exemples ci-dessus) à titre d'inspiration, mais le format, le ton et la mise en scène restent entièrement les tiens.",
+    answer:
+      "Non, aucun script imposé. On te donne des angles qui ont déjà bien marché (voir les exemples ci-dessus) à titre d'inspiration, mais le format, le ton et la mise en scène restent entièrement les tiens.",
   },
   {
     id: 5,
     question: "Quand et comment est-on payée ?",
-    answer: "Le paiement est calculé sur les vues cumulées de tes vidéos chaque mois et versé directement par virement. Tu gardes un accès à tes statistiques à tout moment.",
+    answer:
+      "Le paiement est calculé sur les vues cumulées de tes vidéos chaque mois et versé directement par virement. Tu gardes un accès à tes statistiques à tout moment.",
   },
 ];
 
 const jsonLd = {
   "@context": "https://schema.org",
   "@type": "WebPage",
-  "name": "Programme créateurs Hirly — Sois payée pour parler de recherche d'emploi",
-  "description": "Rejoins le programme créateurs Hirly : poste du contenu authentique sur la recherche d'emploi, et sois payée 1$ pour 1000 vues, sans plafond.",
-  "url": "https://tryhirly.com/creators",
-  "publisher": { "@type": "Organization", "name": "Hirly", "url": "https://tryhirly.com" },
+  name: "Programme créateurs Hirly — Sois payée pour parler de recherche d'emploi",
+  description:
+    "Rejoins le programme créateurs Hirly : poste du contenu authentique sur la recherche d'emploi, et sois payée 1$ pour 1000 vues, sans plafond.",
+  url: "https://tryhirly.com/creators",
+  publisher: { "@type": "Organization", name: "Hirly", url: "https://tryhirly.com" },
 };
 
 const faqLd = {
   "@context": "https://schema.org",
   "@type": "FAQPage",
-  "mainEntity": faq.map((q) => ({
+  mainEntity: faq.map((q) => ({
     "@type": "Question",
-    "name": q.question,
-    "acceptedAnswer": { "@type": "Answer", "text": q.answer },
+    name: q.question,
+    acceptedAnswer: { "@type": "Answer", text: q.answer },
   })),
 };
 
@@ -154,9 +160,18 @@ function VideoCard({ video, featured }) {
         <div className="flex items-center justify-between text-[11px] text-white/80">
           <span className="font-semibold">{video.handle}</span>
           <div className="flex items-center gap-2.5">
-            <span className="flex items-center gap-1"><Eye className="w-3 h-3" />{formatViews(video.views)}</span>
-            <span className="flex items-center gap-1"><Heart className="w-3 h-3" />{formatViews(video.likes)}</span>
-            <span className="flex items-center gap-1"><Bookmark className="w-3 h-3" />{formatViews(video.saves)}</span>
+            <span className="flex items-center gap-1">
+              <Eye className="w-3 h-3" />
+              {formatViews(video.views)}
+            </span>
+            <span className="flex items-center gap-1">
+              <Heart className="w-3 h-3" />
+              {formatViews(video.likes)}
+            </span>
+            <span className="flex items-center gap-1">
+              <Bookmark className="w-3 h-3" />
+              {formatViews(video.saves)}
+            </span>
           </div>
         </div>
       </div>
@@ -179,15 +194,24 @@ export default function Creators() {
       {/* Hero */}
       <section className="gradient-linkedin-soft border-b border-zinc-100">
         <div className="max-w-5xl mx-auto px-6 py-20 lg:py-28 text-center">
-          <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
-            <p className="text-xs font-semibold text-zinc-400 uppercase tracking-widest mb-4">Programme créateurs</p>
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+          >
+            <p className="text-xs font-semibold text-zinc-400 uppercase tracking-widest mb-4">
+              Programme créateurs
+            </p>
             <h1 className="font-display font-black text-4xl sm:text-5xl lg:text-6xl tracking-tight leading-[1.05] mb-5">
               Poste une vidéo.{" "}
-              <span className="italic text-swiipr-gradient">Jusqu'à 400$ dès ta première semaine.</span>
+              <span className="italic text-swiipr-gradient">
+                Jusqu'à 400$ dès ta première semaine.
+              </span>
             </h1>
             <p className="text-zinc-600 text-lg sm:text-xl leading-relaxed max-w-2xl mx-auto mb-8">
-              Rejoins le programme créateurs Hirly : partage ton expérience de la recherche d'emploi sur TikTok et Instagram,
-              et sois payée sur tes vues — sans plafond, sans minimum de followers.
+              Rejoins le programme créateurs Hirly : partage ton expérience de la recherche d'emploi
+              sur TikTok et Instagram, et sois payée sur tes vues — sans plafond, sans minimum de
+              followers.
             </p>
             <div className="flex flex-wrap items-center justify-center gap-3">
               <Link
@@ -224,8 +248,9 @@ export default function Creators() {
             Le contenu de nos créatrices, en vrai
           </h2>
           <p className="text-zinc-500 leading-relaxed">
-            Aucune mise en scène de studio — juste des vidéos filmées au téléphone qui parlent à ceux qui cherchent un emploi.
-            Voici les 4 vidéos qui ont le mieux marché, avec ce qu'elles ont rapporté à 1$ le CPM.
+            Aucune mise en scène de studio — juste des vidéos filmées au téléphone qui parlent à
+            ceux qui cherchent un emploi. Voici les 4 vidéos qui ont le mieux marché, avec ce
+            qu'elles ont rapporté à 1$ le CPM.
           </p>
         </div>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
@@ -266,12 +291,16 @@ export default function Creators() {
                   className="rounded-2xl border border-zinc-200 bg-white p-6"
                 >
                   <div className="flex items-center gap-3 mb-4">
-                    <span className="text-xs font-mono font-semibold text-zinc-300">{step.step}</span>
+                    <span className="text-xs font-mono font-semibold text-zinc-300">
+                      {step.step}
+                    </span>
                     <div className="w-9 h-9 rounded-xl gradient-linkedin text-white grid place-items-center">
                       <Icon className="w-4.5 h-4.5" />
                     </div>
                   </div>
-                  <h3 className="font-display font-bold text-lg tracking-tight mb-2">{step.title}</h3>
+                  <h3 className="font-display font-bold text-lg tracking-tight mb-2">
+                    {step.title}
+                  </h3>
                   <p className="text-zinc-500 text-sm leading-relaxed">{step.body}</p>
                 </motion.div>
               );
@@ -303,14 +332,18 @@ export default function Creators() {
             </ul>
           </div>
           <div className="rounded-3xl gradient-linkedin-soft border border-zinc-200 p-8">
-            <p className="text-xs font-semibold text-zinc-400 uppercase tracking-widest mb-3">Exemple concret</p>
+            <p className="text-xs font-semibold text-zinc-400 uppercase tracking-widest mb-3">
+              Exemple concret
+            </p>
             <p className="font-display font-black text-3xl tracking-tight mb-2">235 700 vues</p>
             <p className="text-sm text-zinc-500 mb-5">
-              = {formatEarnings(235700)} pour une seule vidéo, tournée au téléphone en quelques minutes.
+              = {formatEarnings(235700)} pour une seule vidéo, tournée au téléphone en quelques
+              minutes.
             </p>
             <p className="font-display font-black text-3xl tracking-tight mb-2">455K+ vues</p>
             <p className="text-sm text-zinc-500">
-              cumulées sur nos 7 dernières vidéos créateurs — {`$${totalEarnings}+`} déjà versés à nos créatrices.
+              cumulées sur nos 7 dernières vidéos créateurs — {`$${totalEarnings}+`} déjà versés à
+              nos créatrices.
             </p>
           </div>
         </div>

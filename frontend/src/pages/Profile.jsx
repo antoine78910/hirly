@@ -26,7 +26,13 @@ import PlacesAutocomplete from "../components/PlacesAutocomplete";
 import { normalizeLocationData } from "../lib/targetPreferences";
 import { isResolvedLocation } from "../lib/locationSearch";
 import { Label } from "../components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../components/ui/select";
 import { Switch } from "../components/ui/switch";
 import RolePicker from "../components/RolePicker";
 import { TitleHeader } from "../components/app/AppScreenHeader";
@@ -66,7 +72,9 @@ function JobPreferencesSheet({ open, profile, onClose, onSaved }) {
     setTargetRole("");
     setSectorIds(profile?.sector_ids || []);
     setIndustryIds(profile?.industry_ids || []);
-    setTargetLocation(profile?.target_location_data?.location_label || profile?.target_location || "");
+    setTargetLocation(
+      profile?.target_location_data?.location_label || profile?.target_location || "",
+    );
     setTargetLocationData(profile?.target_location_data || null);
     setRemote(profile?.remote_preference || "any");
     setSeniority(profile?.seniority || "any");
@@ -76,7 +84,9 @@ function JobPreferencesSheet({ open, profile, onClose, onSaved }) {
     const draftRole = (targetRole || "").trim();
     const roles = [...new Set([...targetRoles, ...(draftRole ? [draftRole] : [])])].slice(0, 3);
     if (!roles.length) {
-      toast.error(t("toasts.enterJobTitle") || (lang === "fr" ? "Saisissez un métier" : "Enter a job title"));
+      toast.error(
+        t("toasts.enterJobTitle") || (lang === "fr" ? "Saisissez un métier" : "Enter a job title"),
+      );
       return;
     }
     setSaving(true);
@@ -84,7 +94,11 @@ function JobPreferencesSheet({ open, profile, onClose, onSaved }) {
       const trimmedLocation = (targetLocation || "").trim();
       const normalizedLocationData = normalizeLocationData(trimmedLocation, targetLocationData);
       if (trimmedLocation && !isResolvedLocation(normalizedLocationData, trimmedLocation)) {
-        toast.error(lang === "fr" ? "Choisissez une ville dans les suggestions" : "Select a location from the suggestions");
+        toast.error(
+          lang === "fr"
+            ? "Choisissez une ville dans les suggestions"
+            : "Select a location from the suggestions",
+        );
         return;
       }
       await api.put("/profile/preferences", {
@@ -118,7 +132,12 @@ function JobPreferencesSheet({ open, profile, onClose, onSaved }) {
     >
       <div className="space-y-4">
         <div className="space-y-2">
-          <RolePicker value={targetRole} onChange={setTargetRole} testId="job-prefs-role" lang={lang} />
+          <RolePicker
+            value={targetRole}
+            onChange={setTargetRole}
+            testId="job-prefs-role"
+            lang={lang}
+          />
           <div className="flex flex-wrap gap-2">
             {targetRoles.map((role) => (
               <button
@@ -127,14 +146,17 @@ function JobPreferencesSheet({ open, profile, onClose, onSaved }) {
                 onClick={() => setTargetRoles((roles) => roles.filter((entry) => entry !== role))}
                 className="inline-flex items-center gap-1 rounded-full bg-sprout-primary/20 px-3 py-1 text-sm text-white"
               >
-                {role}<X className="h-3.5 w-3.5" />
+                {role}
+                <X className="h-3.5 w-3.5" />
               </button>
             ))}
             {targetRole.trim() && targetRoles.length < 3 && (
               <button
                 type="button"
                 onClick={() => {
-                  setTargetRoles((roles) => [...new Set([...roles, targetRole.trim()])].slice(0, 3));
+                  setTargetRoles((roles) =>
+                    [...new Set([...roles, targetRole.trim()])].slice(0, 3),
+                  );
                   setTargetRole("");
                 }}
                 className="rounded-full border border-sprout-border px-3 py-1 text-sm text-zinc-200"
@@ -143,10 +165,24 @@ function JobPreferencesSheet({ open, profile, onClose, onSaved }) {
               </button>
             )}
           </div>
-          <p className="text-xs text-zinc-400">{lang === "fr" ? "Ajoutez jusqu’à 3 métiers : les offres correspondant à l’un d’eux seront classées." : "Add up to 3 roles. Jobs matching any role are ranked together."}</p>
+          <p className="text-xs text-zinc-400">
+            {lang === "fr"
+              ? "Ajoutez jusqu’à 3 métiers : les offres correspondant à l’un d’eux seront classées."
+              : "Add up to 3 roles. Jobs matching any role are ranked together."}
+          </p>
         </div>
-        <FacetPicker label={lang === "fr" ? "Secteurs" : "Sectors"} options={MATCHING_SECTORS} values={sectorIds} onChange={setSectorIds} />
-        <FacetPicker label={lang === "fr" ? "Industries" : "Industries"} options={MATCHING_INDUSTRIES} values={industryIds} onChange={setIndustryIds} />
+        <FacetPicker
+          label={lang === "fr" ? "Secteurs" : "Sectors"}
+          options={MATCHING_SECTORS}
+          values={sectorIds}
+          onChange={setSectorIds}
+        />
+        <FacetPicker
+          label={lang === "fr" ? "Industries" : "Industries"}
+          options={MATCHING_INDUSTRIES}
+          values={industryIds}
+          onChange={setIndustryIds}
+        />
         <PlacesAutocomplete
           label={t("profile.targetLocation")}
           optional
@@ -163,9 +199,14 @@ function JobPreferencesSheet({ open, profile, onClose, onSaved }) {
           testId="job-prefs-location"
         />
         <div className="space-y-1.5">
-          <Label className="text-sm font-semibold text-zinc-200">{t("profile.remotePreference")}</Label>
+          <Label className="text-sm font-semibold text-zinc-200">
+            {t("profile.remotePreference")}
+          </Label>
           <Select value={remote} onValueChange={setRemote}>
-            <SelectTrigger className="h-11 rounded-xl bg-sprout-surface-2 border-sprout-border text-white" data-testid="job-prefs-remote">
+            <SelectTrigger
+              className="h-11 rounded-xl bg-sprout-surface-2 border-sprout-border text-white"
+              data-testid="job-prefs-remote"
+            >
               <SelectValue />
             </SelectTrigger>
             <SelectContent className="bg-sprout-surface border-sprout-border text-white">
@@ -179,7 +220,10 @@ function JobPreferencesSheet({ open, profile, onClose, onSaved }) {
         <div className="space-y-1.5">
           <Label className="text-sm font-semibold text-zinc-200">{t("profile.seniority")}</Label>
           <Select value={seniority} onValueChange={setSeniority}>
-            <SelectTrigger className="h-11 rounded-xl bg-sprout-surface-2 border-sprout-border text-white" data-testid="job-prefs-seniority">
+            <SelectTrigger
+              className="h-11 rounded-xl bg-sprout-surface-2 border-sprout-border text-white"
+              data-testid="job-prefs-seniority"
+            >
               <SelectValue />
             </SelectTrigger>
             <SelectContent className="bg-sprout-surface border-sprout-border text-white">
@@ -198,9 +242,10 @@ function JobPreferencesSheet({ open, profile, onClose, onSaved }) {
 }
 
 function FacetPicker({ label, options, values, onChange }) {
-  const toggle = (value) => onChange((current) => current.includes(value)
-    ? current.filter((entry) => entry !== value)
-    : [...current, value]);
+  const toggle = (value) =>
+    onChange((current) =>
+      current.includes(value) ? current.filter((entry) => entry !== value) : [...current, value],
+    );
   return (
     <div className="space-y-2">
       <Label className="text-sm font-semibold text-zinc-200">{label}</Label>
@@ -333,15 +378,35 @@ function ApplicationDefaultsSheet({ open, profile, onClose, onSaved }) {
         />
         <Field
           label={t("profileSections.workAuthorized")}
-          value={Array.isArray(defaults.work_authorized_countries) ? defaults.work_authorized_countries.join(", ") : defaults.work_authorized_countries}
-          onChange={(v) => update("work_authorized_countries", v.split(",").map((item) => item.trim()).filter(Boolean))}
+          value={
+            Array.isArray(defaults.work_authorized_countries)
+              ? defaults.work_authorized_countries.join(", ")
+              : defaults.work_authorized_countries
+          }
+          onChange={(v) =>
+            update(
+              "work_authorized_countries",
+              v
+                .split(",")
+                .map((item) => item.trim())
+                .filter(Boolean),
+            )
+          }
           placeholder={t("profileSections.workAuthorizedPlaceholder")}
           testId="app-defaults-work-authorized-countries"
         />
         <div className="space-y-1.5">
-          <Label className="text-sm font-semibold text-zinc-200">{t("profileSections.requiresSponsorship")}</Label>
-          <Select value={boolSelectValue(defaults.requires_sponsorship)} onValueChange={(v) => update("requires_sponsorship", boolSelectToValue(v))}>
-            <SelectTrigger className="h-11 rounded-xl bg-sprout-surface-2 border-sprout-border text-white" data-testid="app-defaults-sponsorship">
+          <Label className="text-sm font-semibold text-zinc-200">
+            {t("profileSections.requiresSponsorship")}
+          </Label>
+          <Select
+            value={boolSelectValue(defaults.requires_sponsorship)}
+            onValueChange={(v) => update("requires_sponsorship", boolSelectToValue(v))}
+          >
+            <SelectTrigger
+              className="h-11 rounded-xl bg-sprout-surface-2 border-sprout-border text-white"
+              data-testid="app-defaults-sponsorship"
+            >
               <SelectValue />
             </SelectTrigger>
             <SelectContent className="bg-sprout-surface border-sprout-border text-white">
@@ -352,9 +417,17 @@ function ApplicationDefaultsSheet({ open, profile, onClose, onSaved }) {
           </Select>
         </div>
         <div className="space-y-1.5">
-          <Label className="text-sm font-semibold text-zinc-200">{t("profileSections.willingToRelocate")}</Label>
-          <Select value={boolSelectValue(defaults.willing_to_relocate)} onValueChange={(v) => update("willing_to_relocate", boolSelectToValue(v))}>
-            <SelectTrigger className="h-11 rounded-xl bg-sprout-surface-2 border-sprout-border text-white" data-testid="app-defaults-relocate">
+          <Label className="text-sm font-semibold text-zinc-200">
+            {t("profileSections.willingToRelocate")}
+          </Label>
+          <Select
+            value={boolSelectValue(defaults.willing_to_relocate)}
+            onValueChange={(v) => update("willing_to_relocate", boolSelectToValue(v))}
+          >
+            <SelectTrigger
+              className="h-11 rounded-xl bg-sprout-surface-2 border-sprout-border text-white"
+              data-testid="app-defaults-relocate"
+            >
               <SelectValue />
             </SelectTrigger>
             <SelectContent className="bg-sprout-surface border-sprout-border text-white">
@@ -372,9 +445,17 @@ function ApplicationDefaultsSheet({ open, profile, onClose, onSaved }) {
           testId="app-defaults-referral-source"
         />
         <div className="space-y-1.5">
-          <Label className="text-sm font-semibold text-zinc-200">{t("profileSections.privacyConsentDefault")}</Label>
-          <Select value={boolSelectValue(defaults.privacy_consent)} onValueChange={(v) => update("privacy_consent", boolSelectToValue(v))}>
-            <SelectTrigger className="h-11 rounded-xl bg-sprout-surface-2 border-sprout-border text-white" data-testid="app-defaults-privacy-consent">
+          <Label className="text-sm font-semibold text-zinc-200">
+            {t("profileSections.privacyConsentDefault")}
+          </Label>
+          <Select
+            value={boolSelectValue(defaults.privacy_consent)}
+            onValueChange={(v) => update("privacy_consent", boolSelectToValue(v))}
+          >
+            <SelectTrigger
+              className="h-11 rounded-xl bg-sprout-surface-2 border-sprout-border text-white"
+              data-testid="app-defaults-privacy-consent"
+            >
               <SelectValue />
             </SelectTrigger>
             <SelectContent className="bg-sprout-surface border-sprout-border text-white">
@@ -386,8 +467,12 @@ function ApplicationDefaultsSheet({ open, profile, onClose, onSaved }) {
         </div>
         <label className="flex items-center justify-between gap-4 rounded-xl border border-sprout-border bg-sprout-surface-2 p-4">
           <span>
-            <span className="block text-sm font-semibold text-zinc-200">{t("profileSections.preferNotToSayDemographics")}</span>
-            <span className="mt-1 block text-xs text-sprout-muted">{t("profileSections.preferNotToSayDemographicsHint")}</span>
+            <span className="block text-sm font-semibold text-zinc-200">
+              {t("profileSections.preferNotToSayDemographics")}
+            </span>
+            <span className="mt-1 block text-xs text-sprout-muted">
+              {t("profileSections.preferNotToSayDemographicsHint")}
+            </span>
           </span>
           <Switch
             checked={Boolean(defaults.prefer_not_to_say_demographics)}
@@ -396,12 +481,19 @@ function ApplicationDefaultsSheet({ open, profile, onClose, onSaved }) {
           />
         </label>
         <div className="space-y-1.5">
-          <Label className="text-sm font-semibold text-zinc-200">{t("profileSections.formerEmployerRestriction")}</Label>
+          <Label className="text-sm font-semibold text-zinc-200">
+            {t("profileSections.formerEmployerRestriction")}
+          </Label>
           <Select
             value={boolSelectValue(defaults.former_employer_restriction_or_noncompete)}
-            onValueChange={(v) => update("former_employer_restriction_or_noncompete", boolSelectToValue(v))}
+            onValueChange={(v) =>
+              update("former_employer_restriction_or_noncompete", boolSelectToValue(v))
+            }
           >
-            <SelectTrigger className="h-11 rounded-xl bg-sprout-surface-2 border-sprout-border text-white" data-testid="app-defaults-noncompete">
+            <SelectTrigger
+              className="h-11 rounded-xl bg-sprout-surface-2 border-sprout-border text-white"
+              data-testid="app-defaults-noncompete"
+            >
               <SelectValue />
             </SelectTrigger>
             <SelectContent className="bg-sprout-surface border-sprout-border text-white">
@@ -441,12 +533,15 @@ export default function Profile() {
   const [tab, setTab] = useState("resume");
   const [openSheet, setOpenSheet] = useState(null);
 
-  const profileTabs = useMemo(() => ([
-    { key: "resume", label: t("profile.resume"), icon: PROFILE_TAB_ICONS.resume },
-    { key: "personal", label: t("profile.personal"), icon: PROFILE_TAB_ICONS.personal },
-    { key: "documents", label: t("profile.documentsTab"), icon: PROFILE_TAB_ICONS.documents },
-    { key: "referral", label: t("profile.referral"), icon: PROFILE_TAB_ICONS.referral },
-  ]), [t]);
+  const profileTabs = useMemo(
+    () => [
+      { key: "resume", label: t("profile.resume"), icon: PROFILE_TAB_ICONS.resume },
+      { key: "personal", label: t("profile.personal"), icon: PROFILE_TAB_ICONS.personal },
+      { key: "documents", label: t("profile.documentsTab"), icon: PROFILE_TAB_ICONS.documents },
+      { key: "referral", label: t("profile.referral"), icon: PROFILE_TAB_ICONS.referral },
+    ],
+    [t],
+  );
 
   const resumeSections = useMemo(() => getResumeSections(t), [t]);
 
@@ -467,7 +562,9 @@ export default function Profile() {
         if (!cancelled) setLoading(false);
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [reload]);
 
   const completion = useMemo(() => profileCompletion(profile), [profile]);
@@ -484,7 +581,7 @@ export default function Profile() {
     <AppPage className={SHELL_PAGE_CLASS}>
       <TitleHeader
         title={t("profile.title")}
-        rightAction={(
+        rightAction={
           <button
             type="button"
             onClick={() => navigate("/settings")}
@@ -494,142 +591,144 @@ export default function Profile() {
           >
             <SettingsIcon className="h-5 w-5" />
           </button>
-        )}
+        }
       />
 
       <AppPageScroll>
         <div className={`${APP_CONTENT_WIDTH} space-y-4 md:space-y-6`}>
-        <DesktopPageHeader
-          title={t("profile.title")}
-          subtitle={t("profile.subtitle")}
-          actions={(
-            <button
-              type="button"
-              onClick={() => navigate("/settings")}
-              className="shell-btn-outline hidden px-4 py-2 text-sm font-semibold md:inline-flex md:items-center md:gap-2"
-            >
-              <SettingsIcon className="h-4 w-4" />
-              {t("nav.aiSettings")}
-            </button>
-          )}
-        />
-        <div className={`shell-surface p-4 ${showSkeleton ? "animate-pulse" : ""}`}>
-          <div className="flex items-center gap-4">
-            <div
-              className="relative grid h-16 w-16 place-items-center rounded-full"
-              style={{
-                background: showSkeleton
-                  ? "#e4e4e7"
-                  : `conic-gradient(#7C3AED ${completion * 3.6}deg, #e4e4e7 0deg)`,
-              }}
-            >
-              <div className="grid h-12 w-12 place-items-center rounded-full bg-white text-sm font-bold shell-title dark:bg-zinc-800">
-                {showSkeleton ? "—" : `${completion}%`}
+          <DesktopPageHeader
+            title={t("profile.title")}
+            subtitle={t("profile.subtitle")}
+            actions={
+              <button
+                type="button"
+                onClick={() => navigate("/settings")}
+                className="shell-btn-outline hidden px-4 py-2 text-sm font-semibold md:inline-flex md:items-center md:gap-2"
+              >
+                <SettingsIcon className="h-4 w-4" />
+                {t("nav.aiSettings")}
+              </button>
+            }
+          />
+          <div className={`shell-surface p-4 ${showSkeleton ? "animate-pulse" : ""}`}>
+            <div className="flex items-center gap-4">
+              <div
+                className="relative grid h-16 w-16 place-items-center rounded-full"
+                style={{
+                  background: showSkeleton
+                    ? "#e4e4e7"
+                    : `conic-gradient(#7C3AED ${completion * 3.6}deg, #e4e4e7 0deg)`,
+                }}
+              >
+                <div className="grid h-12 w-12 place-items-center rounded-full bg-white text-sm font-bold shell-title dark:bg-zinc-800">
+                  {showSkeleton ? "—" : `${completion}%`}
+                </div>
+              </div>
+              <div className="flex-1">
+                <p className="font-display text-lg font-bold">{t("profile.completeProfile")}</p>
+                <p className="text-sm shell-body">{t("profile.completeProfileBody")}</p>
               </div>
             </div>
-            <div className="flex-1">
-              <p className="font-display text-lg font-bold">{t("profile.completeProfile")}</p>
-              <p className="text-sm shell-body">{t("profile.completeProfileBody")}</p>
-            </div>
+            <button
+              type="button"
+              onClick={() => setOpenSheet("professional")}
+              className="mt-4 w-full rounded-full gradient-linkedin py-3 text-sm font-semibold text-white hover:opacity-90"
+              data-testid="profile-finish-btn"
+            >
+              {t("profile.finishProfile")}
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={() => setOpenSheet("professional")}
-            className="mt-4 w-full rounded-full gradient-linkedin py-3 text-sm font-semibold text-white hover:opacity-90"
-            data-testid="profile-finish-btn"
-          >
-            {t("profile.finishProfile")}
-          </button>
-        </div>
 
-        <LanguageSettingSection variant="profile" />
+          <LanguageSettingSection variant="profile" />
 
-        <div className="shell-border-b flex">
-          {profileTabs.map((tabItem) => {
-            const Icon = tabItem.icon;
-            const active = tab === tabItem.key;
-            return (
-              <button
-                key={tabItem.key}
-                type="button"
-                onClick={() => setTab(tabItem.key)}
-                className={`flex min-w-0 flex-1 flex-col items-center gap-1 px-0.5 py-3 text-center ${
-                  active ? "text-linkedin" : "shell-tab-inactive"
-                }`}
-                data-testid={`profile-tab-${tabItem.key}`}
-              >
-                <Icon className="h-5 w-5 shrink-0" strokeWidth={active ? 2.4 : 1.8} />
-                <span className="w-full min-w-0 text-[10px] font-semibold leading-tight [overflow-wrap:anywhere] sm:text-xs">
-                  {tabItem.label}
-                </span>
-                {active ? <span className="h-0.5 w-8 rounded-full gradient-linkedin" /> : <span className="h-0.5 w-8" />}
-              </button>
-            );
-          })}
-        </div>
-
-        {tab === "resume" && (
-          <div className="space-y-5 pb-4">
-            <ProfileResumeSection
-              profile={profile}
-              onUploadResume={() => setOpenSheet("resume")}
-            />
-
-            <div className="shell-border-b pt-1">
-              <h3 className="shell-title pb-3 text-sm font-semibold uppercase tracking-wide">
-                {t("profileSections.professionalDetails")}
-              </h3>
-            </div>
-
-            {resumeSections.map((section) => {
-              const count = sectionCount(section.countKey);
+          <div className="shell-border-b flex">
+            {profileTabs.map((tabItem) => {
+              const Icon = tabItem.icon;
+              const active = tab === tabItem.key;
               return (
-                <div key={section.key}>
-                  <h3 className="shell-title mb-2 font-bold">
-                    {section.title}
-                    {section.countKey ? ` (${count})` : ""}
-                  </h3>
-                  <button
-                    type="button"
-                    onClick={() => setOpenSheet("professional")}
-                    className="shell-dashed shell-hover flex w-full items-center justify-between rounded-xl border px-4 py-4 text-left"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="grid h-10 w-10 place-items-center rounded-full bg-violet-50 text-linkedin">
-                        <Plus className="h-5 w-5" />
-                      </div>
-                      <div>
-                        <p className="shell-title font-semibold">{section.add}</p>
-                        {section.key === "languages" ? (
-                          <p className="text-sm shell-body">{t("profileSections.languagesHint")}</p>
-                        ) : null}
-                      </div>
-                    </div>
-                    <Plus className="h-5 w-5 text-linkedin" />
-                  </button>
-                </div>
+                <button
+                  key={tabItem.key}
+                  type="button"
+                  onClick={() => setTab(tabItem.key)}
+                  className={`flex min-w-0 flex-1 flex-col items-center gap-1 px-0.5 py-3 text-center ${
+                    active ? "text-linkedin" : "shell-tab-inactive"
+                  }`}
+                  data-testid={`profile-tab-${tabItem.key}`}
+                >
+                  <Icon className="h-5 w-5 shrink-0" strokeWidth={active ? 2.4 : 1.8} />
+                  <span className="w-full min-w-0 text-[10px] font-semibold leading-tight [overflow-wrap:anywhere] sm:text-xs">
+                    {tabItem.label}
+                  </span>
+                  {active ? (
+                    <span className="h-0.5 w-8 rounded-full gradient-linkedin" />
+                  ) : (
+                    <span className="h-0.5 w-8" />
+                  )}
+                </button>
               );
             })}
           </div>
-        )}
 
-        {tab === "personal" && (
-          <ProfilePersonalInfoTab
-            profile={profile}
-            userEmail={user?.email}
-            onSaved={reload}
-          />
-        )}
+          {tab === "resume" && (
+            <div className="space-y-5 pb-4">
+              <ProfileResumeSection
+                profile={profile}
+                onUploadResume={() => setOpenSheet("resume")}
+              />
 
-        {tab === "documents" && (
-          <ProfileDocumentsTab
-            profile={profile}
-            onUploadResume={() => setOpenSheet("resume")}
-            onDocumentsChange={reload}
-          />
-        )}
+              <div className="shell-border-b pt-1">
+                <h3 className="shell-title pb-3 text-sm font-semibold uppercase tracking-wide">
+                  {t("profileSections.professionalDetails")}
+                </h3>
+              </div>
 
-        {tab === "referral" && <ReferralPanel />}
+              {resumeSections.map((section) => {
+                const count = sectionCount(section.countKey);
+                return (
+                  <div key={section.key}>
+                    <h3 className="shell-title mb-2 font-bold">
+                      {section.title}
+                      {section.countKey ? ` (${count})` : ""}
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={() => setOpenSheet("professional")}
+                      className="shell-dashed shell-hover flex w-full items-center justify-between rounded-xl border px-4 py-4 text-left"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="grid h-10 w-10 place-items-center rounded-full bg-violet-50 text-linkedin">
+                          <Plus className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <p className="shell-title font-semibold">{section.add}</p>
+                          {section.key === "languages" ? (
+                            <p className="text-sm shell-body">
+                              {t("profileSections.languagesHint")}
+                            </p>
+                          ) : null}
+                        </div>
+                      </div>
+                      <Plus className="h-5 w-5 text-linkedin" />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {tab === "personal" && (
+            <ProfilePersonalInfoTab profile={profile} userEmail={user?.email} onSaved={reload} />
+          )}
+
+          {tab === "documents" && (
+            <ProfileDocumentsTab
+              profile={profile}
+              onUploadResume={() => setOpenSheet("resume")}
+              onDocumentsChange={reload}
+            />
+          )}
+
+          {tab === "referral" && <ReferralPanel />}
         </div>
       </AppPageScroll>
 

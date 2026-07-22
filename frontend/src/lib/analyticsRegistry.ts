@@ -20,9 +20,7 @@ for (const event of analyticsRegistry.events) {
 export const resolveAnalyticsEvent = (
   name: string,
 ): { canonicalName: string; definition: RegistryEvent } | null => {
-  const canonicalName = eventByName.has(name)
-    ? name
-    : canonicalNameByAlias.get(name);
+  const canonicalName = eventByName.has(name) ? name : canonicalNameByAlias.get(name);
   if (!canonicalName) return null;
   const definition = eventByName.get(canonicalName);
   return definition ? { canonicalName, definition } : null;
@@ -30,8 +28,7 @@ export const resolveAnalyticsEvent = (
 
 const matchesType = (value: unknown, property: RegistryProperty): boolean => {
   const meetsMinimum =
-    property.minimum === undefined ||
-    (typeof value === "number" && value >= property.minimum);
+    property.minimum === undefined || (typeof value === "number" && value >= property.minimum);
   if (property.type === "boolean") return typeof value === "boolean";
   if (property.type === "integer") return Number.isInteger(value) && meetsMinimum;
   if (property.type === "number") {
@@ -54,11 +51,7 @@ export const registryPropertiesForEvent = (
       ? {
           ...input,
           interaction: originalName,
-          surface:
-            input.surface ??
-            input.location ??
-            input.page ??
-            input.source,
+          surface: input.surface ?? input.location ?? input.page ?? input.source,
         }
       : input;
   const allowed: Record<string, RegistryProperty> = {
@@ -68,16 +61,12 @@ export const registryPropertiesForEvent = (
   const result: Record<string, boolean | number | string> = {};
   for (const [key, value] of Object.entries(normalizedInput)) {
     const property = allowed[key];
-    if (
-      property &&
-      property.privacy !== "sensitive" &&
-      matchesType(value, property)
-    ) {
+    if (property && property.privacy !== "sensitive" && matchesType(value, property)) {
       result[key] = value as boolean | number | string;
     }
   }
-  const hasRequiredProperties = Object.keys(
-    resolved.definition.requiredProperties,
-  ).every((key) => key in result);
+  const hasRequiredProperties = Object.keys(resolved.definition.requiredProperties).every(
+    (key) => key in result,
+  );
   return hasRequiredProperties ? result : null;
 };

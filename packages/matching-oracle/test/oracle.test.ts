@@ -15,31 +15,40 @@ describe("PR0 deterministic online matching oracle", () => {
       coarseCandidateCount: 1,
       eligibleCount: 1,
       hiddenCount: 3,
-      results: [{
-        canonicalGroupId: "group-best",
-        preferredJobId: "job-best",
-        jobVersion: "v1",
-        matcherVersion: "matching-oracle.v1",
-        relevanceScore: 99.166667,
-        fulfillmentRoute: "manual",
-        explanationCodes: [
-          "role_family_overlap",
-          "skill_overlap",
-          "location_work_mode_match",
-          "within_explicit_radius",
-          "contract_match",
-          "fresh_listing",
-        ],
-      }],
+      results: [
+        {
+          canonicalGroupId: "group-best",
+          preferredJobId: "job-best",
+          jobVersion: "v1",
+          matcherVersion: "matching-oracle.v1",
+          relevanceScore: 99.166667,
+          fulfillmentRoute: "manual",
+          explanationCodes: [
+            "role_family_overlap",
+            "skill_overlap",
+            "location_work_mode_match",
+            "within_explicit_radius",
+            "contract_match",
+            "fresh_listing",
+          ],
+        },
+      ],
     });
   });
 
   test("is input-order invariant and uses canonical group as a stable tie breaker", () => {
-    const duplicateScore = { ...jobs[0]!, canonicalGroupId: "group-alpha", preferredJobId: "job-alpha" };
+    const duplicateScore = {
+      ...jobs[0]!,
+      canonicalGroupId: "group-alpha",
+      preferredJobId: "job-alpha",
+    };
     const forward = new MatchingOracle([jobs[0]!, duplicateScore]).match(profile, [], { now });
     const reverse = new MatchingOracle([duplicateScore, jobs[0]!]).match(profile, [], { now });
     expect(reverse).toEqual(forward);
-    expect(forward.results.map((result) => result.canonicalGroupId)).toEqual(["group-alpha", "group-best"]);
+    expect(forward.results.map((result) => result.canonicalGroupId)).toEqual([
+      "group-alpha",
+      "group-best",
+    ]);
   });
 
   test("applies hard constraints before the coarse bound", () => {
@@ -69,17 +78,30 @@ describe("PR0 deterministic online matching oracle", () => {
 
   test("rejects duplicate canonical groups and unbounded configurations", () => {
     expect(() => new MatchingOracle([jobs[0]!, jobs[0]!])).toThrow("duplicate canonical group");
-    expect(() => new MatchingOracle([{ ...jobs[0]!, publishedAt: "not-a-date" }])).toThrow("invalid publishedAt");
-    expect(() => new MatchingOracle([{ ...jobs[0]!, qualityScore: 101 }])).toThrow("invalid qualityScore");
-    expect(() => new MatchingOracle(jobs).match(profile, [], {
-      now,
-      config: {
-        matcherVersion: "invalid",
-        coarseLimit: 10_001,
-        resultLimit: 200,
-        weights: { role: 35, skills: 20, geographyAndWorkMode: 20, contract: 10, freshness: 10, quality: 5 },
-      },
-    })).toThrow("coarseLimit");
+    expect(() => new MatchingOracle([{ ...jobs[0]!, publishedAt: "not-a-date" }])).toThrow(
+      "invalid publishedAt",
+    );
+    expect(() => new MatchingOracle([{ ...jobs[0]!, qualityScore: 101 }])).toThrow(
+      "invalid qualityScore",
+    );
+    expect(() =>
+      new MatchingOracle(jobs).match(profile, [], {
+        now,
+        config: {
+          matcherVersion: "invalid",
+          coarseLimit: 10_001,
+          resultLimit: 200,
+          weights: {
+            role: 35,
+            skills: 20,
+            geographyAndWorkMode: 20,
+            contract: 10,
+            freshness: 10,
+            quality: 5,
+          },
+        },
+      }),
+    ).toThrow("coarseLimit");
   });
 
   test("publishes a bounded, action-aware SQL EXPLAIN contract without a cartesian join", () => {

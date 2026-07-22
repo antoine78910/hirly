@@ -1,7 +1,10 @@
 /** In-app UI copy for /app routes (English + French). */
 
 import { readAiSettings } from "./aiSettings";
-import { PROFESSIONAL_PROFILE_I18N_EN, PROFESSIONAL_PROFILE_I18N_FR } from "./professionalProfileI18n";
+import {
+  PROFESSIONAL_PROFILE_I18N_EN,
+  PROFESSIONAL_PROFILE_I18N_FR,
+} from "./professionalProfileI18n";
 import { PERSONAL_INFO_OPTIONS_EN, PERSONAL_INFO_OPTIONS_FR } from "./personalInfoOptionsI18n";
 import { APP_UI_TRANSLATIONS } from "./appUiTranslations";
 
@@ -50,16 +53,20 @@ export const APP_UI = {
       currentSubscription: "Current Subscription",
       currentSubscriptionDesc: "Subscribe to unlock premium features and unlimited applications.",
       noSubscription: "No Active Subscription",
-      noSubscriptionDesc: "Subscribe to get access to premium features, AI-powered resumes, and unlimited applications.",
+      noSubscriptionDesc:
+        "Subscribe to get access to premium features, AI-powered resumes, and unlimited applications.",
       viewPlans: "View Plans & Subscribe",
       manageSubscription: "Manage Subscription",
       premiumActive: "Premium Active",
-      premiumActiveDesc: "Your subscription is active. Manage billing details in the customer portal.",
+      premiumActiveDesc:
+        "Your subscription is active. Manage billing details in the customer portal.",
       mobileSubscriptionTitle: "Have a mobile subscription?",
-      mobileSubscriptionDesc: "If you purchased a subscription through the mobile app, link your account to manage it here.",
+      mobileSubscriptionDesc:
+        "If you purchased a subscription through the mobile app, link your account to manage it here.",
       linkMobilePurchase: "Link Mobile Purchase",
       usageCredits: "Usage & Credits",
-      usageCreditsDesc: "Track your credit usage and see how many credits you have remaining for this period.",
+      usageCreditsDesc:
+        "Track your credit usage and see how many credits you have remaining for this period.",
       currentCreditPeriod: "Current Credit Period",
       creditsUsed: "Credits Used",
       creditsOf: "{used} of {total} credits",
@@ -160,8 +167,10 @@ export const APP_UI = {
       switchDark: "Switch to dark mode",
       notifications: "Notifications",
       feedTimeout: "Jobs feed is taking too long. Try refreshing or widening your filters.",
-      providerRateLimited: "Job provider is temporarily rate-limited. Try again later or widen filters.",
-      widenFiltersHint: "Try widening your distance, adding more locations, or choosing another role.",
+      providerRateLimited:
+        "Job provider is temporarily rate-limited. Try again later or widen filters.",
+      widenFiltersHint:
+        "Try widening your distance, adding more locations, or choosing another role.",
       tryWidenSearch: "Try widening your search distance or changing your location.",
       editTarget: "Edit target role and location",
       swipeReadyReview: "Ready for your review",
@@ -170,15 +179,18 @@ export const APP_UI = {
       swipeReadyApps: "{company} is ready in Applications. Not submitted yet.",
       swipeActionRequiredDesc: "Open Tracker to answer the remaining application questions.",
       swipeHumanVerification: "Human verification needed",
-      swipeHumanVerificationDesc: "Open Tracker, then finish on the company site if automatic apply is blocked.",
+      swipeHumanVerificationDesc:
+        "Open Tracker, then finish on the company site if automatic apply is blocked.",
       swipePackageGenerated: "Application package generated",
       swipePackageFailed: "Browser preparation failed. You can retry from Tracker.",
       swipeTextGenerated: "Application text generated",
-      swipeTextGeneratedDesc: "CV and cover letter text are ready, but the file package needs review.",
+      swipeTextGeneratedDesc:
+        "CV and cover letter text are ready, but the file package needs review.",
       swipeMoreProfile: "More profile data needed",
       swipeMoreProfileDesc: "Complete your CV/profile to generate a stronger application.",
       swipeMoreJob: "More job data needed",
-      swipeMoreJobDesc: "This job post does not include enough detail for a strong tailored package.",
+      swipeMoreJobDesc:
+        "This job post does not include enough detail for a strong tailored package.",
       swipeAppSaved: "Application saved",
       swipeAppSavedDesc: "Generation failed. Open Tracker to review or retry later.",
       swipeQueued: "Application queued for {company}",
@@ -186,11 +198,14 @@ export const APP_UI = {
       swipePackageFor: "Application package generated for {company}",
       swipePackageReady: "CV and cover letter are ready. Not submitted yet.",
       demoApplied: "Applied (demo)",
-      demoAppliedDesc: "Demo mode — your application was saved locally. Nothing was sent to the company.",
-      generationTimeout: "Application generation is still taking longer than expected. Check Tracker in a moment.",
+      demoAppliedDesc:
+        "Demo mode — your application was saved locally. Nothing was sent to the company.",
+      generationTimeout:
+        "Application generation is still taking longer than expected. Check Tracker in a moment.",
       noJobsFiltered: "No jobs found with these filters.",
       feedExhaustedTitle: "You’ve viewed all matching jobs",
-      feedExhaustedBody: "Try adjusting your preferences or filters to discover more opportunities.",
+      feedExhaustedBody:
+        "Try adjusting your preferences or filters to discover more opportunities.",
       feedPolicyHiddenTitle: "Jobs are currently unavailable",
       feedPolicyHiddenBody: "Some matching jobs are hidden by eligibility or policy requirements.",
       feedBlockedTitle: "Jobs need attention before they can appear",
@@ -198,7 +213,8 @@ export const APP_UI = {
       feedNoInventoryTitle: "No matching jobs yet",
       feedNoInventoryBody: "Try broadening your preferences or check back later.",
       feedProfileNotReadyTitle: "Complete your job preferences",
-      feedProfileNotReadyBody: "Add your target role and location so we can find matching jobs for you.",
+      feedProfileNotReadyBody:
+        "Add your target role and location so we can find matching jobs for you.",
       feedSuggestionPreferences: "Edit job preferences",
       feedSuggestionLocation: "Edit location",
       feedSuggestionRadius: "Adjust search radius",
@@ -206,7 +222,8 @@ export const APP_UI = {
       feedSuggestionRevisitLater: "We’ll show new matching jobs here when they become available.",
       addPhoneToApply: "Add phone number",
       uploadResumeToSwipe: "Upload resume",
-      missingPhoneBody: "Some companies require a phone number to apply. Add yours so Hirly can submit your applications — and so recruiters can call you back.",
+      missingPhoneBody:
+        "Some companies require a phone number to apply. Add yours so Hirly can submit your applications — and so recruiters can call you back.",
       missingResumeBody: "Upload your resume to unlock job matches and apply with one swipe.",
       industryProductDesign: "Product Design",
       industryInfrastructure: "Infrastructure",
@@ -295,7 +312,8 @@ export const APP_UI = {
       comingSoon: "{feature} — coming soon",
       inviteCopied: "Invite link copied",
       billingPortalError: "Could not open billing portal",
-      deleteConfirm: "Delete your Hirly account? This removes your profile, swipes, and applications. This cannot be undone.",
+      deleteConfirm:
+        "Delete your Hirly account? This removes your profile, swipes, and applications. This cannot be undone.",
       accountDeleted: "Account deleted",
       deleteError: "Could not delete account",
       languageTitle: "App language",
@@ -310,7 +328,8 @@ export const APP_UI = {
       poweredBy: "Powered by {brand} AI",
       title: "AI Settings",
       subtitle: "AI Application Settings",
-      description: "Choose how AI assists with your job applications — speed, quality, and control in one place.",
+      description:
+        "Choose how AI assists with your job applications — speed, quality, and control in one place.",
       featuresOn: "{n}/4 features on",
       swipeReady: "1-swipe apply ready",
       promoTitle: "Built for screen recordings",
@@ -323,10 +342,12 @@ export const APP_UI = {
       resumeDesc: "Generate a tailored resume for each job application",
       resumeStat: "ATS-optimized",
       reviewDocs: "Review Documents",
-      reviewDocsDesc: "Review and approve AI-generated documents before they are used in applications",
+      reviewDocsDesc:
+        "Review and approve AI-generated documents before they are used in applications",
       reviewDocsStat: "Full control",
       findGaps: "Find Gaps in Resume",
-      findGapsDesc: "Answer questions addressing job requirements to improve AI resume and cover letter generation",
+      findGapsDesc:
+        "Answer questions addressing job requirements to improve AI resume and cover letter generation",
       findGapsStat: "Smarter matches",
       mobileIntro: "Choose how AI assists with your job applications.",
     },
@@ -334,7 +355,8 @@ export const APP_UI = {
       sectionTitle: "Demo mode",
       sectionIntro: "Sample finance jobs in Paris for screen recordings and product demos.",
       financeJobFeed: "Finance jobs (Paris)",
-      financeJobFeedDesc: "Replace the live feed with 30 realistic banking & markets roles (BNP, SocGen, Natixis, etc.). Applies stay local.",
+      financeJobFeedDesc:
+        "Replace the live feed with 30 realistic banking & markets roles (BNP, SocGen, Natixis, etc.). Applies stay local.",
       financeJobFeedOn: "Finance demo feed enabled",
       financeJobFeedOff: "Finance demo feed disabled",
     },
@@ -357,7 +379,8 @@ export const APP_UI = {
       readyToReview: "Ready to review",
       generatedRecently: "Generated recently",
       generatedOn: "Generated {date}",
-      dialogHint: "Review the generated CV and cover letter below. Approve to submit this application.",
+      dialogHint:
+        "Review the generated CV and cover letter below. Approve to submit this application.",
       pageHint: "Open each document to read it in full, then approve when you are ready to submit.",
       tapToRead: "Tap to read",
       backToQueue: "Back to review queue",
@@ -371,8 +394,10 @@ export const APP_UI = {
       actionRequired: "Action required",
       approved: "Application approved",
       submitError: "Could not submit application",
-      disabledBody: "Applications are prepared automatically when you swipe right. Turn on Review Documents to approve each package before it is submitted.",
-      emptyBody: "No applications are waiting for your review. Swipe right on jobs to generate new packages.",
+      disabledBody:
+        "Applications are prepared automatically when you swipe right. Turn on Review Documents to approve each package before it is submitted.",
+      emptyBody:
+        "No applications are waiting for your review. Swipe right on jobs to generate new packages.",
       approvedDesc: "We are finalizing the submission.",
       actionRequiredDesc: "A few answers are needed before this can be completed.",
       cvSourceTailored: "AI-tailored CV",
@@ -404,7 +429,8 @@ export const APP_UI = {
       title: "Applications",
       subtitle: "Track packages, submissions, and follow-ups in one place.",
       addResume: "Add Your Resume",
-      addResumeBody: "Upload your main resume to activate job applications and track your progress.",
+      addResumeBody:
+        "Upload your main resume to activate job applications and track your progress.",
       uploadResume: "Upload Resume",
       yourApplications: "Your applications",
       summary: "Summary",
@@ -429,16 +455,20 @@ export const APP_UI = {
       expired: "Expired",
       expiredCreditRefundedCompact: "Expired · +1 credit refunded",
       offerExpiredSorry: "Sorry, this offer has expired.",
-      offerExpiredBody: "This application could not be completed because the offer is no longer available.",
+      offerExpiredBody:
+        "This application could not be completed because the offer is no longer available.",
       expiredRefundTitle: "Offer expired — 1 credit returned",
-      expiredRefundBody: "This application could not be completed because the offer is no longer available. We added the credit back to your balance.",
+      expiredRefundBody:
+        "This application could not be completed because the offer is no longer available. We added the credit back to your balance.",
       untitledRole: "Untitled role",
       unknownCompany: "Unknown company",
       securityCheck: "Security check needed",
       applyOnCompanySite: "Apply on company site",
       preparationFailed: "Preparation failed",
-      preparationFailedBody: "Your CV and cover letter are ready, but automatic browser apply could not finish. You can open the company site and apply with those documents.",
-      manualApplyBlockedBody: "Automatic apply could not finish on the employer site. Open the company page to continue yourself — your tailored documents stay in Hirly.",
+      preparationFailedBody:
+        "Your CV and cover letter are ready, but automatic browser apply could not finish. You can open the company site and apply with those documents.",
+      manualApplyBlockedBody:
+        "Automatic apply could not finish on the employer site. Open the company page to continue yourself — your tailored documents stay in Hirly.",
       needsAttention: "Needs attention",
       appPending: "Application pending",
       answerQuestions: "Answer questions",
@@ -463,24 +493,29 @@ export const APP_UI = {
       timelinePackage: "Tailored package generated",
       timelineSubmitted: "Application submitted",
       timelineAnswersNeeded: "Answers needed",
-      timelineAnswersNeededDesc: "A few details are required before Hirly can finish this application.",
+      timelineAnswersNeededDesc:
+        "A few details are required before Hirly can finish this application.",
       timelinePending: "Application pending",
       timelinePendingDesc: "Hirly is finalizing and submitting this application.",
       timelinePrepared: "Application prepared",
       timelinePreparedDesc: "Your tailored package is ready for automatic submission.",
       timelineAwaitingReview: "Awaiting your approval",
-      timelineAwaitingReviewDesc: "Review the CV and cover letter before Hirly submits this application.",
+      timelineAwaitingReviewDesc:
+        "Review the CV and cover letter before Hirly submits this application.",
       timelineSecurity: "Security check needed",
       timelineSecurityDesc: "An additional verification step is required on the employer site.",
       timelineFailed: "Needs attention",
       timelineFailedDesc: "This application could not be completed automatically.",
-      timelinePrepareFailedDesc: "The package was generated, but browser preparation needs to be retried.",
+      timelinePrepareFailedDesc:
+        "The package was generated, but browser preparation needs to be retried.",
       timelineNotificationSent: "Email notification sent",
       timelineNotificationSentDesc: "You received a confirmation email from Hirly.",
       timelineVerificationNotification: "Verification notification sent",
-      timelineVerificationNotificationDesc: "Hirly emailed you to complete the required security check.",
+      timelineVerificationNotificationDesc:
+        "Hirly emailed you to complete the required security check.",
       timelineExpired: "Application expired",
-      timelineExpiredDesc: "This job offer is no longer available. We've refunded the credit this application used.",
+      timelineExpiredDesc:
+        "This job offer is no longer available. We've refunded the credit this application used.",
       timelineInterview: "Interview invitation",
       timelineOffer: "Offer update",
       timelineEmailReceived: "Email received",
@@ -488,7 +523,8 @@ export const APP_UI = {
       statusFinalizing: "We're finalizing your application.",
       statusPrepared: "Application prepared. Final submission is not enabled yet.",
       statusBlocked: "A few answers are needed before this application can be prepared.",
-      statusCaptcha: "A security check blocked automatic apply. Open the company site to finish yourself.",
+      statusCaptcha:
+        "A security check blocked automatic apply. Open the company site to finish yourself.",
       statusPrepareFailed: "Application package generated, but browser preparation failed.",
       statusFailed: "Submission failed.",
       statusExpired: "This job offer has expired. Your credit has been refunded.",
@@ -651,9 +687,11 @@ export const APP_UI = {
         contactTitle: "Contact Information",
         contactDesc: "Your basic contact details for professional communication and applications.",
         salaryTitle: "Salary Expectations",
-        salaryDesc: "Set your salary expectations to help match you with appropriate job opportunities.",
+        salaryDesc:
+          "Set your salary expectations to help match you with appropriate job opportunities.",
         demographicsTitle: "Demographic Information",
-        demographicsDesc: "Help us understand your background and preferences to provide a better experience.",
+        demographicsDesc:
+          "Help us understand your background and preferences to provide a better experience.",
         firstName: "First Name",
         lastName: "Last Name",
         firstNamePlaceholder: "Alex",
@@ -681,7 +719,8 @@ export const APP_UI = {
         citizenshipType: "Status type",
         removeCitizenship: "Remove citizenship entry",
         noCitizenship: "No citizenship status",
-        noCitizenshipDesc: "Add your citizenship or visa status to help employers understand your work authorization.",
+        noCitizenshipDesc:
+          "Add your citizenship or visa status to help employers understand your work authorization.",
         contactSaved: "Contact information saved",
         salarySaved: "Salary expectations saved",
         demographicsSaved: "Demographic information saved",
@@ -689,9 +728,11 @@ export const APP_UI = {
       },
       documents: {
         resumeTitle: "Resume",
-        resumeSectionDesc: "Your primary resume used to build your profile and generate tailored applications.",
+        resumeSectionDesc:
+          "Your primary resume used to build your profile and generate tailored applications.",
         noResume: "No resume uploaded yet",
-        noResumeDesc: "Upload your resume to build your professional profile and generate tailored applications.",
+        noResumeDesc:
+          "Upload your resume to build your professional profile and generate tailored applications.",
         uploadResume: "Upload resume",
         resumeOnFile: "Current resume on file",
         replaceResume: "Replace",
@@ -700,9 +741,11 @@ export const APP_UI = {
         downloadError: "Could not download resume",
         resumeFallbackName: "Resume",
         coverLetterTitle: "Cover letter",
-        coverLetterSectionDesc: "Optional. Upload a reference cover letter to help AI match your tone and structure.",
+        coverLetterSectionDesc:
+          "Optional. Upload a reference cover letter to help AI match your tone and structure.",
         noCoverLetter: "No cover letter uploaded",
-        noCoverLetterDesc: "Add a cover letter you like — Hirly can use it as inspiration when generating applications.",
+        noCoverLetterDesc:
+          "Add a cover letter you like — Hirly can use it as inspiration when generating applications.",
         uploadCoverLetter: "Upload cover letter",
         replaceCoverLetter: "Replace",
         viewCoverLetter: "View cover letter",
@@ -714,9 +757,11 @@ export const APP_UI = {
         coverLetterDeleteError: "Could not remove cover letter",
         coverLetterFallbackName: "Cover letter",
         additionalTitle: "Additional documents",
-        additionalSectionDesc: "Transcripts, portfolios, certifications, and other files you want to reuse across applications.",
+        additionalSectionDesc:
+          "Transcripts, portfolios, certifications, and other files you want to reuse across applications.",
         noAdditional: "No additional documents yet",
-        noAdditionalDesc: "Upload transcripts, portfolios, or certificates to attach them to your applications.",
+        noAdditionalDesc:
+          "Upload transcripts, portfolios, or certificates to attach them to your applications.",
         uploadDocument: "Upload document",
         addDocument: "Add document",
         uploadedCountOne: "1 document uploaded",
@@ -732,7 +777,8 @@ export const APP_UI = {
         deleteError: "Could not delete document",
         viewUnavailableDemo: "Document preview is unavailable in demo mode",
         configureAiSettings: "Configure AI application settings",
-        configureAiSettingsHint: "Choose how AI generates your cover letter, resume, and document review for each apply.",
+        configureAiSettingsHint:
+          "Choose how AI generates your cover letter, resume, and document review for each apply.",
       },
     },
     referralPanel: {
@@ -762,7 +808,8 @@ export const APP_UI = {
       uploadTitle: "Upload resume",
       updateTitle: "Update resume",
       uploadDesc: "Upload your resume to get started with personalized job applications.",
-      updateDesc: "Your current resume is shown below (read-only). Upload a new file to replace it.",
+      updateDesc:
+        "Your current resume is shown below (read-only). Upload a new file to replace it.",
       currentResume: "Current resume",
       currentOnFile: "Current resume on file",
       previewReadOnly: "Read-only preview",
@@ -779,12 +826,14 @@ export const APP_UI = {
       fileFormats: "PDF, DOCX, RTF, TXT, or image (PNG/JPG/HEIC/WEBP) • Max 20 MB",
       fileTypeError: "Please upload a PDF, DOCX, RTF, TXT, or image file.",
       fileSizeError: "File must be {maxMb}MB or smaller.",
-      legacyDocError: "Legacy .doc files aren't supported. Please re-save your resume as PDF or DOCX and try again.",
+      legacyDocError:
+        "Legacy .doc files aren't supported. Please re-save your resume as PDF or DOCX and try again.",
       uploadSuccess: "Resume updated. AI re-parsed your profile.",
       uploadError: "Upload failed",
       downloadResume: "Download",
       exampleResume: "Example resume",
-      exampleResumeHint: "Not sure what to upload? Here is a well-formatted entry-level resume you can use as inspiration.",
+      exampleResumeHint:
+        "Not sure what to upload? Here is a well-formatted entry-level resume you can use as inspiration.",
       exampleOnFile: "Sample resume for inspiration",
     },
     phoneSheet: {
@@ -804,7 +853,8 @@ export const APP_UI = {
       bestScore: "Best score",
       mockTitle: "5-question mock",
       mockCta: "Start your mock interview",
-      mockDesc: "Tailored to your target role. ~5 minutes. Get scored on confidence, communication, and technical answers.",
+      mockDesc:
+        "Tailored to your target role. ~5 minutes. Get scored on confidence, communication, and technical answers.",
       startNow: "Start now",
       wordCount: "{count} words",
       coachTips: "Coach tips",
@@ -885,7 +935,8 @@ export const APP_UI = {
     deleteAccountDialog: {
       title: "Delete your account?",
       subtitle: "This action is permanent and cannot be undone.",
-      intro: "If you continue, everything linked to your {brand} account will be permanently deleted:",
+      intro:
+        "If you continue, everything linked to your {brand} account will be permanently deleted:",
       bulletProfile: "Your profile, CV, cover letters, and documents",
       bulletApplications: "All applications and their submission history",
       bulletSwipes: "Your swipes and job preferences",
@@ -897,7 +948,8 @@ export const APP_UI = {
       deleting: "Deleting…",
     },
     notificationSettings: {
-      intro: "Preview the alerts {brand} sends during your job search. Email notifications are sent from {email}. All are enabled by default.",
+      intro:
+        "Preview the alerts {brand} sends during your job search. Email notifications are sent from {email}. All are enabled by default.",
       exampleTime: "2 min ago",
       exampleSender: "{brand} · {email}",
       verificationRequired: {
@@ -983,7 +1035,8 @@ export const APP_UI = {
       willingToRelocate: "Willing to relocate",
       privacyConsentDefault: "Privacy consent default",
       preferNotToSayDemographics: "Prefer not to say for demographics",
-      preferNotToSayDemographicsHint: "Use decline/prefer-not-to-say options when forms provide them.",
+      preferNotToSayDemographicsHint:
+        "Use decline/prefer-not-to-say options when forms provide them.",
       formerEmployerRestriction: "Former employer or non-compete restriction",
       iAgree: "I agree",
       iDoNotAgree: "I do not agree",
@@ -1011,7 +1064,8 @@ export const APP_UI = {
       bestPlanTitle: "You're already on our best plan",
       bestPlanDesc: "You have our highest tier active. Manage your subscription anytime.",
       manageSubscription: "Manage subscription",
-      prorationNote: "You'll only pay today's prorated difference, and your extra application credits are added instantly.",
+      prorationNote:
+        "You'll only pay today's prorated difference, and your extra application credits are added instantly.",
       cancelAnytime: "Cancel anytime",
       securePayments: "Secure payments",
       instantAccess: "Instant access",
@@ -1094,18 +1148,22 @@ export const APP_UI = {
     billingPage: {
       title: "Facturation & abonnement",
       currentSubscription: "Abonnement actuel",
-      currentSubscriptionDesc: "Abonnez-vous pour débloquer les fonctionnalités premium et les candidatures illimitées.",
+      currentSubscriptionDesc:
+        "Abonnez-vous pour débloquer les fonctionnalités premium et les candidatures illimitées.",
       noSubscription: "Aucun abonnement actif",
-      noSubscriptionDesc: "Abonnez-vous pour accéder aux fonctionnalités premium, CV IA et candidatures illimitées.",
+      noSubscriptionDesc:
+        "Abonnez-vous pour accéder aux fonctionnalités premium, CV IA et candidatures illimitées.",
       viewPlans: "Voir les offres & s'abonner",
       manageSubscription: "Gérer l'abonnement",
       premiumActive: "Premium actif",
       premiumActiveDesc: "Votre abonnement est actif. Gérez la facturation dans le portail client.",
       mobileSubscriptionTitle: "Abonnement mobile ?",
-      mobileSubscriptionDesc: "Si vous avez acheté un abonnement via l'app mobile, liez votre compte pour le gérer ici.",
+      mobileSubscriptionDesc:
+        "Si vous avez acheté un abonnement via l'app mobile, liez votre compte pour le gérer ici.",
       linkMobilePurchase: "Lier un achat mobile",
       usageCredits: "Utilisation & crédits",
-      usageCreditsDesc: "Suivez votre consommation de crédits et le solde restant pour cette période.",
+      usageCreditsDesc:
+        "Suivez votre consommation de crédits et le solde restant pour cette période.",
       currentCreditPeriod: "Période de crédits en cours",
       creditsUsed: "Crédits utilisés",
       creditsOf: "{used} sur {total} crédits",
@@ -1205,8 +1263,10 @@ export const APP_UI = {
       switchLight: "Passer en mode clair",
       switchDark: "Passer en mode sombre",
       notifications: "Notifications",
-      feedTimeout: "Le chargement des offres prend trop de temps. Actualisez ou élargissez vos filtres.",
-      providerRateLimited: "Le fournisseur d'offres est temporairement limité. Réessayez plus tard ou élargissez les filtres.",
+      feedTimeout:
+        "Le chargement des offres prend trop de temps. Actualisez ou élargissez vos filtres.",
+      providerRateLimited:
+        "Le fournisseur d'offres est temporairement limité. Réessayez plus tard ou élargissez les filtres.",
       widenFiltersHint: "Élargissez la distance, ajoutez des lieux ou choisissez un autre poste.",
       tryWidenSearch: "Élargissez la zone de recherche ou changez de lieu.",
       editTarget: "Modifier le poste et le lieu cibles",
@@ -1216,35 +1276,43 @@ export const APP_UI = {
       swipeReadyApps: "{company} est prêt dans Candidatures. Pas encore envoyé.",
       swipeActionRequiredDesc: "Ouvrez Candidatures pour répondre aux questions restantes.",
       swipeHumanVerification: "Vérification humaine requise",
-      swipeHumanVerificationDesc: "Ouvrez Candidatures, puis terminez sur le site de l'entreprise si l'envoi automatique est bloqué.",
+      swipeHumanVerificationDesc:
+        "Ouvrez Candidatures, puis terminez sur le site de l'entreprise si l'envoi automatique est bloqué.",
       swipePackageGenerated: "Dossier de candidature généré",
       swipePackageFailed: "La préparation navigateur a échoué. Réessayez depuis Candidatures.",
       swipeTextGenerated: "Texte de candidature généré",
-      swipeTextGeneratedDesc: "CV et lettre prêts, mais le dossier fichier nécessite une relecture.",
+      swipeTextGeneratedDesc:
+        "CV et lettre prêts, mais le dossier fichier nécessite une relecture.",
       swipeMoreProfile: "Plus de données profil nécessaires",
       swipeMoreProfileDesc: "Complétez votre CV/profil pour une candidature plus solide.",
       swipeMoreJob: "Plus de données sur l'offre nécessaires",
-      swipeMoreJobDesc: "Cette annonce ne contient pas assez de détails pour un dossier sur mesure.",
+      swipeMoreJobDesc:
+        "Cette annonce ne contient pas assez de détails pour un dossier sur mesure.",
       swipeAppSaved: "Candidature enregistrée",
       swipeAppSavedDesc: "La génération a échoué. Consultez Candidatures pour relire ou réessayer.",
       swipeQueued: "Candidature mise en attente pour {company}",
-      swipeQueuedDesc: "Nous générons le CV et la lettre de motivation personnalisés en arrière-plan.",
+      swipeQueuedDesc:
+        "Nous générons le CV et la lettre de motivation personnalisés en arrière-plan.",
       swipePackageFor: "Dossier généré pour {company}",
       swipePackageReady: "CV et lettre prêts. Pas encore envoyés.",
       demoApplied: "Candidature enregistrée (démo)",
-      demoAppliedDesc: "Mode démo — candidature sauvegardée en local. Rien n'a été envoyé à l'entreprise.",
-      generationTimeout: "La génération prend plus de temps que prévu. Consultez Candidatures dans un instant.",
+      demoAppliedDesc:
+        "Mode démo — candidature sauvegardée en local. Rien n'a été envoyé à l'entreprise.",
+      generationTimeout:
+        "La génération prend plus de temps que prévu. Consultez Candidatures dans un instant.",
       noJobsFiltered: "Aucune offre avec ces filtres.",
       feedExhaustedTitle: "Vous avez vu toutes les offres correspondantes",
       feedExhaustedBody: "Modifiez vos préférences ou filtres pour découvrir plus d’opportunités.",
       feedPolicyHiddenTitle: "Des offres sont actuellement indisponibles",
-      feedPolicyHiddenBody: "Certaines offres correspondantes sont masquées par des critères d’éligibilité.",
+      feedPolicyHiddenBody:
+        "Certaines offres correspondantes sont masquées par des critères d’éligibilité.",
       feedBlockedTitle: "Des offres doivent être vérifiées avant d’apparaître",
       feedBlockedBody: "Des offres correspondantes sont actuellement bloquées dans votre feed.",
       feedNoInventoryTitle: "Aucune offre correspondante pour le moment",
       feedNoInventoryBody: "Élargissez vos préférences ou revenez plus tard.",
       feedProfileNotReadyTitle: "Complétez vos préférences de recherche",
-      feedProfileNotReadyBody: "Ajoutez le poste et le lieu recherchés pour recevoir des offres correspondantes.",
+      feedProfileNotReadyBody:
+        "Ajoutez le poste et le lieu recherchés pour recevoir des offres correspondantes.",
       feedSuggestionPreferences: "Modifier les préférences",
       feedSuggestionLocation: "Modifier le lieu",
       feedSuggestionRadius: "Ajuster le rayon",
@@ -1252,7 +1320,8 @@ export const APP_UI = {
       feedSuggestionRevisitLater: "Les nouvelles offres correspondantes apparaîtront ici.",
       addPhoneToApply: "Ajouter mon numéro",
       uploadResumeToSwipe: "Importer mon CV",
-      missingPhoneBody: "Certaines entreprises exigent un numéro pour postuler. Ajoutez le vôtre pour candidater — et pour que les recruteurs puissent vous rappeler.",
+      missingPhoneBody:
+        "Certaines entreprises exigent un numéro pour postuler. Ajoutez le vôtre pour candidater — et pour que les recruteurs puissent vous rappeler.",
       missingResumeBody: "Importez votre CV pour débloquer les offres et postuler en un swipe.",
       industryProductDesign: "Design produit",
       industryInfrastructure: "Infrastructure",
@@ -1341,7 +1410,8 @@ export const APP_UI = {
       comingSoon: "{feature} — bientôt disponible",
       inviteCopied: "Lien d'invitation copié",
       billingPortalError: "Impossible d'ouvrir le portail de facturation",
-      deleteConfirm: "Supprimer votre compte Hirly ? Votre profil, swipes et candidatures seront effacés. Action irréversible.",
+      deleteConfirm:
+        "Supprimer votre compte Hirly ? Votre profil, swipes et candidatures seront effacés. Action irréversible.",
       accountDeleted: "Compte supprimé",
       deleteError: "Impossible de supprimer le compte",
       languageTitle: "Langue de l'app",
@@ -1356,7 +1426,8 @@ export const APP_UI = {
       poweredBy: "Propulsé par l'IA {brand}",
       title: "Réglages IA",
       subtitle: "Réglages des candidatures IA",
-      description: "Choisissez comment l'IA vous aide — rapidité, qualité et contrôle au même endroit.",
+      description:
+        "Choisissez comment l'IA vous aide — rapidité, qualité et contrôle au même endroit.",
       featuresOn: "{n}/4 fonctionnalités actives",
       swipeReady: "Candidature en 1 swipe prête",
       promoTitle: "Pensé pour les démos",
@@ -1380,13 +1451,15 @@ export const APP_UI = {
       sectionTitle: "Mode démo",
       sectionIntro: "Offres finance à Paris pour enregistrements d'écran et démos produit.",
       financeJobFeed: "Offres finance (Paris)",
-      financeJobFeedDesc: "Remplace le feed live par 30 postes banque & marchés (BNP, SocGen, Natixis…). Candidatures locales uniquement.",
+      financeJobFeedDesc:
+        "Remplace le feed live par 30 postes banque & marchés (BNP, SocGen, Natixis…). Candidatures locales uniquement.",
       financeJobFeedOn: "Feed démo finance activé",
       financeJobFeedOff: "Feed démo finance désactivé",
     },
     demo: {
       badge: "Compte démo",
-      banner: "Les candidatures restent locales pour les enregistrements d'écran. Rien n'est envoyé aux employeurs.",
+      banner:
+        "Les candidatures restent locales pour les enregistrements d'écran. Rien n'est envoyé aux employeurs.",
     },
     credits: {
       viewPlans: "Voir les offres",
@@ -1417,8 +1490,10 @@ export const APP_UI = {
       actionRequired: "Action requise",
       approved: "Candidature approuvée",
       submitError: "Impossible d'envoyer la candidature",
-      disabledBody: "Les candidatures sont préparées automatiquement quand vous swipez à droite. Activez Relecture des documents pour approuver chaque dossier avant envoi.",
-      emptyBody: "Aucune candidature n'attend votre relecture. Swipez à droite pour générer de nouveaux dossiers.",
+      disabledBody:
+        "Les candidatures sont préparées automatiquement quand vous swipez à droite. Activez Relecture des documents pour approuver chaque dossier avant envoi.",
+      emptyBody:
+        "Aucune candidature n'attend votre relecture. Swipez à droite pour générer de nouveaux dossiers.",
       approvedDesc: "Nous finalisons l'envoi.",
       actionRequiredDesc: "Quelques réponses sont nécessaires avant de terminer.",
       cvSourceTailored: "CV généré par l'IA",
@@ -1477,14 +1552,17 @@ export const APP_UI = {
       offerExpiredSorry: "Désolé, cette offre a expiré.",
       offerExpiredBody: "Cette candidature n'a pas pu aboutir car l'offre n'est plus disponible.",
       expiredRefundTitle: "Offre expirée — 1 crédit rendu",
-      expiredRefundBody: "Cette candidature n'a pas pu aboutir car l'offre n'est plus disponible. Le crédit a été recrédité sur votre solde.",
+      expiredRefundBody:
+        "Cette candidature n'a pas pu aboutir car l'offre n'est plus disponible. Le crédit a été recrédité sur votre solde.",
       untitledRole: "Poste sans titre",
       unknownCompany: "Entreprise inconnue",
       securityCheck: "Vérification de sécurité",
       applyOnCompanySite: "Postuler sur le site de l'entreprise",
       preparationFailed: "Préparation échouée",
-      preparationFailedBody: "Votre CV et lettre sont prêts, mais l'envoi automatique n'a pas pu aboutir. Ouvrez le site de l'entreprise pour postuler avec ces documents.",
-      manualApplyBlockedBody: "L'envoi automatique n'a pas pu aboutir sur le site employeur. Ouvrez la page de l'entreprise pour continuer — vos documents restent dans Hirly.",
+      preparationFailedBody:
+        "Votre CV et lettre sont prêts, mais l'envoi automatique n'a pas pu aboutir. Ouvrez le site de l'entreprise pour postuler avec ces documents.",
+      manualApplyBlockedBody:
+        "L'envoi automatique n'a pas pu aboutir sur le site employeur. Ouvrez la page de l'entreprise pour continuer — vos documents restent dans Hirly.",
       needsAttention: "Attention requise",
       appPending: "Candidature en attente",
       answerQuestions: "Répondre aux questions",
@@ -1509,7 +1587,8 @@ export const APP_UI = {
       timelinePackage: "Dossier sur mesure généré",
       timelineSubmitted: "Candidature envoyée",
       timelineAnswersNeeded: "Réponses nécessaires",
-      timelineAnswersNeededDesc: "Quelques informations sont requises avant que Hirly puisse finaliser cette candidature.",
+      timelineAnswersNeededDesc:
+        "Quelques informations sont requises avant que Hirly puisse finaliser cette candidature.",
       timelinePending: "Candidature en attente",
       timelinePendingDesc: "Hirly finalise et envoie cette candidature.",
       timelinePrepared: "Candidature préparée",
@@ -1520,13 +1599,16 @@ export const APP_UI = {
       timelineSecurityDesc: "Une vérification supplémentaire est requise sur le site employeur.",
       timelineFailed: "Attention requise",
       timelineFailedDesc: "Cette candidature n'a pas pu être finalisée automatiquement.",
-      timelinePrepareFailedDesc: "Le dossier a été généré, mais la préparation navigateur doit être relancée.",
+      timelinePrepareFailedDesc:
+        "Le dossier a été généré, mais la préparation navigateur doit être relancée.",
       timelineNotificationSent: "E-mail de notification envoyé",
       timelineNotificationSentDesc: "Vous avez reçu un e-mail de confirmation de Hirly.",
       timelineVerificationNotification: "Notification de vérification envoyée",
-      timelineVerificationNotificationDesc: "Hirly vous a envoyé un e-mail pour terminer la vérification requise.",
+      timelineVerificationNotificationDesc:
+        "Hirly vous a envoyé un e-mail pour terminer la vérification requise.",
       timelineExpired: "Candidature expirée",
-      timelineExpiredDesc: "Cette offre d'emploi n'est plus disponible. Nous vous avons remboursé le crédit utilisé pour cette candidature.",
+      timelineExpiredDesc:
+        "Cette offre d'emploi n'est plus disponible. Nous vous avons remboursé le crédit utilisé pour cette candidature.",
       timelineInterview: "Invitation entretien",
       timelineOffer: "Mise à jour offre",
       timelineEmailReceived: "E-mail reçu",
@@ -1534,7 +1616,8 @@ export const APP_UI = {
       statusFinalizing: "Nous finalisons votre candidature.",
       statusPrepared: "Candidature préparée. L'envoi final n'est pas encore activé.",
       statusBlocked: "Quelques réponses sont nécessaires avant de préparer cette candidature.",
-      statusCaptcha: "Un contrôle de sécurité a bloqué l'envoi automatique. Ouvrez le site de l'entreprise pour terminer.",
+      statusCaptcha:
+        "Un contrôle de sécurité a bloqué l'envoi automatique. Ouvrez le site de l'entreprise pour terminer.",
       statusPrepareFailed: "Dossier généré, mais la préparation navigateur a échoué.",
       statusFailed: "Échec de l'envoi.",
       statusExpired: "Cette offre d'emploi a expiré. Votre crédit a été remboursé.",
@@ -1604,8 +1687,10 @@ export const APP_UI = {
       loadError: "Impossible de charger l'historique",
       packageGenerated: "Dossier généré. Pas encore envoyé.",
       packageError: "Impossible de générer le dossier. Réessayez.",
-      generatePackageHint: "Génère un CV et une lettre de motivation adaptés à ce poste (1 crédit).",
-      packageNoCredits: "Plus de crédits de candidature. Passez à l'offre supérieure pour continuer.",
+      generatePackageHint:
+        "Génère un CV et une lettre de motivation adaptés à ce poste (1 crédit).",
+      packageNoCredits:
+        "Plus de crédits de candidature. Passez à l'offre supérieure pour continuer.",
       packageJobUnavailable: "Cette offre n'est plus disponible. Elle a peut-être expiré.",
       packageProfileRequired: "Importez votre CV dans Profil avant de générer un dossier.",
       packageJobNotApplyable: "Cette offre ne peut pas être traitée automatiquement par Hirly.",
@@ -1695,11 +1780,13 @@ export const APP_UI = {
       onsite: "Sur site",
       personalInfo: {
         contactTitle: "Coordonnées",
-        contactDesc: "Vos informations de contact pour les candidatures et échanges professionnels.",
+        contactDesc:
+          "Vos informations de contact pour les candidatures et échanges professionnels.",
         salaryTitle: "Prétentions salariales",
         salaryDesc: "Indiquez votre fourchette salariale pour mieux cibler les offres adaptées.",
         demographicsTitle: "Informations démographiques",
-        demographicsDesc: "Aidez-nous à mieux comprendre votre profil pour une expérience plus pertinente.",
+        demographicsDesc:
+          "Aidez-nous à mieux comprendre votre profil pour une expérience plus pertinente.",
         firstName: "Prénom",
         lastName: "Nom",
         firstNamePlaceholder: "Alex",
@@ -1727,7 +1814,8 @@ export const APP_UI = {
         citizenshipType: "Type de statut",
         removeCitizenship: "Supprimer l'entrée",
         noCitizenship: "Aucun statut de citoyenneté",
-        noCitizenshipDesc: "Ajoutez votre citoyenneté ou statut de visa pour clarifier votre autorisation de travail.",
+        noCitizenshipDesc:
+          "Ajoutez votre citoyenneté ou statut de visa pour clarifier votre autorisation de travail.",
         contactSaved: "Coordonnées enregistrées",
         salarySaved: "Prétentions salariales enregistrées",
         demographicsSaved: "Informations démographiques enregistrées",
@@ -1735,9 +1823,11 @@ export const APP_UI = {
       },
       documents: {
         resumeTitle: "CV",
-        resumeSectionDesc: "Votre CV principal pour construire votre profil et générer des candidatures sur mesure.",
+        resumeSectionDesc:
+          "Votre CV principal pour construire votre profil et générer des candidatures sur mesure.",
         noResume: "Aucun CV importé",
-        noResumeDesc: "Importez votre CV pour construire votre profil professionnel et générer des candidatures sur mesure.",
+        noResumeDesc:
+          "Importez votre CV pour construire votre profil professionnel et générer des candidatures sur mesure.",
         uploadResume: "Importer CV",
         resumeOnFile: "CV actuel enregistré",
         replaceResume: "Remplacer",
@@ -1746,9 +1836,11 @@ export const APP_UI = {
         downloadError: "Impossible de télécharger le CV",
         resumeFallbackName: "CV",
         coverLetterTitle: "Lettre de motivation",
-        coverLetterSectionDesc: "Facultatif. Importez une lettre de référence pour aider l'IA à retrouver votre ton et votre structure.",
+        coverLetterSectionDesc:
+          "Facultatif. Importez une lettre de référence pour aider l'IA à retrouver votre ton et votre structure.",
         noCoverLetter: "Aucune lettre de motivation importée",
-        noCoverLetterDesc: "Ajoutez une lettre que vous aimez — Hirly pourra s'en inspirer pour vos candidatures.",
+        noCoverLetterDesc:
+          "Ajoutez une lettre que vous aimez — Hirly pourra s'en inspirer pour vos candidatures.",
         uploadCoverLetter: "Importer une lettre",
         replaceCoverLetter: "Remplacer",
         viewCoverLetter: "Voir la lettre",
@@ -1760,9 +1852,11 @@ export const APP_UI = {
         coverLetterDeleteError: "Impossible de supprimer la lettre",
         coverLetterFallbackName: "Lettre de motivation",
         additionalTitle: "Documents additionnels",
-        additionalSectionDesc: "Relevés de notes, portfolios, certifications et autres fichiers réutilisables.",
+        additionalSectionDesc:
+          "Relevés de notes, portfolios, certifications et autres fichiers réutilisables.",
         noAdditional: "Aucun document additionnel",
-        noAdditionalDesc: "Importez des relevés, portfolios ou certificats à joindre à vos candidatures.",
+        noAdditionalDesc:
+          "Importez des relevés, portfolios ou certificats à joindre à vos candidatures.",
         uploadDocument: "Importer",
         addDocument: "Ajouter un document",
         uploadedCountOne: "1 document importé",
@@ -1778,7 +1872,8 @@ export const APP_UI = {
         deleteError: "Impossible de supprimer le document",
         viewUnavailableDemo: "Aperçu indisponible en mode démo",
         configureAiSettings: "Réglages candidature IA",
-        configureAiSettingsHint: "Choisissez comment l'IA génère la lettre, le CV et la relecture pour chaque candidature.",
+        configureAiSettingsHint:
+          "Choisissez comment l'IA génère la lettre, le CV et la relecture pour chaque candidature.",
       },
     },
     referralPanel: {
@@ -1808,14 +1903,16 @@ export const APP_UI = {
       uploadTitle: "Importer un CV",
       updateTitle: "Mettre à jour le CV",
       uploadDesc: "Importez votre CV pour démarrer des candidatures personnalisées.",
-      updateDesc: "Votre CV actuel s'affiche ci-dessous (lecture seule). Importez un nouveau fichier pour le remplacer.",
+      updateDesc:
+        "Votre CV actuel s'affiche ci-dessous (lecture seule). Importez un nouveau fichier pour le remplacer.",
       currentResume: "CV actuel",
       currentOnFile: "CV enregistré",
       previewReadOnly: "Aperçu en lecture seule",
       previewLoading: "Chargement de l'aperçu…",
       previewFrameTitle: "Aperçu du CV",
       previewUnavailable: "Aperçu indisponible — téléchargez le fichier pour le consulter.",
-      pdfPreviewOnly: "L'aperçu intégré est disponible pour les PDF. Importez un PDF pour l'afficher ici.",
+      pdfPreviewOnly:
+        "L'aperçu intégré est disponible pour les PDF. Importez un PDF pour l'afficher ici.",
       selectFile: "Choisir un fichier",
       uploading: "Import en cours…",
       readyToUpload: "Prêt à importer",
@@ -1825,12 +1922,14 @@ export const APP_UI = {
       fileFormats: "PDF, DOCX, RTF, TXT ou image (PNG/JPG/HEIC/WEBP) • 20 Mo max",
       fileTypeError: "Importez un PDF, DOCX, RTF, TXT ou une image.",
       fileSizeError: "Le fichier doit faire {maxMb} Mo ou moins.",
-      legacyDocError: "Les fichiers .doc (ancien format Word) ne sont pas pris en charge. Réenregistrez votre CV en PDF ou DOCX puis réessayez.",
+      legacyDocError:
+        "Les fichiers .doc (ancien format Word) ne sont pas pris en charge. Réenregistrez votre CV en PDF ou DOCX puis réessayez.",
       uploadSuccess: "CV mis à jour. L'IA a re-analysé votre profil.",
       uploadError: "Échec de l'import",
       downloadResume: "Télécharger",
       exampleResume: "CV exemple",
-      exampleResumeHint: "Pas sûr de quoi importer ? Voici un CV débutant bien formaté pour vous inspirer.",
+      exampleResumeHint:
+        "Pas sûr de quoi importer ? Voici un CV débutant bien formaté pour vous inspirer.",
       exampleOnFile: "CV exemple à titre indicatif",
     },
     phoneSheet: {
@@ -1850,7 +1949,8 @@ export const APP_UI = {
       bestScore: "Meilleur score",
       mockTitle: "Mock 5 questions",
       mockCta: "Lancer votre entretien blanc",
-      mockDesc: "Adapté à votre poste cible. ~5 minutes. Évaluez confiance, communication et réponses techniques.",
+      mockDesc:
+        "Adapté à votre poste cible. ~5 minutes. Évaluez confiance, communication et réponses techniques.",
       startNow: "Commencer",
       wordCount: "{count} mots",
       coachTips: "Conseils coach",
@@ -1883,7 +1983,8 @@ export const APP_UI = {
       thanks: "Merci ! Votre message a été envoyé à l'équipe.",
       supportSoon: "Support bientôt disponible",
       attachmentsSoon: "Pièces jointes bientôt disponibles",
-      welcomeMessage: "Qu'aimez-vous/détestez-vous chez {brand} ? Cela va directement aux fondateurs 💬",
+      welcomeMessage:
+        "Qu'aimez-vous/détestez-vous chez {brand} ? Cela va directement aux fondateurs 💬",
       callSupport: "Appeler le support",
     },
     suggestFeature: {
@@ -1931,7 +2032,8 @@ export const APP_UI = {
     deleteAccountDialog: {
       title: "Supprimer votre compte ?",
       subtitle: "Cette action est définitive et irréversible.",
-      intro: "Si vous continuez, tout ce qui est lié à votre compte {brand} sera supprimé définitivement :",
+      intro:
+        "Si vous continuez, tout ce qui est lié à votre compte {brand} sera supprimé définitivement :",
       bulletProfile: "Votre profil, CV, lettres de motivation et documents",
       bulletApplications: "Toutes vos candidatures et leur historique",
       bulletSwipes: "Vos swipes et préférences d'offres",
@@ -1943,14 +2045,16 @@ export const APP_UI = {
       deleting: "Suppression…",
     },
     notificationSettings: {
-      intro: "Aperçu des alertes envoyées par {brand} pendant votre recherche. Les e-mails de notification partent de {email}. Toutes sont activées par défaut.",
+      intro:
+        "Aperçu des alertes envoyées par {brand} pendant votre recherche. Les e-mails de notification partent de {email}. Toutes sont activées par défaut.",
       exampleTime: "Il y a 2 min",
       exampleSender: "{brand} · {email}",
       verificationRequired: {
         title: "Vérification requise",
         description: "Quand une vérification est nécessaire avant l'envoi d'une candidature.",
         exampleTitle: "Vérification requise",
-        exampleBody: "Terminez la vérification de sécurité pour envoyer votre candidature chez Stripe.",
+        exampleBody:
+          "Terminez la vérification de sécurité pour envoyer votre candidature chez Stripe.",
       },
       applicationSubmitted: {
         title: "Candidature envoyée",
@@ -1962,13 +2066,15 @@ export const APP_UI = {
         title: "Mises à jour de statut",
         description: "Quand une candidature passe à une nouvelle étape.",
         exampleTitle: "Statut mis à jour",
-        exampleBody: "Votre candidature pour Frontend Engineer chez Notion est maintenant En cours d'examen.",
+        exampleBody:
+          "Votre candidature pour Frontend Engineer chez Notion est maintenant En cours d'examen.",
       },
       companyReply: {
         title: "Réponses des entreprises",
         description: "Quand un recruteur répond par e-mail.",
         exampleTitle: "Nouvelle réponse de Stripe",
-        exampleBody: "Merci pour votre candidature — nous aimerions en savoir plus sur votre expérience.",
+        exampleBody:
+          "Merci pour votre candidature — nous aimerions en savoir plus sur votre expérience.",
       },
       interviewInvite: {
         title: "Invitations entretien",
@@ -2029,7 +2135,8 @@ export const APP_UI = {
       willingToRelocate: "Prêt à déménager",
       privacyConsentDefault: "Consentement confidentialité par défaut",
       preferNotToSayDemographics: "Préfère ne pas répondre (démographie)",
-      preferNotToSayDemographicsHint: "Utiliser « préfère ne pas répondre » quand le formulaire le propose.",
+      preferNotToSayDemographicsHint:
+        "Utiliser « préfère ne pas répondre » quand le formulaire le propose.",
       formerEmployerRestriction: "Restriction ancien employeur ou clause de non-concurrence",
       iAgree: "J'accepte",
       iDoNotAgree: "Je n'accepte pas",
@@ -2055,9 +2162,11 @@ export const APP_UI = {
       currentPlanBadge: "Plan actuel",
       yourBilling: "Votre facturation",
       bestPlanTitle: "Vous êtes déjà sur notre meilleur plan",
-      bestPlanDesc: "Votre offre la plus complète est active. Gérez votre abonnement à tout moment.",
+      bestPlanDesc:
+        "Votre offre la plus complète est active. Gérez votre abonnement à tout moment.",
       manageSubscription: "Gérer l'abonnement",
-      prorationNote: "Vous ne payez que la différence au prorata aujourd'hui, et vos crédits supplémentaires sont ajoutés instantanément.",
+      prorationNote:
+        "Vous ne payez que la différence au prorata aujourd'hui, et vos crédits supplémentaires sont ajoutés instantanément.",
       cancelAnytime: "Sans engagement",
       securePayments: "Paiement sécurisé",
       instantAccess: "Accès immédiat",
@@ -2189,10 +2298,26 @@ export function getExperienceOptions(t) {
 export function getUpgradeContent(t) {
   return {
     features: [
-      { title: t("upgrade.featureSwipeTitle"), description: t("upgrade.featureSwipeDesc"), icon: "zap" },
-      { title: t("upgrade.featureResumeTitle"), description: t("upgrade.featureResumeDesc"), icon: "sparkles" },
-      { title: t("upgrade.featureCoverTitle"), description: t("upgrade.featureCoverDesc"), icon: "rocket" },
-      { title: t("upgrade.featureMatchTitle"), description: t("upgrade.featureMatchDesc"), icon: "check" },
+      {
+        title: t("upgrade.featureSwipeTitle"),
+        description: t("upgrade.featureSwipeDesc"),
+        icon: "zap",
+      },
+      {
+        title: t("upgrade.featureResumeTitle"),
+        description: t("upgrade.featureResumeDesc"),
+        icon: "sparkles",
+      },
+      {
+        title: t("upgrade.featureCoverTitle"),
+        description: t("upgrade.featureCoverDesc"),
+        icon: "rocket",
+      },
+      {
+        title: t("upgrade.featureMatchTitle"),
+        description: t("upgrade.featureMatchDesc"),
+        icon: "check",
+      },
     ],
     stats: [
       { value: "1M+", label: t("upgrade.statDownloads") },
@@ -2200,10 +2325,26 @@ export function getUpgradeContent(t) {
       { value: "4.8 ★", label: t("upgrade.statRating") },
     ],
     benefits: [
-      { title: t("upgrade.benefitTimingTitle"), description: t("upgrade.benefitTimingDesc"), icon: "zap" },
-      { title: t("upgrade.benefitInstantTitle"), description: t("upgrade.benefitInstantDesc"), icon: "rocket" },
-      { title: t("upgrade.benefitAiTitle"), description: t("upgrade.benefitAiDesc"), icon: "sparkles" },
-      { title: t("upgrade.benefitSuccessTitle"), description: t("upgrade.benefitSuccessDesc"), icon: "heart" },
+      {
+        title: t("upgrade.benefitTimingTitle"),
+        description: t("upgrade.benefitTimingDesc"),
+        icon: "zap",
+      },
+      {
+        title: t("upgrade.benefitInstantTitle"),
+        description: t("upgrade.benefitInstantDesc"),
+        icon: "rocket",
+      },
+      {
+        title: t("upgrade.benefitAiTitle"),
+        description: t("upgrade.benefitAiDesc"),
+        icon: "sparkles",
+      },
+      {
+        title: t("upgrade.benefitSuccessTitle"),
+        description: t("upgrade.benefitSuccessDesc"),
+        icon: "heart",
+      },
     ],
   };
 }
@@ -2280,8 +2421,10 @@ export function getIndustryFor(t, job) {
   const stack = (job?.tech_stack || []).join(" ").toLowerCase();
   const title = (job?.title || "").toLowerCase();
   if (title.includes("design")) return t("swipe.industryProductDesign");
-  if (stack.includes("rust") || stack.includes("go") || stack.includes("postgres")) return t("swipe.industryInfrastructure");
-  if (stack.includes("ml") || stack.includes("pytorch") || stack.includes("transformers")) return t("swipe.industryAiMl");
+  if (stack.includes("rust") || stack.includes("go") || stack.includes("postgres"))
+    return t("swipe.industryInfrastructure");
+  if (stack.includes("ml") || stack.includes("pytorch") || stack.includes("transformers"))
+    return t("swipe.industryAiMl");
   if (title.includes("marketing") || title.includes("growth")) return t("swipe.industryMarketing");
   return t("swipe.industryTechnology");
 }
@@ -2302,9 +2445,7 @@ export function getDemoSwipeSuccessCopy(t, job) {
   const company = job?.company || "";
   return {
     title: t("swipe.demoApplied"),
-    description: company
-      ? t("swipe.demoAppliedDesc")
-      : t("swipe.demoAppliedDesc"),
+    description: company ? t("swipe.demoAppliedDesc") : t("swipe.demoAppliedDesc"),
   };
 }
 
@@ -2317,13 +2458,18 @@ export function getSwipeSuccessCopy(t, data, job) {
     const queuedTitle = t("swipe.swipeQueued", { company });
     const queuedDesc = t("swipe.swipeQueuedDesc");
     return {
-      title: queuedTitle === "swipe.swipeQueued" ? t("swipe.swipePackageFor", { company }) : queuedTitle,
-      description: queuedDesc === "swipe.swipeQueuedDesc" ? t("swipe.swipePackageReady") : queuedDesc,
+      title:
+        queuedTitle === "swipe.swipeQueued" ? t("swipe.swipePackageFor", { company }) : queuedTitle,
+      description:
+        queuedDesc === "swipe.swipeQueuedDesc" ? t("swipe.swipePackageReady") : queuedDesc,
     };
   }
 
   if (data?.manual_fulfillment || data?.manual_status === "manual_review_needed") {
-    return { title: t("swipe.swipePackageFor", { company }), description: t("swipe.swipePackageReady") };
+    return {
+      title: t("swipe.swipePackageFor", { company }),
+      description: t("swipe.swipePackageReady"),
+    };
   }
 
   if (submission === "prepared") {
@@ -2339,7 +2485,10 @@ export function getSwipeSuccessCopy(t, data, job) {
     return { title: t("review.actionRequired"), description: t("swipe.swipeActionRequiredDesc") };
   }
   if (submission === "blocked_captcha") {
-    return { title: t("swipe.swipeHumanVerification"), description: t("swipe.swipeHumanVerificationDesc") };
+    return {
+      title: t("swipe.swipeHumanVerification"),
+      description: t("swipe.swipeHumanVerificationDesc"),
+    };
   }
   if (submission === "prepare_failed") {
     return { title: t("swipe.swipePackageGenerated"), description: t("swipe.swipePackageFailed") };
@@ -2516,10 +2665,35 @@ export function getProfileTabs(t) {
 
 export function getResumeSections(t) {
   return [
-    { key: "certifications", title: t("profileSections.certifications"), countKey: null, add: t("profileSections.addCertifications") },
-    { key: "awards", title: t("profileSections.awards"), countKey: "awards", add: t("profileSections.addAwards") },
-    { key: "coursework", title: t("profileSections.coursework"), countKey: "coursework", add: t("profileSections.addCoursework") },
-    { key: "languages", title: t("profileSections.languages"), countKey: "languages", add: t("profileSections.addLanguages") },
-    { key: "skills", title: t("profileSections.skills"), countKey: "skills", add: t("profileSections.addSkills") },
+    {
+      key: "certifications",
+      title: t("profileSections.certifications"),
+      countKey: null,
+      add: t("profileSections.addCertifications"),
+    },
+    {
+      key: "awards",
+      title: t("profileSections.awards"),
+      countKey: "awards",
+      add: t("profileSections.addAwards"),
+    },
+    {
+      key: "coursework",
+      title: t("profileSections.coursework"),
+      countKey: "coursework",
+      add: t("profileSections.addCoursework"),
+    },
+    {
+      key: "languages",
+      title: t("profileSections.languages"),
+      countKey: "languages",
+      add: t("profileSections.addLanguages"),
+    },
+    {
+      key: "skills",
+      title: t("profileSections.skills"),
+      countKey: "skills",
+      add: t("profileSections.addSkills"),
+    },
   ];
 }

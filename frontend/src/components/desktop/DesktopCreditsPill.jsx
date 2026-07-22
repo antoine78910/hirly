@@ -14,9 +14,9 @@ import {
 } from "../../lib/demoAccount";
 
 export function useSwipeCredits() {
-  const [credits, setCredits] = useState(() => (
-    isDemoAccountEnabled() ? getDemoCreditsRemaining() : 0
-  ));
+  const [credits, setCredits] = useState(() =>
+    isDemoAccountEnabled() ? getDemoCreditsRemaining() : 0,
+  );
   const [isPremium, setIsPremium] = useState(false);
   const [planTier, setPlanTier] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -60,7 +60,8 @@ export function useSwipeCredits() {
     setCredits(0);
     setLoading(true);
     let cancelled = false;
-    api.get("/billing/status")
+    api
+      .get("/billing/status")
       .then(async ({ data }) => {
         if (cancelled) return;
         setIsPremium(Boolean(data?.is_premium));
@@ -138,23 +139,27 @@ export default function DesktopCreditsPill({
       aria-label={isPremium && !forceOpenUpgrade ? t("common.credits") : t("credits.viewPlans")}
       data-testid="desktop-credits-pill"
     >
-      <span className={`grid place-items-center rounded-full bg-gradient-to-br from-violet-500 to-blue-500 shadow-sm ${
-        compact ? "h-5 w-5" : "h-6 w-6"
-      }`}>
+      <span
+        className={`grid place-items-center rounded-full bg-gradient-to-br from-violet-500 to-blue-500 shadow-sm ${
+          compact ? "h-5 w-5" : "h-6 w-6"
+        }`}
+      >
         <Zap className={`text-white ${compact ? "h-3 w-3" : "h-3.5 w-3.5"}`} fill="white" />
       </span>
-      <span className="tabular-nums">
-        {loading ? "-" : displayCredits}
-      </span>
+      <span className="tabular-nums">{loading ? "-" : displayCredits}</span>
       {tierLabel ? (
-        <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
-          isDark ? "bg-violet-500/20 text-violet-200" : "bg-violet-100 text-violet-700"
-        }`}>
+        <span
+          className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
+            isDark ? "bg-violet-500/20 text-violet-200" : "bg-violet-100 text-violet-700"
+          }`}
+        >
           {tierLabel}
         </span>
       ) : null}
       {!compact ? (
-        <span className={`text-xs font-medium ${isDark ? "text-violet-300/80" : "text-violet-500/80"}`}>
+        <span
+          className={`text-xs font-medium ${isDark ? "text-violet-300/80" : "text-violet-500/80"}`}
+        >
           {t("common.credits")}
         </span>
       ) : null}

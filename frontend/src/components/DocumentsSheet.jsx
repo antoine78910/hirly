@@ -12,12 +12,19 @@ export default function DocumentsSheet({ open, profile: _profile, onClose }) {
   };
 
   return (
-    <Sheet open={open} title={t("profile.documents.additionalTitle")} onClose={onClose} testId="documents-sheet">
+    <Sheet
+      open={open}
+      title={t("profile.documents.additionalTitle")}
+      onClose={onClose}
+      testId="documents-sheet"
+    >
       <div className="py-10 text-center">
         <div className="mx-auto mb-4 grid h-16 w-16 place-items-center rounded-2xl bg-violet-50">
           <FileStack className="h-7 w-7 text-linkedin" />
         </div>
-        <h3 className="font-display text-xl font-bold text-zinc-900">{t("profile.documents.noAdditional")}</h3>
+        <h3 className="font-display text-xl font-bold text-zinc-900">
+          {t("profile.documents.noAdditional")}
+        </h3>
         <p className="mx-auto mt-2 max-w-sm text-sm text-zinc-500">
           {t("profile.documents.noAdditionalDesc")}
         </p>

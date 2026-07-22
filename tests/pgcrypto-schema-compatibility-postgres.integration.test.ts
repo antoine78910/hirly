@@ -12,20 +12,23 @@ let disposableDatabaseValidated = false;
 
 async function psql(statement: string): Promise<string> {
   if (!databaseUrl) throw new Error("PGCRYPTO_COMPAT_TEST_DATABASE_URL is required");
-  const child = Bun.spawn([
-    "psql",
-    databaseUrl,
-    "-X",
-    "-v",
-    "ON_ERROR_STOP=1",
-    "-v",
-    "VERBOSITY=verbose",
-    "-A",
-    "-t",
-    "-q",
-    "-c",
-    `SET search_path = public, pg_catalog; ${statement}`,
-  ], { stdout: "pipe", stderr: "pipe" });
+  const child = Bun.spawn(
+    [
+      "psql",
+      databaseUrl,
+      "-X",
+      "-v",
+      "ON_ERROR_STOP=1",
+      "-v",
+      "VERBOSITY=verbose",
+      "-A",
+      "-t",
+      "-q",
+      "-c",
+      `SET search_path = public, pg_catalog; ${statement}`,
+    ],
+    { stdout: "pipe", stderr: "pipe" },
+  );
   const [exitCode, stdout, stderr] = await Promise.all([
     child.exited,
     new Response(child.stdout).text(),
@@ -94,7 +97,8 @@ async function wrapperMetadata(): Promise<string> {
 }
 
 async function expectStableVectors(): Promise<void> {
-  expect(await psql(`
+  expect(
+    await psql(`
     SELECT concat_ws('|',
       encode(public.digest('sprout:compat-fixture', 'sha1'), 'hex'),
       encode(public.digest(convert_to('sprout:compat-fixture', 'UTF8'), 'sha1'), 'hex'),
@@ -105,16 +109,19 @@ async function expectStableVectors(): Promise<void> {
       encode(public.digest(E'sprout:é whitespace\\n', 'sha256'), 'hex'),
       encode(public.digest(convert_to(E'sprout:é whitespace\\n', 'UTF8'), 'sha256'), 'hex')
     );
-  `)).toBe([
-    "4e3094c40d768d4801a995f8bb01d7414ee05a8f",
-    "4e3094c40d768d4801a995f8bb01d7414ee05a8f",
-    "a377985acb3dcd567d534d794f9e3341abca0762",
-    "a377985acb3dcd567d534d794f9e3341abca0762",
-    "87ef36582ba4f3367a54b7a843604f0364e5b72d4206882a6ba3d0b964316a56",
-    "87ef36582ba4f3367a54b7a843604f0364e5b72d4206882a6ba3d0b964316a56",
-    "f213b11f8fa350e1af2adae9c11783187916aed31e72efb29d4a465b5bc7e0de",
-    "f213b11f8fa350e1af2adae9c11783187916aed31e72efb29d4a465b5bc7e0de",
-  ].join("|"));
+  `),
+  ).toBe(
+    [
+      "4e3094c40d768d4801a995f8bb01d7414ee05a8f",
+      "4e3094c40d768d4801a995f8bb01d7414ee05a8f",
+      "a377985acb3dcd567d534d794f9e3341abca0762",
+      "a377985acb3dcd567d534d794f9e3341abca0762",
+      "87ef36582ba4f3367a54b7a843604f0364e5b72d4206882a6ba3d0b964316a56",
+      "87ef36582ba4f3367a54b7a843604f0364e5b72d4206882a6ba3d0b964316a56",
+      "f213b11f8fa350e1af2adae9c11783187916aed31e72efb29d4a465b5bc7e0de",
+      "f213b11f8fa350e1af2adae9c11783187916aed31e72efb29d4a465b5bc7e0de",
+    ].join("|"),
+  );
 }
 
 describePostgres("pgcrypto compatibility on disposable PostgreSQL", () => {
@@ -172,9 +179,11 @@ describePostgres("pgcrypto compatibility on disposable PostgreSQL", () => {
     await psql(down);
     await psql(down);
     expect(await topology()).toBe("extensions||||");
-    expect(await psql(`
+    expect(
+      await psql(`
       SELECT encode(extensions.digest('sprout:compat-fixture', 'sha1'), 'hex')
-    `)).toBe("4e3094c40d768d4801a995f8bb01d7414ee05a8f");
+    `),
+    ).toBe("4e3094c40d768d4801a995f8bb01d7414ee05a8f");
 
     await psql(up);
     expect(await wrapperMetadata()).toBe(
@@ -193,12 +202,12 @@ describePostgres("pgcrypto compatibility on disposable PostgreSQL", () => {
       COMMENT ON FUNCTION public.digest(text, text) IS 'fixture:foreign-owner';
     `);
     await expect(psql(up)).rejects.toThrow("42723");
-    expect(await topology()).toBe(
-      "extensions|digest(text,text)||fixture:foreign-owner|",
-    );
-    expect(await psql(`
+    expect(await topology()).toBe("extensions|digest(text,text)||fixture:foreign-owner|");
+    expect(
+      await psql(`
       SELECT (pg_catalog.to_regprocedure('public.digest(bytea,text)') IS NULL)::text
-    `)).toBe("true");
+    `),
+    ).toBe("true");
   }, 20_000);
 });
 

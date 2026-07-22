@@ -48,11 +48,11 @@ export function normalizeResumeStep(step, { user, profile, onboarding } = {}) {
     return ONBOARDING_STEP_ORDER[contactPhoneIndex + 1] || "salary";
   }
   if (
-    user
-    && stepIndex > contactPhoneIndex
-    && !hasOnboardingPhone(profile, onboarding)
-    && !PAYWALL_RESUME_STEPS.has(step)
-    && !hasPassedContactPhoneStep(onboarding)
+    user &&
+    stepIndex > contactPhoneIndex &&
+    !hasOnboardingPhone(profile, onboarding) &&
+    !PAYWALL_RESUME_STEPS.has(step) &&
+    !hasPassedContactPhoneStep(onboarding)
   ) {
     return "contactPhone";
   }
@@ -71,11 +71,7 @@ export function inferOnboardingStepFromProgress({ onboarding = {}, profile = nul
   if (!data.experience && !profile?.seniority) return "experience";
   if (!data.onboarding_location && !profile?.target_location) return "location";
   const hasCv = Boolean(profile?.cv_text || profile?.cv_filename);
-  if (
-    !hasOnboardingPhone(profile, data)
-    && !hasPassedContactPhoneStep(data)
-    && !hasCv
-  ) {
+  if (!hasOnboardingPhone(profile, data) && !hasPassedContactPhoneStep(data) && !hasCv) {
     return "contactPhone";
   }
   if (!data.acquisition_source) return "attribution";
@@ -92,9 +88,10 @@ export function resolveOnboardingResumeStep({
 }) {
   const lastStep = onboarding?.last_step;
   const lastIndex = lastStep ? ONBOARDING_STEP_ORDER.indexOf(lastStep) : -1;
-  const paramIndex = stepParam && ONBOARDING_STEP_ORDER.includes(stepParam)
-    ? ONBOARDING_STEP_ORDER.indexOf(stepParam)
-    : -1;
+  const paramIndex =
+    stepParam && ONBOARDING_STEP_ORDER.includes(stepParam)
+      ? ONBOARDING_STEP_ORDER.indexOf(stepParam)
+      : -1;
 
   let targetStep = null;
   if (lastIndex >= 0 && lastIndex >= paramIndex) {
@@ -198,7 +195,8 @@ export function applyOnboardingSnapshot(snapshot, profile, setters) {
   }
   if (typeof onboarding.salary_min === "number") setSalaryMin(onboarding.salary_min);
   if (typeof onboarding.salary_max === "number") setSalaryMax(onboarding.salary_max);
-  if (typeof onboarding.interviews_per_week === "number") setInterviewsPerWeek(onboarding.interviews_per_week);
+  if (typeof onboarding.interviews_per_week === "number")
+    setInterviewsPerWeek(onboarding.interviews_per_week);
   if (onboarding.job_timeline) setJobTimeline(onboarding.job_timeline);
   if (onboarding.job_blocker) setJobBlocker(onboarding.job_blocker);
   if (onboarding.job_accomplish) setJobAccomplish(onboarding.job_accomplish);
@@ -220,8 +218,10 @@ export function applyOnboardingSnapshot(snapshot, profile, setters) {
   }
   if (onboarding.tried_other_apps != null) setTriedOtherApps(onboarding.tried_other_apps);
   if (onboarding.acquisition_source) setAttribution(onboarding.acquisition_source);
-  if (Array.isArray(onboarding.suggested_categories)) setSuggestedCategories(onboarding.suggested_categories);
+  if (Array.isArray(onboarding.suggested_categories))
+    setSuggestedCategories(onboarding.suggested_categories);
   if (onboarding.selected_plan) setSelectedPlan(onboarding.selected_plan);
-  if (onboarding.referral_code) setReferralCode(normalizeReferralCodeInput(onboarding.referral_code));
+  if (onboarding.referral_code)
+    setReferralCode(normalizeReferralCodeInput(onboarding.referral_code));
   if (profile && (profile.cv_text || profile.target_role)) setProfile(profile);
 }

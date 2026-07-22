@@ -3,11 +3,7 @@ import analyticsRegistryDocument from "./analytics-registry.v1.json";
 
 export const ANALYTICS_REGISTRY_VERSION = "hirly.analytics-registry.v1" as const;
 
-export const analyticsEventSourceSchema = z.enum([
-  "frontend",
-  "backend",
-  "historical-only",
-]);
+export const analyticsEventSourceSchema = z.enum(["frontend", "backend", "historical-only"]);
 export const analyticsIdentityPolicySchema = z.enum([
   "anonymous",
   "identified",
@@ -21,11 +17,7 @@ export const analyticsPropertyTypeSchema = z.enum([
   "string",
   "timestamp",
 ]);
-export const analyticsPrivacyClassSchema = z.enum([
-  "public",
-  "pseudonymous",
-  "sensitive",
-]);
+export const analyticsPrivacyClassSchema = z.enum(["public", "pseudonymous", "sensitive"]);
 export const analyticsTimestampQualitySchema = z.enum([
   "exact_business_timestamp",
   "validated_client_occurrence",
@@ -40,10 +32,7 @@ export const canonicalAnalyticsUserIdSchema = z
     message: "analytics user IDs must use canonical lowercase UUID serialization",
   })
   .refine(
-    (value) =>
-      !["anonymous", "guest", "system", "backend", "cron"].includes(
-        value.toLowerCase(),
-      ),
+    (value) => !["anonymous", "guest", "system", "backend", "cron"].includes(value.toLowerCase()),
     { message: "generic analytics identities are not allowed" },
   );
 
@@ -106,9 +95,7 @@ export const analyticsRegistrySchema = z
   })
   .strict()
   .superRefine((registry, context) => {
-    const canonicalNames = new Set(
-      registry.events.map((event) => event.name),
-    );
+    const canonicalNames = new Set(registry.events.map((event) => event.name));
     const names = new Set<string>();
     const aliases = new Set<string>();
     for (const [index, event] of registry.events.entries()) {
@@ -133,20 +120,12 @@ export const analyticsRegistrySchema = z
     }
   });
 
-export const analyticsRegistry = analyticsRegistrySchema.parse(
-  analyticsRegistryDocument,
-);
+export const analyticsRegistry = analyticsRegistrySchema.parse(analyticsRegistryDocument);
 
-export type AnalyticsEventDefinition = z.infer<
-  typeof analyticsEventDefinitionSchema
->;
-export type AnalyticsTimestampQuality = z.infer<
-  typeof analyticsTimestampQualitySchema
->;
+export type AnalyticsEventDefinition = z.infer<typeof analyticsEventDefinitionSchema>;
+export type AnalyticsTimestampQuality = z.infer<typeof analyticsTimestampQualitySchema>;
 
-const definitionsByName = new Map(
-  analyticsRegistry.events.map((event) => [event.name, event]),
-);
+const definitionsByName = new Map(analyticsRegistry.events.map((event) => [event.name, event]));
 const canonicalNameByAlias = new Map(
   analyticsRegistry.events.flatMap((event) =>
     event.legacyAliases.map((alias) => [alias, event.name] as const),
@@ -158,9 +137,7 @@ export function resolveAnalyticsEventName(name: string): string | null {
   return canonicalNameByAlias.get(name) ?? null;
 }
 
-export function getAnalyticsEventDefinition(
-  name: string,
-): AnalyticsEventDefinition | null {
+export function getAnalyticsEventDefinition(name: string): AnalyticsEventDefinition | null {
   const canonicalName = resolveAnalyticsEventName(name);
   return canonicalName ? (definitionsByName.get(canonicalName) ?? null) : null;
 }
@@ -171,18 +148,14 @@ function propertyMatchesType(
 ): boolean {
   const expected = definition.type;
   const meetsMinimum =
-    definition.minimum === undefined ||
-    (typeof value === "number" && value >= definition.minimum);
+    definition.minimum === undefined || (typeof value === "number" && value >= definition.minimum);
   if (expected === "boolean") return typeof value === "boolean";
   if (expected === "integer") return Number.isInteger(value) && meetsMinimum;
   if (expected === "number") {
     return typeof value === "number" && Number.isFinite(value) && meetsMinimum;
   }
   if (expected === "timestamp") {
-    return (
-      typeof value === "string" &&
-      z.iso.datetime({ offset: true }).safeParse(value).success
-    );
+    return typeof value === "string" && z.iso.datetime({ offset: true }).safeParse(value).success;
   }
   return typeof value === "string";
 }
@@ -219,9 +192,9 @@ export function sanitizeAnalyticsProperties(
     }
     properties[key] = value as boolean | number | string;
   }
-  const missingRequiredProperties = Object.keys(
-    definition.requiredProperties,
-  ).filter((key) => !(key in properties));
+  const missingRequiredProperties = Object.keys(definition.requiredProperties).filter(
+    (key) => !(key in properties),
+  );
   return {
     properties,
     rejectedProperties: rejectedProperties.sort(),

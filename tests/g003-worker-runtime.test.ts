@@ -4,19 +4,10 @@ import { join } from "node:path";
 import { createJsonLogger } from "../packages/observability/src/index";
 import type { ClaimedTask, Lease } from "../packages/db/src/index";
 import { Consumer } from "../apps/worker/src/runtime/consumer";
-import {
-  nextCronOccurrence,
-  runSchedulerTick,
-} from "../apps/worker/src/runtime/scheduler";
-import {
-  createHttpHandler,
-  startHttpServer,
-} from "../apps/worker/src/http/server";
+import { nextCronOccurrence, runSchedulerTick } from "../apps/worker/src/runtime/scheduler";
+import { createHttpHandler, startHttpServer } from "../apps/worker/src/http/server";
 import type { RuntimeConfig } from "../apps/worker/src/runtime/config";
-import type {
-  ConsumerRepository,
-  RuntimeStore,
-} from "../apps/worker/src/runtime/types";
+import type { ConsumerRepository, RuntimeStore } from "../apps/worker/src/runtime/types";
 import { parseCliArgs } from "../apps/worker/src/cli";
 import { createWorkerRuntime } from "../apps/worker/src/runtime/lifecycle";
 import { createShutdownHandler } from "../apps/worker/src/main";
@@ -76,11 +67,13 @@ function claimedTask(overrides: Partial<ClaimedTask> = {}): ClaimedTask {
 class AdversarialRepository implements ConsumerRepository {
   readonly finishCalls: Array<{
     outcome: "succeeded" | "retryable" | "failed" | "cancelled";
-    options: {
-      errorCode?: string;
-      errorMessage?: string;
-      retryAt?: Date;
-    } | undefined;
+    options:
+      | {
+          errorCode?: string;
+          errorMessage?: string;
+          retryAt?: Date;
+        }
+      | undefined;
   }> = [];
   claimCalls = 0;
   heartbeatCalls = 0;
@@ -154,17 +147,13 @@ describe("G003 worker runtime delivery contract", () => {
     const workflow = read(".github/workflows/typescript-foundation.yml");
 
     expect(rootPackage.scripts?.test).toContain("bun test ./tests");
-    expect(rootPackage.scripts?.["test:g003"]).toContain(
-      "g003-worker-runtime.test.ts",
-    );
+    expect(rootPackage.scripts?.["test:g003"]).toContain("g003-worker-runtime.test.ts");
     expect(rootPackage.scripts?.["test:g003"]).toContain("apps/worker");
     expect(workflow).toContain("bun run test:g003");
   });
 
   test("keeps the runtime surface isolated from existing production routes", () => {
-    expect(existsSync(join(repoRoot, "apps", "worker", "src", "main.ts"))).toBe(
-      true,
-    );
+    expect(existsSync(join(repoRoot, "apps", "worker", "src", "main.ts"))).toBe(true);
     const rootVercel = read("vercel.json");
     expect(rootVercel).not.toContain("apps/worker");
     expect(rootVercel).not.toContain("/health/ready");
@@ -188,10 +177,7 @@ describe("G003 fencing, retry, restart, and shutdown behavior", () => {
     await waitFor(() => repository.finishCalls.length >= 2);
     await consumer.stop(100);
 
-    expect(repository.finishCalls.map(({ outcome }) => outcome)).toEqual([
-      "succeeded",
-      "failed",
-    ]);
+    expect(repository.finishCalls.map(({ outcome }) => outcome)).toEqual(["succeeded", "failed"]);
     expect(repository.finishCalls[1]?.options?.errorCode).toBe("lease_lost");
     expect(events).toContainEqual(
       expect.objectContaining({
@@ -231,9 +217,9 @@ describe("G003 fencing, retry, restart, and shutdown behavior", () => {
 describe("G003 persisted scheduler identity", () => {
   test("derives the next occurrence from persisted state after restart", () => {
     const persisted = new Date("2026-07-20T10:07:00.000Z");
-    expect(
-      nextCronOccurrence("*/15 * * * *", "UTC", persisted).toISOString(),
-    ).toBe("2026-07-20T10:15:00.000Z");
+    expect(nextCronOccurrence("*/15 * * * *", "UTC", persisted).toISOString()).toBe(
+      "2026-07-20T10:15:00.000Z",
+    );
   });
 
   test("gives both DST fallback occurrences distinct UTC identities", () => {
@@ -269,13 +255,8 @@ describe("G003 persisted scheduler identity", () => {
       },
     } as RuntimeStore;
 
-    expect(
-      await runSchedulerTick(store),
-    ).toBe(2);
-    expect(successors).toEqual([
-      "2026-07-20T10:01:00.000Z",
-      "2026-07-20T10:02:00.000Z",
-    ]);
+    expect(await runSchedulerTick(store)).toBe(2);
+    expect(successors).toEqual(["2026-07-20T10:01:00.000Z", "2026-07-20T10:02:00.000Z"]);
   });
 
   test("stops a catch-up batch when the locked schedule is disabled or advanced", async () => {
@@ -299,9 +280,7 @@ describe("G003 persisted scheduler identity", () => {
       },
     } as RuntimeStore;
 
-    expect(
-      await runSchedulerTick(store),
-    ).toBe(0);
+    expect(await runSchedulerTick(store)).toBe(0);
     expect(attempts).toBe(1);
   });
 });
@@ -538,9 +517,7 @@ describe("G003 HTTP health and control-plane hardening", () => {
     const dependencyFailureStore = {
       ...fixture.store,
       async getRun() {
-        throw new Error(
-          "postgresql://worker:super-secret@db.internal/jobs failed",
-        );
+        throw new Error("postgresql://worker:super-secret@db.internal/jobs failed");
       },
     };
     const handler = createHttpHandler({
@@ -559,10 +536,9 @@ describe("G003 HTTP health and control-plane hardening", () => {
     expect((readiness as Response).status).toBe(503);
 
     const failure = await handler(
-      new Request(
-        "http://worker.test/control/runs/00000000-0000-4000-8000-000000000002",
-        { headers: { authorization: `Bearer ${token}` } },
-      ),
+      new Request("http://worker.test/control/runs/00000000-0000-4000-8000-000000000002", {
+        headers: { authorization: `Bearer ${token}` },
+      }),
     );
     const failureBody = JSON.stringify(await failure.json());
     expect(failureBody).not.toContain("super-secret");
@@ -601,19 +577,13 @@ describe("G003 CLI and graceful lifecycle test seams", () => {
       type: "enqueue-maintenance",
       idempotencyKey: "manual-1",
     });
-    expect(
-      parseCliArgs(["enqueue-provider", "apec", "manual-2"]),
-    ).toEqual({
+    expect(parseCliArgs(["enqueue-provider", "apec", "manual-2"])).toEqual({
       type: "enqueue-provider",
       provider: "apec",
       idempotencyKey: "manual-2",
     });
-    expect(() =>
-      parseCliArgs(["enqueue-provider", "unknown", "manual-3"]),
-    ).toThrow();
-    expect(() =>
-      parseCliArgs(["enqueue-maintenance", "manual-4", "unexpected"]),
-    ).toThrow();
+    expect(() => parseCliArgs(["enqueue-provider", "unknown", "manual-3"])).toThrow();
+    expect(() => parseCliArgs(["enqueue-maintenance", "manual-4", "unexpected"])).toThrow();
   });
 
   test("readiness flips before drain, shutdown is idempotent, and database closes last", async () => {
@@ -728,11 +698,7 @@ describe("G003 CLI and graceful lifecycle test seams", () => {
     expect(failureLines.join("\n")).not.toContain("db.internal");
 
     const child = Bun.spawn(
-      [
-        process.execPath,
-        join(repoRoot, "apps", "worker", "src", "cli.ts"),
-        "not-a-command",
-      ],
+      [process.execPath, join(repoRoot, "apps", "worker", "src", "cli.ts"), "not-a-command"],
       {
         env: {
           ...process.env,
@@ -744,10 +710,7 @@ describe("G003 CLI and graceful lifecycle test seams", () => {
         stderr: "pipe",
       },
     );
-    const [exitCode, stderr] = await Promise.all([
-      child.exited,
-      new Response(child.stderr).text(),
-    ]);
+    const [exitCode, stderr] = await Promise.all([child.exited, new Response(child.stderr).text()]);
     expect(exitCode).not.toBe(0);
     expect(stderr).toContain("usage:");
   });

@@ -1,11 +1,7 @@
 import { createHash } from "node:crypto";
 import type { SourcePageCommit, SourcePageCommitResult } from "@hirly/contracts";
 import { classifyAtsUrl } from "@hirly/ingestion/ats";
-import {
-  sanitizeSourceDocument,
-  selectApplyUrl,
-  toCanonicalJob,
-} from "@hirly/ingestion";
+import { sanitizeSourceDocument, selectApplyUrl, toCanonicalJob } from "@hirly/ingestion";
 import { normalizeSproutJob, type NormalizedSproutJob } from "./normalization";
 import type { SproutCheckpoint } from "./checkpoint";
 import type { SproutRawJob } from "./schema";
@@ -89,7 +85,12 @@ export function createSproutCommitRepository(input: {
       for (const raw of page.items) {
         try {
           entries.push(
-            buildSproutCommitEntry({ raw, policyId: input.policyId, fetchedAt: page.fetchedAt, countryCode: input.countryCode }),
+            buildSproutCommitEntry({
+              raw,
+              policyId: input.policyId,
+              fetchedAt: page.fetchedAt,
+              countryCode: input.countryCode,
+            }),
           );
         } catch {
           // A malformed provider row must not prevent valid rows in the same

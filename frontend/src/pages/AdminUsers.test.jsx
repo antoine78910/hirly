@@ -12,15 +12,28 @@ jest.mock("../lib/adminApi", () => ({
   autoApplyApiUrl: (path) => path,
 }));
 jest.mock("sonner", () => ({ toast: { error: jest.fn(), success: jest.fn() } }));
-jest.mock("react-router-dom", () => ({
-  Link: ({ children, to, ...props }) => <a href={to} {...props}>{children}</a>,
-}), { virtual: true });
+jest.mock(
+  "react-router-dom",
+  () => ({
+    Link: ({ children, to, ...props }) => (
+      <a href={to} {...props}>
+        {children}
+      </a>
+    ),
+  }),
+  { virtual: true },
+);
 jest.mock("../components/ui/button", () => ({
   Button: ({ children, ...props }) => <button {...props}>{children}</button>,
 }));
 jest.mock("../components/admin/AdminShell", () => ({
   __esModule: true,
-  default: ({ actions, children }) => <main>{actions}{children}</main>,
+  default: ({ actions, children }) => (
+    <main>
+      {actions}
+      {children}
+    </main>
+  ),
   AdminAccessDenied: () => <div>Admin access denied</div>,
 }));
 
@@ -65,7 +78,9 @@ describe("AdminUsers server pagination state", () => {
 
     api.get.mockRejectedValueOnce(new Error("database unavailable"));
     await act(async () => {
-      [...container.querySelectorAll("button")].find((item) => item.textContent.includes("Refresh")).click();
+      [...container.querySelectorAll("button")]
+        .find((item) => item.textContent.includes("Refresh"))
+        .click();
     });
 
     expect(container.textContent).not.toContain("paid@example.com");
@@ -75,14 +90,21 @@ describe("AdminUsers server pagination state", () => {
 
   it("requests the next signed server cursor without changing the limit", async () => {
     api.get
-      .mockResolvedValueOnce({ data: page({ total: 101, has_next: true, next_cursor: "signed-next" }) })
-      .mockResolvedValueOnce({ data: page({ total: 101, has_previous: true, previous_cursor: "signed-previous" }) });
+      .mockResolvedValueOnce({
+        data: page({ total: 101, has_next: true, next_cursor: "signed-next" }),
+      })
+      .mockResolvedValueOnce({
+        data: page({ total: 101, has_previous: true, previous_cursor: "signed-previous" }),
+      });
     await act(async () => root.render(<AdminUsers />));
     await act(async () => {
       [...container.querySelectorAll("button")].find((item) => item.textContent === "Next").click();
     });
-    expect(api.get).toHaveBeenLastCalledWith("/admin/users", expect.objectContaining({
-      params: expect.objectContaining({ cursor: "signed-next", limit: 100 }),
-    }));
+    expect(api.get).toHaveBeenLastCalledWith(
+      "/admin/users",
+      expect.objectContaining({
+        params: expect.objectContaining({ cursor: "signed-next", limit: 100 }),
+      }),
+    );
   });
 });

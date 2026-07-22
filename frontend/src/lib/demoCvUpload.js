@@ -29,7 +29,8 @@ function writeStoredCv(payload) {
 function guessMime(filename = "", fallback = "application/pdf") {
   const name = filename.toLowerCase();
   if (name.endsWith(".pdf")) return "application/pdf";
-  if (name.endsWith(".docx")) return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  if (name.endsWith(".docx"))
+    return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
   if (name.endsWith(".txt")) return "text/plain";
   if (name.endsWith(".png")) return "image/png";
   if (name.endsWith(".jpg") || name.endsWith(".jpeg")) return "image/jpeg";

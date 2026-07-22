@@ -94,17 +94,16 @@ const CONTENT_BANK_EN = [
         ),
         ex("Ava's 3.2M Video", "https://www.instagram.com/reels/DXYCByYCueO/"),
         ex("Eylul's 500K Video", "https://www.instagram.com/reel/DYOD3hThFov/"),
-        ex(
-          "John's 100K Video",
-          "https://www.tiktok.com/@johnseekingjob/video/7631983608885939486",
-        ),
+        ex("John's 100K Video", "https://www.tiktok.com/@johnseekingjob/video/7631983608885939486"),
       ]),
       heading(3, "Guidelines"),
       warningGuideline(
         "Hold/Do something else while speaking. Point to the categories (Good, Better, Best) when you are addressing them.",
       ),
       heading(3, "Video Captions"),
-      paragraph("Good, better, best: Job application edition! #jobsearch #jobapplication #linkedin #indeed #careeradvice"),
+      paragraph(
+        "Good, better, best: Job application edition! #jobsearch #jobapplication #linkedin #indeed #careeradvice",
+      ),
       heading(2, "Main Script"),
       infoScript(
         "Good. Better. Best. Job application edition.\n\nGood. LinkedIn and Indeed.\nYour standard job platforms. You see they use tons of listings, but you're competing with hundreds of applicants and most of the times it's a hit or miss.\n\nBetter. Handshake. More curated, especially for students. You'll find internships and early career roles, but you still have to apply to everything yourself.\n\nBest. Hirly. All you have to do is swipe right on the jobs you want and it auto-applies to hundreds of applications without you needing to do anything. It generates a tailored resume and cover letter per role and submits directly on the company's website.",
@@ -169,11 +168,11 @@ const CONTENT_BANK_EN = [
     content: [
       heading(1, "Job Platforms That Landed Me a 100K Salary"),
       heading(3, "Examples"),
-      examplesGrid([
-        ex("Riyaj's 142K Video", "https://www.facebook.com/reel/2679321229131031"),
-      ]),
+      examplesGrid([ex("Riyaj's 142K Video", "https://www.facebook.com/reel/2679321229131031")]),
       heading(3, "Guidelines"),
-      warningGuideline("Position yourself as the expert. Use a visual prop — pouring drink, mixing matcha."),
+      warningGuideline(
+        "Position yourself as the expert. Use a visual prop — pouring drink, mixing matcha.",
+      ),
       heading(3, "Caption"),
       paragraph(
         "Video Text Hook: Job platforms that landed me a 100k salary\nOut of Video Caption: Try these out #jobapplication #university #graduation #jobmarket",

@@ -1,15 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import {
-  Calendar,
-  Check,
-  DollarSign,
-  Heart,
-  Info,
-  Loader2,
-  MapPin,
-  X,
-} from "lucide-react";
+import { Calendar, Check, DollarSign, Heart, Info, Loader2, MapPin, X } from "lucide-react";
 import CompanyLogo from "../CompanyLogo";
 import Logo from "../Logo";
 import { BRAND } from "../../lib/brand";
@@ -124,7 +115,8 @@ function DemoJobCard({ job, variant = "desktop" }) {
   const title = getJobDisplayTitle(job, { lang });
   const location = job.location || t("swipe.locationNotSpecified");
   const salaryLabel = formatJobSalaryLabel(job, { lang });
-  const postedLabel = formatPostedDate(t, job.posted_at || job.postedAt) || t("swipe.postedRecently");
+  const postedLabel =
+    formatPostedDate(t, job.posted_at || job.postedAt) || t("swipe.postedRecently");
   const previewText = snippet || job.summary || "";
 
   return (
@@ -135,11 +127,7 @@ function DemoJobCard({ job, variant = "desktop" }) {
     >
       <div className="flex min-h-0 flex-1 flex-col px-4 pb-2 pt-3 sm:px-5 sm:pb-3 sm:pt-4">
         <div className="flex shrink-0 items-start justify-end gap-2">
-          <JobCardMatchBadge
-            job={job}
-            t={t}
-            className="!bg-violet-100 !text-violet-700"
-          />
+          <JobCardMatchBadge job={job} t={t} className="!bg-violet-100 !text-violet-700" />
         </div>
 
         <div className="mt-0.5 flex justify-center sm:mt-1">
@@ -147,13 +135,13 @@ function DemoJobCard({ job, variant = "desktop" }) {
         </div>
 
         <div className="mt-2 text-center sm:mt-3">
-          <p className="font-display text-base font-semibold text-zinc-900 sm:text-xl">{job.company}</p>
+          <p className="font-display text-base font-semibold text-zinc-900 sm:text-xl">
+            {job.company}
+          </p>
         </div>
 
         <div className="mt-2 px-1 sm:mt-3 sm:px-2">
-          <h3
-            className="text-center font-display text-[clamp(1.15rem,4.8vw,1.75rem)] font-black leading-[1.08] tracking-tight text-zinc-900 sm:text-[1.65rem]"
-          >
+          <h3 className="text-center font-display text-[clamp(1.15rem,4.8vw,1.75rem)] font-black leading-[1.08] tracking-tight text-zinc-900 sm:text-[1.65rem]">
             {title}
           </h3>
         </div>
@@ -174,14 +162,7 @@ function DemoJobCard({ job, variant = "desktop" }) {
         ) : null}
 
         <div className="mt-2 sm:mt-3">
-          <JobCardHighlights
-            job={job}
-            t={t}
-            lang={lang}
-            max={3}
-            compact
-            theme={LP_CARD_THEME}
-          />
+          <JobCardHighlights job={job} t={t} lang={lang} max={3} compact theme={LP_CARD_THEME} />
         </div>
 
         <div className="mt-auto pt-2 sm:pt-3">
@@ -237,7 +218,9 @@ function ApplyStepsPanel({ steps, activeStep, title, applyingLabel, lang }) {
 
       {!visible ? (
         <p className="mt-3 text-xs text-zinc-400">
-          {lang === "fr" ? "Swipez à droite pour lancer une candidature." : "Swipe right to start an application."}
+          {lang === "fr"
+            ? "Swipez à droite pour lancer une candidature."
+            : "Swipe right to start an application."}
         </p>
       ) : activeStep < steps.length ? (
         <p className="mt-3 text-xs text-zinc-500">{applyingLabel}</p>
@@ -292,13 +275,21 @@ function SwipeCardStack({
                 <motion.div
                   key={`${job.id}-${index}`}
                   initial={{ opacity: 0, y: 18, scale: 0.98 }}
-                  animate={exiting ? exitVariants[job.swipe] : { opacity: 1, x: 0, y: 0, rotate: 0, scale: 1 }}
+                  animate={
+                    exiting
+                      ? exitVariants[job.swipe]
+                      : { opacity: 1, x: 0, y: 0, rotate: 0, scale: 1 }
+                  }
                   exit={{ opacity: 0, scale: 0.98 }}
                   transition={{ type: "spring", stiffness: 320, damping: 26 }}
                   className="relative"
                 >
-                  {showApplyStamp ? <SwipeActionStamp kind="apply" label={applyStampLabel} variant={variant} /> : null}
-                  {showPassStamp ? <SwipeActionStamp kind="skip" label={passStampLabel} variant={variant} /> : null}
+                  {showApplyStamp ? (
+                    <SwipeActionStamp kind="apply" label={applyStampLabel} variant={variant} />
+                  ) : null}
+                  {showPassStamp ? (
+                    <SwipeActionStamp kind="skip" label={passStampLabel} variant={variant} />
+                  ) : null}
 
                   <DemoJobCard job={job} variant={variant} />
                 </motion.div>
@@ -316,7 +307,9 @@ function SwipeCardStack({
 function SwipeActionButtons({ variant = "desktop" }) {
   const isMobile = variant === "mobile";
   return (
-    <div className={`relative z-20 flex items-center justify-center ${isMobile ? "mt-2 gap-4" : "mt-8 gap-4 sm:gap-6"}`}>
+    <div
+      className={`relative z-20 flex items-center justify-center ${isMobile ? "mt-2 gap-4" : "mt-8 gap-4 sm:gap-6"}`}
+    >
       <div
         className={`grid place-items-center rounded-full border border-zinc-200 bg-white text-zinc-400 shadow-sm ${
           isMobile ? "h-11 w-11" : "h-12 w-12"
@@ -351,7 +344,8 @@ export default function LandingHeroSwipeDemo({ lang }) {
 
   const job = jobs[index];
   const panelTitle = lang === "fr" ? "Candidature en cours" : "Application in progress";
-  const applyingLabel = lang === "fr" ? "Hirly prépare votre dossier…" : "Hirly is preparing your application…";
+  const applyingLabel =
+    lang === "fr" ? "Hirly prépare votre dossier…" : "Hirly is preparing your application…";
   const passStampLabel = "PASS";
   const applyStampLabel = lang === "fr" ? "POSTULER" : "APPLY";
 
@@ -399,9 +393,12 @@ export default function LandingHeroSwipeDemo({ lang }) {
       if (current.swipe === "apply") {
         setApplyStep(0);
         for (let stepIndex = 0; stepIndex < steps.length; stepIndex += 1) {
-          const timer = window.setTimeout(() => {
-            setApplyStep(stepIndex + 1);
-          }, (stepIndex + 1) * STEP_MS);
+          const timer = window.setTimeout(
+            () => {
+              setApplyStep(stepIndex + 1);
+            },
+            (stepIndex + 1) * STEP_MS,
+          );
           stepTimersRef.current.push(timer);
         }
       }
@@ -435,7 +432,11 @@ export default function LandingHeroSwipeDemo({ lang }) {
         applyStampLabel={applyStampLabel}
         variant="mobile"
       />
-      <LandingMobileApplyStepToasts steps={steps} activeStep={applyStep} bottomClassName="bottom-[5.75rem]" />
+      <LandingMobileApplyStepToasts
+        steps={steps}
+        activeStep={applyStep}
+        bottomClassName="bottom-[5.75rem]"
+      />
       <div className="relative z-30 -mt-10">
         <SwipeActionButtons variant="mobile" />
       </div>
@@ -464,7 +465,9 @@ export default function LandingHeroSwipeDemo({ lang }) {
     <div ref={rootRef} className="mt-16 overflow-visible bg-transparent text-left lg:mt-20">
       <div className="grid items-start gap-6 overflow-visible bg-transparent lg:grid-cols-[minmax(0,1fr)_minmax(300px,380px)] lg:gap-8">
         <div className="w-full overflow-visible bg-transparent lg:hidden">{swipeDemoMobile}</div>
-        <div className="hidden w-full overflow-visible bg-transparent lg:block">{swipeDemoDesktop}</div>
+        <div className="hidden w-full overflow-visible bg-transparent lg:block">
+          {swipeDemoDesktop}
+        </div>
 
         <ApplyStepsPanel
           steps={steps}

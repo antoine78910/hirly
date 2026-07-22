@@ -26,23 +26,10 @@ function uniqueArray<T extends z.ZodType>(item: T, maximum: number) {
     });
 }
 
-export const candidateProjectionStatusSchema = z.enum([
-  "active",
-  "paused",
-  "deleted",
-]);
-export const locationPolicySchema = z.enum([
-  "explicit",
-  "country",
-  "worldwide",
-]);
+export const candidateProjectionStatusSchema = z.enum(["active", "paused", "deleted"]);
+export const locationPolicySchema = z.enum(["explicit", "country", "worldwide"]);
 export const workModeSchema = z.enum(["onsite", "hybrid", "remote"]);
-export const fulfillmentRouteSchema = z.enum([
-  "auto",
-  "assisted",
-  "manual",
-  "blocked",
-]);
+export const fulfillmentRouteSchema = z.enum(["auto", "assisted", "manual", "blocked"]);
 
 const activeCandidateSearchProfileSchema = z
   .object({
@@ -68,7 +55,10 @@ const activeCandidateSearchProfileSchema = z
     countryCodes: uniqueArray(countryCodeSchema, 250),
     locationPolicy: locationPolicySchema,
     salaryFloor: z.number().nonnegative().nullable(),
-    currency: z.string().regex(/^[A-Z]{3}$/).nullable(),
+    currency: z
+      .string()
+      .regex(/^[A-Z]{3}$/)
+      .nullable(),
     freshnessWindowDays: z.number().int().min(1).max(365),
     exposurePolicyVersion: monotonicVersionSchema,
     featureSchemaVersion: z.string().min(1).max(64),
@@ -188,7 +178,10 @@ export const candidateSearchProfilePersistenceRowSchema = z
     country_codes: uniqueArray(countryCodeSchema, 250),
     location_policy: locationPolicySchema.nullable(),
     salary_floor: z.number().nonnegative().nullable(),
-    currency: z.string().regex(/^[A-Z]{3}$/).nullable(),
+    currency: z
+      .string()
+      .regex(/^[A-Z]{3}$/)
+      .nullable(),
     freshness_window_days: z.number().int().min(1).max(365).nullable(),
     exposure_policy_version: monotonicVersionSchema,
     feature_schema_version: z.string().min(1).max(64),
@@ -236,17 +229,8 @@ export function toCandidateSearchProfilePersistenceRow(
   });
 }
 
-export const candidateActionKindSchema = z.enum([
-  "seen",
-  "dismissed",
-  "applied",
-  "undo",
-]);
-export const actionRetentionStateSchema = z.enum([
-  "active",
-  "superseded",
-  "deleted",
-]);
+export const candidateActionKindSchema = z.enum(["seen", "dismissed", "applied", "undo"]);
+export const actionRetentionStateSchema = z.enum(["active", "superseded", "deleted"]);
 
 export const candidateActionProjectionSchema = z
   .object({
@@ -311,11 +295,7 @@ export const jobLifecycleStatusSchema = z.enum([
   "expired",
   "blocked",
 ]);
-export const jobValidationStatusSchema = z.enum([
-  "valid",
-  "review",
-  "invalid",
-]);
+export const jobValidationStatusSchema = z.enum(["valid", "review", "invalid"]);
 
 export const jobSearchDocumentSchema = z
   .object({
@@ -562,13 +542,7 @@ export const candidateProjectionOutboxEventSchema = z
     schemaVersion: z.literal(MATCHING_CONTRACT_VERSION),
     eventId: z.uuid(),
     candidateId: z.string().min(1).max(256),
-    eventFamily: z.enum([
-      "profiles",
-      "swipes",
-      "applications",
-      "users",
-      "deletion",
-    ]),
+    eventFamily: z.enum(["profiles", "swipes", "applications", "users", "deletion"]),
     entityId: z.string().min(1).max(256),
     operation: z.enum(["insert", "update", "delete"]),
     entityVersion: monotonicVersionSchema,
@@ -650,28 +624,18 @@ export const matchingRollbackControlsSchema = z
   })
   .strict();
 
-export type CandidateSearchProfile = z.infer<
-  typeof candidateSearchProfileSchema
->;
+export type CandidateSearchProfile = z.infer<typeof candidateSearchProfileSchema>;
 export type CandidateSearchProfilePersistenceRow = z.infer<
   typeof candidateSearchProfilePersistenceRowSchema
 >;
-export type CandidateActionProjection = z.infer<
-  typeof candidateActionProjectionSchema
->;
+export type CandidateActionProjection = z.infer<typeof candidateActionProjectionSchema>;
 export type CandidateActionProjectionPersistenceRow = z.infer<
   typeof candidateActionProjectionPersistenceRowSchema
 >;
 export type JobSearchDocument = z.infer<typeof jobSearchDocumentSchema>;
-export type JobSearchDocumentPersistenceRow = z.infer<
-  typeof jobSearchDocumentPersistenceRowSchema
->;
+export type JobSearchDocumentPersistenceRow = z.infer<typeof jobSearchDocumentPersistenceRowSchema>;
 export type OnlineMatchRequest = z.infer<typeof onlineMatchRequestSchema>;
 export type OnlineMatchResponse = z.infer<typeof onlineMatchResponseSchema>;
-export type CandidateProjectionOutboxEvent = z.infer<
-  typeof candidateProjectionOutboxEventSchema
->;
+export type CandidateProjectionOutboxEvent = z.infer<typeof candidateProjectionOutboxEventSchema>;
 export type ProjectionTask = z.infer<typeof projectionTaskSchema>;
-export type ProjectionTaskPersistenceRow = z.infer<
-  typeof projectionTaskPersistenceRowSchema
->;
+export type ProjectionTaskPersistenceRow = z.infer<typeof projectionTaskPersistenceRowSchema>;

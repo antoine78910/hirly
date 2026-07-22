@@ -66,9 +66,7 @@ describe("consumer lifecycle", () => {
     consumer.start();
     await Bun.sleep(20);
     await consumer.stop(100);
-    expect(repository.finished).toEqual([
-      { outcome: "succeeded", options: undefined },
-    ]);
+    expect(repository.finished).toEqual([{ outcome: "succeeded", options: undefined }]);
   });
 
   test("marks transient failures retryable", async () => {

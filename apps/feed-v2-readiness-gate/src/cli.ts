@@ -18,7 +18,7 @@ async function getJson(url: string, timeoutMs: number, headers: HeadersInit = {}
   return {
     status: response.status,
     latencyMs: Math.round(performance.now() - started),
-    body: await response.json() as Record<string, unknown>,
+    body: (await response.json()) as Record<string, unknown>,
   };
 }
 
@@ -31,8 +31,9 @@ export async function runFeedV2ReadinessCli(argv: string[]): Promise<void> {
   } else {
     const sloMs = Number(process.env.FEED_V2_SMOKE_SLO_MS ?? "1500");
     const internalUrl = process.env.FEED_V2_INTERNAL_URL?.trim();
-    const healthUrl = value(argv, "--health-url")
-      ?? (internalUrl ? new URL("/health/live", internalUrl).toString() : undefined);
+    const healthUrl =
+      value(argv, "--health-url") ??
+      (internalUrl ? new URL("/health/live", internalUrl).toString() : undefined);
     if (!healthUrl) throw new Error("health_url_required");
     const health = await getJson(healthUrl, sloMs);
     const publicUrl = value(argv, "--public-url");
@@ -52,14 +53,16 @@ export async function runFeedV2ReadinessCli(argv: string[]): Promise<void> {
         routingEnabled: health.body.routingEnabled === true,
         latencyMs: health.latencyMs,
       },
-      ...(publicSmoke ? {
-        publicSmoke: {
-          role: value(argv, "--role"),
-          location: value(argv, "--location"),
-          radiusKm: Number(value(argv, "--radius-km")),
-          ...publicSmoke,
-        },
-      } : {}),
+      ...(publicSmoke
+        ? {
+            publicSmoke: {
+              role: value(argv, "--role"),
+              location: value(argv, "--location"),
+              radiusKm: Number(value(argv, "--radius-km")),
+              ...publicSmoke,
+            },
+          }
+        : {}),
     };
   }
   const evidence = evaluateFeedV2Readiness(input);

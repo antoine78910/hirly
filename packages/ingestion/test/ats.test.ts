@@ -18,12 +18,7 @@ describe("G011 ATS URL classification", () => {
       "acme",
       "123",
     ],
-    [
-      "https://job-boards.greenhouse.io/acme/jobs/456",
-      "greenhouse",
-      "acme",
-      "456",
-    ],
+    ["https://job-boards.greenhouse.io/acme/jobs/456", "greenhouse", "acme", "456"],
     ["https://jobs.lever.co/Acme/abc", "lever", "acme", "abc"],
     ["https://jobs.eu.lever.co/acme/def", "lever", "acme", "def"],
     ["https://jobs.ashbyhq.com/Acme/abc-123", "ashby", "acme", "abc-123"],
@@ -34,12 +29,7 @@ describe("G011 ATS URL classification", () => {
       "acme",
       "744000135866249",
     ],
-    [
-      "https://acme.jobs.personio.de/job/2616841",
-      "personio",
-      "acme",
-      "2616841",
-    ],
+    ["https://acme.jobs.personio.de/job/2616841", "personio", "acme", "2616841"],
     ["https://acme.recruitee.com/o/platform-engineer", "recruitee", "acme", null],
     [
       "https://owlco.na.teamtailor.com/jobs/8010892-midmarket-sdr",
@@ -47,24 +37,9 @@ describe("G011 ATS URL classification", () => {
       "owlco.na",
       "8010892",
     ],
-    [
-      "https://careers.flatchr.io/fr/company/Acme/jobs/42",
-      "flatchr",
-      "acme",
-      "42",
-    ],
-    [
-      "https://acme.nicoka.com/api/jobs/published?jobid=76",
-      "nicoka",
-      "acme",
-      "76",
-    ],
-    [
-      "https://trial.nicoka.com/acme/api/jobs/published?jobid=77",
-      "nicoka",
-      "acme",
-      "77",
-    ],
+    ["https://careers.flatchr.io/fr/company/Acme/jobs/42", "flatchr", "acme", "42"],
+    ["https://acme.nicoka.com/api/jobs/published?jobid=76", "nicoka", "acme", "76"],
+    ["https://trial.nicoka.com/acme/api/jobs/published?jobid=77", "nicoka", "acme", "77"],
   ])(
     "extracts provider, normalized tenant and posting from %s",
     (url, provider, tenantKey, postingId) => {
@@ -138,9 +113,7 @@ describe("G011 ATS URL classification", () => {
   });
 
   test("catalogues every detectable provider without conflating detection and submission", () => {
-    expect(Object.keys(APPLICATION_CAPABILITIES).sort()).toEqual(
-      [...ATS_PROVIDERS].sort(),
-    );
+    expect(Object.keys(APPLICATION_CAPABILITIES).sort()).toEqual([...ATS_PROVIDERS].sort());
     for (const provider of ATS_PROVIDERS) {
       const capability = APPLICATION_CAPABILITIES[provider];
       expect(capability.urlDetection).toBeTrue();
@@ -171,7 +144,11 @@ describe("G011 ATS URL classification", () => {
       providerHint: "zoho_recruit",
       match: "unknown",
     });
-    expect(detectAtsEvidence("https://fa-eoic-saasfaprod1.fa.ocs.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX/job/1")).toMatchObject({
+    expect(
+      detectAtsEvidence(
+        "https://fa-eoic-saasfaprod1.fa.ocs.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX/job/1",
+      ),
+    ).toMatchObject({
       status: "unmanaged",
       providerHint: "oracle_fusion_hcm",
     });

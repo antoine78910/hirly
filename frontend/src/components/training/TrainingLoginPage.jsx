@@ -8,7 +8,8 @@ import { setDemoAccountFromUser } from "../../lib/demoAccount";
 import { TrainingAuthForm, TrainingAuthPopup } from "./TrainingAuthPopup";
 
 export default function TrainingLoginPage() {
-  const { setUser, setHasProfile, setHasPreferences, setHasTrainingAccess, setIsTrainingCreator } = useAuth();
+  const { setUser, setHasProfile, setHasPreferences, setHasTrainingAccess, setIsTrainingCreator } =
+    useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [authError, setAuthError] = useState("");
@@ -24,7 +25,9 @@ export default function TrainingLoginPage() {
   const establishSession = async (session) => {
     const accessToken = session?.access_token;
     if (!accessToken) {
-      setAuthNotice("Vérifiez votre boîte mail pour confirmer votre compte, puis reconnectez-vous.");
+      setAuthNotice(
+        "Vérifiez votre boîte mail pour confirmer votre compte, puis reconnectez-vous.",
+      );
       return null;
     }
     const { data } = await api.post("/auth/supabase-session", supabaseSessionPayload(session));
@@ -54,7 +57,10 @@ export default function TrainingLoginPage() {
 
     setSubmitting(true);
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password,
+      });
       if (error) throw error;
       const sessionUser = await establishSession(data?.session);
       if (!sessionUser) return;
@@ -62,7 +68,9 @@ export default function TrainingLoginPage() {
         setAuthError("Ce compte n'a pas accès à la formation. Utilisez votre lien d'invitation.");
       }
     } catch (err) {
-      setAuthError(err?.response?.data?.detail || err?.message || "Identifiants incorrects. Réessayez.");
+      setAuthError(
+        err?.response?.data?.detail || err?.message || "Identifiants incorrects. Réessayez.",
+      );
     } finally {
       setSubmitting(false);
     }
@@ -71,7 +79,7 @@ export default function TrainingLoginPage() {
   return (
     <TrainingAuthPopup
       testId="training-login-page"
-      aside={(
+      aside={
         <>
           <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15">
             <GraduationCap className="h-6 w-6" />
@@ -80,16 +88,15 @@ export default function TrainingLoginPage() {
             Accéder à la formation
           </h1>
           <p className="mt-3 text-sm leading-relaxed text-violet-100/95 sm:text-base">
-            Connecte-toi avec le compte que tu as créé lors de ton inscription.
-            Tu as besoin d&apos;un lien d&apos;invitation pour rejoindre la formation.
+            Connecte-toi avec le compte que tu as créé lors de ton inscription. Tu as besoin
+            d&apos;un lien d&apos;invitation pour rejoindre la formation.
           </p>
           <div className="mt-6 rounded-2xl border border-white/20 bg-white/10 px-4 py-3 text-sm leading-relaxed text-violet-50">
-            <span className="font-semibold text-white">Pas encore de compte ?</span>
-            {" "}
-            Ouvre le lien d&apos;invitation que tu as reçu pour créer ton compte et activer l&apos;accès.
+            <span className="font-semibold text-white">Pas encore de compte ?</span> Ouvre le lien
+            d&apos;invitation que tu as reçu pour créer ton compte et activer l&apos;accès.
           </div>
         </>
-      )}
+      }
     >
       <TrainingAuthForm
         title="Connexion"

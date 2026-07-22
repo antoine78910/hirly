@@ -1,10 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { createDatabase } from "@hirly/db";
-import {
-  producePaidCohortCoverage,
-  type PaidCohortCoverageInput,
-} from "./paid-cohort-coverage";
+import { producePaidCohortCoverage, type PaidCohortCoverageInput } from "./paid-cohort-coverage";
 import { PostgresPaidCohortCoverageStore } from "./paid-cohort-coverage-store";
 
 const inputIndex = Bun.argv.indexOf("--input");

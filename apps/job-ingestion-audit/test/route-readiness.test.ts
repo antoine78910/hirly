@@ -44,54 +44,64 @@ describe("G018 route-readiness evidence", () => {
   });
 
   test("refuses sample, blocked, overlapping and unreconciled evidence", () => {
-    expect(() => buildRouteReadinessReport({ ...input, sample: true }))
-      .toThrow("sample evidence is not scoreable");
-    expect(() => buildRouteReadinessReport({
-      ...input,
-      status: "BLOCKED_EXTERNAL",
-      blockerReason: "coverage unavailable",
-    })).toThrow("not scoreable");
-    expect(() => buildRouteReadinessReport({
-      ...input,
-      runtimeReadyAutoApplicable: 31,
-    })).toThrow("strict-auto <= static-auto");
-    expect(() => buildRouteReadinessReport({
-      ...input,
-      failureBuckets: { ...input.failureBuckets, missing_url: 79 },
-    })).toThrow("do not reconcile");
+    expect(() => buildRouteReadinessReport({ ...input, sample: true })).toThrow(
+      "sample evidence is not scoreable",
+    );
+    expect(() =>
+      buildRouteReadinessReport({
+        ...input,
+        status: "BLOCKED_EXTERNAL",
+        blockerReason: "coverage unavailable",
+      }),
+    ).toThrow("not scoreable");
+    expect(() =>
+      buildRouteReadinessReport({
+        ...input,
+        runtimeReadyAutoApplicable: 31,
+      }),
+    ).toThrow("strict-auto <= static-auto");
+    expect(() =>
+      buildRouteReadinessReport({
+        ...input,
+        failureBuckets: { ...input.failureBuckets, missing_url: 79 },
+      }),
+    ).toThrow("do not reconcile");
   });
 
   test("dry-runs direct occurrence preference without exposing selections", () => {
-    const report = buildOccurrencePreferenceDryRun([
+    const report = buildOccurrencePreferenceDryRun(
+      [
+        {
+          groupKey: "group-1",
+          occurrenceKey: "france-travail",
+          active: true,
+          authority: "official_public",
+          route: "manual_public",
+          confidence: 0.9,
+        },
+        {
+          groupKey: "group-1",
+          occurrenceKey: "employer-ats",
+          active: true,
+          authority: "direct_employer",
+          route: "verified_runtime_ats",
+          confidence: 0.8,
+          verifiedAt: "2026-07-20T17:00:00.000Z",
+        },
+        {
+          groupKey: "group-2",
+          occurrenceKey: "aggregator",
+          active: true,
+          authority: "aggregator",
+          route: "discovery_only",
+          confidence: 0.9,
+        },
+      ],
       {
-        groupKey: "group-1",
-        occurrenceKey: "france-travail",
-        active: true,
-        authority: "official_public",
-        route: "manual_public",
-        confidence: 0.9,
+        "group-1": "france-travail",
+        "group-2": "aggregator",
       },
-      {
-        groupKey: "group-1",
-        occurrenceKey: "employer-ats",
-        active: true,
-        authority: "direct_employer",
-        route: "verified_runtime_ats",
-        confidence: 0.8,
-        verifiedAt: "2026-07-20T17:00:00.000Z",
-      },
-      {
-        groupKey: "group-2",
-        occurrenceKey: "aggregator",
-        active: true,
-        authority: "aggregator",
-        route: "discovery_only",
-        confidence: 0.9,
-      },
-    ], {
-      "group-1": "france-travail",
-      "group-2": "aggregator",
-    });
+    );
     expect(report).toMatchObject({
       groupsEvaluated: 2,
       groupsWithSelection: 2,
@@ -108,26 +118,30 @@ describe("G018 route-readiness evidence", () => {
   });
 
   test("records absent occurrence tables as typed non-scoreable evidence", () => {
-    const input = JSON.parse(readFileSync(
-      new URL(
-        "../../../artifacts/job-ingestion/g018-occurrence-preference-blocked-2026-07-20.json",
-        import.meta.url,
+    const input = JSON.parse(
+      readFileSync(
+        new URL(
+          "../../../artifacts/job-ingestion/g018-occurrence-preference-blocked-2026-07-20.json",
+          import.meta.url,
+        ),
+        "utf8",
       ),
-      "utf8",
-    ));
-    const { schemaVersion: _schemaVersion, scoreable: _scoreable,
-      preferredDirectOccurrenceUplift: _uplift, unlockCondition: _unlock,
-      safeguards: _safeguards, digest: _digest, ...builderInput } = input;
+    );
+    const {
+      schemaVersion: _schemaVersion,
+      scoreable: _scoreable,
+      preferredDirectOccurrenceUplift: _uplift,
+      unlockCondition: _unlock,
+      safeguards: _safeguards,
+      digest: _digest,
+      ...builderInput
+    } = input;
     const report = buildOccurrencePreferenceStructuralBlocker(builderInput);
     expect(report).toEqual(input);
     expect(report).toMatchObject({
       status: "BLOCKED_STRUCTURAL",
       scoreable: false,
-      missingRelations: [
-        "job_occurrences",
-        "canonical_job_groups",
-        "canonical_job_group_members",
-      ],
+      missingRelations: ["job_occurrences", "canonical_job_groups", "canonical_job_group_members"],
       preferredDirectOccurrenceUplift: null,
       safeguards: {
         readOnly: true,
@@ -138,10 +152,12 @@ describe("G018 route-readiness evidence", () => {
         writerTransfer: false,
       },
     });
-    expect(() => buildOccurrencePreferenceStructuralBlocker({
-      ...builderInput,
-      missingRelations: [],
-    })).toThrow("requires at least one missing relation");
+    expect(() =>
+      buildOccurrencePreferenceStructuralBlocker({
+        ...builderInput,
+        missingRelations: [],
+      }),
+    ).toThrow("requires at least one missing relation");
   });
 
   test("gates aggregate source diversification without activating sources", () => {
@@ -235,11 +251,13 @@ describe("G018 route-readiness evidence", () => {
         p50: 2,
         p90: 7,
       },
-      proposedSources: [{
-        sourceKey: "bpce-open-feed",
-        incrementalRuntimeReadyJobs: 10,
-        affectedPaidUsers: 5,
-      }],
+      proposedSources: [
+        {
+          sourceKey: "bpce-open-feed",
+          incrementalRuntimeReadyJobs: 10,
+          affectedPaidUsers: 5,
+        },
+      ],
       thresholds: {
         minRuntimeReadyUplift: 20,
         maxFranceTravailShare: 0.5,
@@ -258,27 +276,30 @@ describe("G018 route-readiness evidence", () => {
       "paid_user_p10_below_minimum",
       "paid_user_coverage_regressed",
     ]);
-    expect(() => buildSourceDiversificationGate({
-      ...base,
-      status: "BLOCKED_EXTERNAL",
-      blockerReason: "paid cohort unavailable",
-    })).toThrow("not scoreable");
-    expect(() => buildSourceDiversificationGate({
-      ...base,
-      proposedSources: [{
-        sourceKey: "bpce-open-feed",
-        incrementalRuntimeReadyJobs: 9,
-        affectedPaidUsers: 5,
-      }],
-    })).toThrow("does not reconcile");
+    expect(() =>
+      buildSourceDiversificationGate({
+        ...base,
+        status: "BLOCKED_EXTERNAL",
+        blockerReason: "paid cohort unavailable",
+      }),
+    ).toThrow("not scoreable");
+    expect(() =>
+      buildSourceDiversificationGate({
+        ...base,
+        proposedSources: [
+          {
+            sourceKey: "bpce-open-feed",
+            incrementalRuntimeReadyJobs: 9,
+            affectedPaidUsers: 5,
+          },
+        ],
+      }),
+    ).toThrow("does not reconcile");
   });
 
   test("pins the production census to aggregate-only read-only SQL", () => {
     const sql = readFileSync(
-      new URL(
-        "../../../docs/operations/sql/french-route-readiness-census.sql",
-        import.meta.url,
-      ),
+      new URL("../../../docs/operations/sql/french-route-readiness-census.sql", import.meta.url),
       "utf8",
     );
     const normalized = sql.replace(/--.*$/gm, " ").toLowerCase();
@@ -295,6 +316,5 @@ describe("G018 route-readiness evidence", () => {
     expect(sql).toContain("percentile_disc(0.9)");
     expect(sql).not.toContain("'userId'");
     expect(sql).not.toMatch(/jsonb_agg\s*\(/i);
-
   });
 });

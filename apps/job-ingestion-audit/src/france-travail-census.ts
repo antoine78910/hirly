@@ -1,7 +1,4 @@
-import type {
-  FranceTravailCensusManifest,
-  FranceTravailCensusPartition,
-} from "./audit";
+import type { FranceTravailCensusManifest, FranceTravailCensusPartition } from "./audit";
 import { validateFranceTravailCensusManifest } from "./audit";
 
 export class ExternalDependencyBlockedError extends Error {
@@ -30,10 +27,7 @@ export interface FranceTravailLiveCensusResult {
   partitions: FranceTravailLivePartitionResult[];
 }
 
-export type CensusFetch = (
-  input: string | URL | Request,
-  init?: RequestInit,
-) => Promise<Response>;
+export type CensusFetch = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 
 export function parseContentRange(value: string | null): number | null {
   if (!value) return null;
@@ -135,8 +129,8 @@ async function fetchPartition(
     }
 
     if (
-      sourceReportedTotal !== null
-      && sourceReportedTotal > manifest.capRules.maxRecordsPerPartition
+      sourceReportedTotal !== null &&
+      sourceReportedTotal > manifest.capRules.maxRecordsPerPartition
     ) {
       return {
         partitionId: partition.id,
@@ -169,8 +163,7 @@ async function fetchPartition(
     start += manifest.capRules.pageSize;
   }
 
-  const complete =
-    sourceReportedTotal !== null && externalIds.size === sourceReportedTotal;
+  const complete = sourceReportedTotal !== null && externalIds.size === sourceReportedTotal;
   return {
     partitionId: partition.id,
     status: complete ? "complete" : "blocked",
@@ -203,19 +196,20 @@ export async function runFranceTravailLiveCensus(
     );
   }
   const endpoint =
-    input.endpoint
-    ?? "https://api.francetravail.io/partenaire/offresdemploi/v2/offres/search";
+    input.endpoint ?? "https://api.francetravail.io/partenaire/offresdemploi/v2/offres/search";
   const fetcher = input.fetcher ?? fetch;
-  const sleep = input.sleep ?? ((milliseconds) =>
-    new Promise((resolve) => setTimeout(resolve, milliseconds)));
+  const sleep =
+    input.sleep ?? ((milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)));
   const partitions: FranceTravailLivePartitionResult[] = [];
   for (const partition of manifest.partitions) {
-    partitions.push(await fetchPartition(manifest, partition, {
-      accessToken: input.accessToken,
-      endpoint,
-      fetcher,
-      sleep,
-    }));
+    partitions.push(
+      await fetchPartition(manifest, partition, {
+        accessToken: input.accessToken,
+        endpoint,
+        fetcher,
+        sleep,
+      }),
+    );
   }
   return {
     schemaVersion: 1,

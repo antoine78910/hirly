@@ -34,10 +34,10 @@ export default function PhoneMockup({
                 <div className="grid h-10 w-10 place-items-center rounded-xl border border-dashed border-violet-300/80 bg-white/80">
                   <ImageIcon className="h-5 w-5 text-violet-400" strokeWidth={1.8} />
                 </div>
-                <p className="text-[10px] font-semibold leading-snug text-violet-700">{placeholderLabel}</p>
-                {src ? (
-                  <p className="font-mono text-[8px] text-zinc-400">{src}</p>
-                ) : null}
+                <p className="text-[10px] font-semibold leading-snug text-violet-700">
+                  {placeholderLabel}
+                </p>
+                {src ? <p className="font-mono text-[8px] text-zinc-400">{src}</p> : null}
               </div>
             ) : (
               <img

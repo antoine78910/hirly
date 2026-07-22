@@ -69,7 +69,8 @@ export function TrainingAuthForm({
   submitTestId = "training-auth-submit",
   showModeToggle = false,
 }) {
-  const resolvedSubmitLabel = submitLabel || (authMode === "login" ? "Se connecter" : "Créer mon compte");
+  const resolvedSubmitLabel =
+    submitLabel || (authMode === "login" ? "Se connecter" : "Créer mon compte");
 
   return (
     <>

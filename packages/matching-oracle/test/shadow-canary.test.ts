@@ -14,7 +14,10 @@ import {
 
 const groupA = "00000000-0000-4000-8000-000000000001";
 const groupB = "00000000-0000-4000-8000-000000000002";
-function response(ids: readonly string[], emptyReason: OnlineMatchResponse["emptyReason"] = null): OnlineMatchResponse {
+function response(
+  ids: readonly string[],
+  emptyReason: OnlineMatchResponse["emptyReason"] = null,
+): OnlineMatchResponse {
   return {
     schemaVersion: MATCHING_CONTRACT_VERSION,
     candidateId: "candidate-shadow",
@@ -36,15 +39,17 @@ function response(ids: readonly string[], emptyReason: OnlineMatchResponse["empt
   };
 }
 
-const domain: OnlineV2DomainRecord[] = [{
-  canonicalGroupId: groupA,
-  eligible: true,
-  statusReasons: ["fresh", "active"],
-  componentScores: { skills: 0.5, role: 1 },
-  relevanceScore: 0.9,
-  fulfillmentRoute: "manual",
-  explanationCodes: ["manual_route", "role_match"],
-}];
+const domain: OnlineV2DomainRecord[] = [
+  {
+    canonicalGroupId: groupA,
+    eligible: true,
+    statusReasons: ["fresh", "active"],
+    componentScores: { skills: 0.5, role: 1 },
+    relevanceScore: 0.9,
+    fulfillmentRoute: "manual",
+    explanationCodes: ["manual_route", "role_match"],
+  },
+];
 const observation: ShadowObservation = {
   legacy: response([groupA, groupB]),
   onlineV2: response([groupA]),
@@ -76,7 +81,12 @@ const enabled: ShadowCanaryControls = {
   selectors: [{ cohort: "paid", countryCode: "FR", roleFamilyId: "fullstack" }],
   requiredSupplyGates: [PARIS_FULLSTACK_SUPPLY_GATE],
 };
-const context = { candidateId: "candidate-shadow", cohort: "paid", countryCode: "FR", roleFamilyId: "fullstack" };
+const context = {
+  candidateId: "candidate-shadow",
+  cohort: "paid",
+  countryCode: "FR",
+  roleFamilyId: "fullstack",
+};
 const now = new Date("2026-07-21T12:00:00Z");
 
 describe("G008 PR6 shadow and canary foundation", () => {
@@ -89,7 +99,9 @@ describe("G008 PR6 shadow and canary foundation", () => {
       selectors: [],
       requiredSupplyGates: [PARIS_FULLSTACK_SUPPLY_GATE],
     });
-    expect(evaluateShadowCanary(DISABLED_SHADOW_CANARY_CONTROLS, context, observation, [gate], now)).toEqual({
+    expect(
+      evaluateShadowCanary(DISABLED_SHADOW_CANARY_CONTROLS, context, observation, [gate], now),
+    ).toEqual({
       exposedResponse: observation.legacy,
       shadowExecuted: false,
       sampled: false,
@@ -101,12 +113,14 @@ describe("G008 PR6 shadow and canary foundation", () => {
   });
 
   test("freezes a stable order-independent online-v2 domain parity digest", () => {
-    const reordered = [{
-      ...domain[0]!,
-      statusReasons: [...domain[0]!.statusReasons].reverse(),
-      explanationCodes: [...domain[0]!.explanationCodes].reverse(),
-      componentScores: { role: 1, skills: 0.5 },
-    }];
+    const reordered = [
+      {
+        ...domain[0]!,
+        statusReasons: [...domain[0]!.statusReasons].reverse(),
+        explanationCodes: [...domain[0]!.explanationCodes].reverse(),
+        componentScores: { role: 1, skills: 0.5 },
+      },
+    ];
     expect(digestOnlineV2Domain(reordered)).toEqual(digestOnlineV2Domain(domain));
     expect(digestOnlineV2Domain(domain)).toMatchObject({
       version: ONLINE_V2_PARITY_DIGEST_VERSION,
@@ -136,15 +150,49 @@ describe("G008 PR6 shadow and canary foundation", () => {
   });
 
   test("requires exact rollout scope, Paris supply, query plan, and rollback clearance", () => {
-    expect(evaluateShadowCanary(enabled, { ...context, countryCode: "US" }, observation, [gate], now).rollbackReason).toBe("ROLLOUT_SCOPE_DENIED");
-    expect(evaluateShadowCanary(enabled, context, observation, [], now).rollbackReason).toBe(`SUPPLY_GATE_MISSING:${PARIS_FULLSTACK_SUPPLY_GATE}`);
-    expect(evaluateShadowCanary(enabled, context, observation, [{ ...gate, radiusKm: 51 }], now).rollbackReason).toBe(`SUPPLY_GATE_SCOPE_MISMATCH:${PARIS_FULLSTACK_SUPPLY_GATE}`);
-    expect(evaluateShadowCanary(enabled, context, { ...observation, queryPlan: { ...observation.queryPlan, sequentialScan: true } }, [gate], now).rollbackReason).toBe("QUERY_PLAN_GATE_FAILED");
-    expect(evaluateShadowCanary({ ...enabled, rollbackRequested: true }, context, observation, [gate], now).rollbackReason).toBe("ROLLBACK_REQUESTED");
+    expect(
+      evaluateShadowCanary(enabled, { ...context, countryCode: "US" }, observation, [gate], now)
+        .rollbackReason,
+    ).toBe("ROLLOUT_SCOPE_DENIED");
+    expect(evaluateShadowCanary(enabled, context, observation, [], now).rollbackReason).toBe(
+      `SUPPLY_GATE_MISSING:${PARIS_FULLSTACK_SUPPLY_GATE}`,
+    );
+    expect(
+      evaluateShadowCanary(enabled, context, observation, [{ ...gate, radiusKm: 51 }], now)
+        .rollbackReason,
+    ).toBe(`SUPPLY_GATE_SCOPE_MISMATCH:${PARIS_FULLSTACK_SUPPLY_GATE}`);
+    expect(
+      evaluateShadowCanary(
+        enabled,
+        context,
+        { ...observation, queryPlan: { ...observation.queryPlan, sequentialScan: true } },
+        [gate],
+        now,
+      ).rollbackReason,
+    ).toBe("QUERY_PLAN_GATE_FAILED");
+    expect(
+      evaluateShadowCanary(
+        { ...enabled, rollbackRequested: true },
+        context,
+        observation,
+        [gate],
+        now,
+      ).rollbackReason,
+    ).toBe("ROLLBACK_REQUESTED");
   });
 
   test("rejects unsafe control combinations", () => {
-    expect(() => evaluateShadowCanary({ ...enabled, shadowEnabled: false }, context, observation, [gate], now)).toThrow("canary requires shadow");
-    expect(() => evaluateShadowCanary({ ...enabled, sampleRateBasisPoints: 10_001 }, context, observation, [gate], now)).toThrow("sample rate");
+    expect(() =>
+      evaluateShadowCanary({ ...enabled, shadowEnabled: false }, context, observation, [gate], now),
+    ).toThrow("canary requires shadow");
+    expect(() =>
+      evaluateShadowCanary(
+        { ...enabled, sampleRateBasisPoints: 10_001 },
+        context,
+        observation,
+        [gate],
+        now,
+      ),
+    ).toThrow("sample rate");
   });
 });

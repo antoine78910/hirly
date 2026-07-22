@@ -72,7 +72,10 @@ export default function DeleteAccountDialog({ open, onClose }) {
               <span className="grid h-8 w-8 place-items-center rounded-xl bg-rose-100 text-rose-600">
                 <AlertTriangle className="h-4 w-4" />
               </span>
-              <h2 id="delete-account-title" className="font-display text-lg font-bold tracking-tight text-zinc-900">
+              <h2
+                id="delete-account-title"
+                className="font-display text-lg font-bold tracking-tight text-zinc-900"
+              >
                 {t("deleteAccountDialog.title")}
               </h2>
             </div>
@@ -92,11 +95,16 @@ export default function DeleteAccountDialog({ open, onClose }) {
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
-          <p className="text-sm text-zinc-600">{t("deleteAccountDialog.intro", { brand: BRAND.NAME })}</p>
+          <p className="text-sm text-zinc-600">
+            {t("deleteAccountDialog.intro", { brand: BRAND.NAME })}
+          </p>
           <ul className="mt-4 space-y-2.5">
             {BULLET_KEYS.map((key) => (
               <li key={key} className="flex items-start gap-2.5 text-sm text-zinc-800">
-                <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-rose-500" aria-hidden="true" />
+                <span
+                  className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-rose-500"
+                  aria-hidden="true"
+                />
                 <span>{t(key)}</span>
               </li>
             ))}
@@ -123,7 +131,11 @@ export default function DeleteAccountDialog({ open, onClose }) {
             className="inline-flex items-center justify-center gap-2 rounded-lg bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-50"
             data-testid="delete-account-confirm"
           >
-            {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+            {deleting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Trash2 className="h-4 w-4" />
+            )}
             {deleting ? t("deleteAccountDialog.deleting") : t("deleteAccountDialog.confirm")}
           </button>
         </div>

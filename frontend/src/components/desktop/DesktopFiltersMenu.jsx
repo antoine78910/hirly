@@ -54,8 +54,12 @@ function FlyoutRow({ active, children, onClick, onMouseEnter, testId, isDark }) 
       data-testid={testId}
       className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition-colors ${
         active
-          ? isDark ? "bg-zinc-800 text-white" : "bg-violet-50 text-violet-900"
-          : isDark ? "text-zinc-200 hover:bg-zinc-900" : "text-zinc-700 hover:bg-zinc-50"
+          ? isDark
+            ? "bg-zinc-800 text-white"
+            : "bg-violet-50 text-violet-900"
+          : isDark
+            ? "text-zinc-200 hover:bg-zinc-900"
+            : "text-zinc-700 hover:bg-zinc-50"
       }`}
     >
       {children}
@@ -71,18 +75,34 @@ function SubmenuOption({ active, label, onClick, testId, multi = false, isDark }
       data-testid={testId}
       className={`flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-sm transition-colors ${
         active && !multi
-          ? isDark ? "bg-zinc-800 text-white" : "bg-violet-50 text-violet-900"
-          : isDark ? "text-zinc-200 hover:bg-zinc-900" : "text-zinc-700 hover:bg-zinc-50"
+          ? isDark
+            ? "bg-zinc-800 text-white"
+            : "bg-violet-50 text-violet-900"
+          : isDark
+            ? "text-zinc-200 hover:bg-zinc-900"
+            : "text-zinc-700 hover:bg-zinc-50"
       }`}
     >
       <span>{label}</span>
-      {active && !multi ? <span className={`h-2 w-2 rounded-full ${isDark ? "bg-white" : "bg-violet-600"}`} /> : null}
+      {active && !multi ? (
+        <span className={`h-2 w-2 rounded-full ${isDark ? "bg-white" : "bg-violet-600"}`} />
+      ) : null}
       {active && multi ? <Check className="h-4 w-4 text-violet-500" /> : null}
     </button>
   );
 }
 
-function ListAddSection({ title, placeholder, values, onAdd, onRemove, testId, isDark, addLabel, removeLabel }) {
+function ListAddSection({
+  title,
+  placeholder,
+  values,
+  onAdd,
+  onRemove,
+  testId,
+  isDark,
+  addLabel,
+  removeLabel,
+}) {
   const [draft, setDraft] = useState("");
 
   const submit = () => {
@@ -113,7 +133,9 @@ function ListAddSection({ title, placeholder, values, onAdd, onRemove, testId, i
           type="button"
           onClick={submit}
           className={`h-9 shrink-0 rounded-lg px-3 text-sm font-medium ${
-            isDark ? "bg-zinc-800 text-white hover:bg-zinc-700" : "bg-zinc-100 text-zinc-900 hover:bg-zinc-200"
+            isDark
+              ? "bg-zinc-800 text-white hover:bg-zinc-700"
+              : "bg-zinc-100 text-zinc-900 hover:bg-zinc-200"
           }`}
         >
           {addLabel}
@@ -175,20 +197,29 @@ export default function DesktopFiltersMenu({
     onOpenChange?.(open);
   }, [open, onOpenChange]);
 
-  const patch = useCallback((partial) => {
-    onFiltersChange?.(mergeFilters({ ...f, ...partial }));
-  }, [f, onFiltersChange]);
+  const patch = useCallback(
+    (partial) => {
+      onFiltersChange?.(mergeFilters({ ...f, ...partial }));
+    },
+    [f, onFiltersChange],
+  );
 
-  const patchSalary = useCallback((minSalary) => {
-    if (salaryTimerRef.current) clearTimeout(salaryTimerRef.current);
-    salaryTimerRef.current = setTimeout(() => {
-      onFiltersChange?.(mergeFilters({ ...f, minSalary }));
-    }, 300);
-  }, [f, onFiltersChange]);
+  const patchSalary = useCallback(
+    (minSalary) => {
+      if (salaryTimerRef.current) clearTimeout(salaryTimerRef.current);
+      salaryTimerRef.current = setTimeout(() => {
+        onFiltersChange?.(mergeFilters({ ...f, minSalary }));
+      }, 300);
+    },
+    [f, onFiltersChange],
+  );
 
-  useEffect(() => () => {
-    if (salaryTimerRef.current) clearTimeout(salaryTimerRef.current);
-  }, []);
+  useEffect(
+    () => () => {
+      if (salaryTimerRef.current) clearTimeout(salaryTimerRef.current);
+    },
+    [],
+  );
 
   const updateFlyoutPosition = useCallback(() => {
     if (!open || !anchorRef.current) return;
@@ -285,9 +316,11 @@ export default function DesktopFiltersMenu({
                 multi
                 active={f.workLocations.includes(value)}
                 label={label}
-                onClick={() => patch({
-                  workLocations: toggleFilterArray(f.workLocations, value),
-                })}
+                onClick={() =>
+                  patch({
+                    workLocations: toggleFilterArray(f.workLocations, value),
+                  })
+                }
                 testId={`desktop-filters-work-${value}`}
               />
             ))}
@@ -303,9 +336,11 @@ export default function DesktopFiltersMenu({
                 multi
                 active={f.experience.includes(value)}
                 label={label}
-                onClick={() => patch({
-                  experience: toggleFilterArray(f.experience, value),
-                })}
+                onClick={() =>
+                  patch({
+                    experience: toggleFilterArray(f.experience, value),
+                  })
+                }
                 testId={`desktop-filters-exp-${value}`}
               />
             ))}
@@ -321,9 +356,11 @@ export default function DesktopFiltersMenu({
                 multi
                 active={f.jobTypes.includes(value)}
                 label={label}
-                onClick={() => patch({
-                  jobTypes: toggleFilterArray(f.jobTypes, value),
-                })}
+                onClick={() =>
+                  patch({
+                    jobTypes: toggleFilterArray(f.jobTypes, value),
+                  })
+                }
                 testId={`desktop-filters-job-${value}`}
               />
             ))}
@@ -333,8 +370,7 @@ export default function DesktopFiltersMenu({
         return (
           <div className="space-y-3 p-3">
             <p className={`text-sm ${isDark ? "text-zinc-300" : "text-zinc-600"}`}>
-              {t("filters.minimum")}
-              {" "}
+              {t("filters.minimum")}{" "}
               <span className={`font-semibold ${isDark ? "text-white" : "text-zinc-900"}`}>
                 {formatMinSalary(salaryDraft, lang)}
               </span>
@@ -353,7 +389,9 @@ export default function DesktopFiltersMenu({
               className="w-full accent-violet-500"
               data-testid="desktop-filters-salary-slider"
             />
-            <div className={`flex justify-between text-xs ${isDark ? "text-zinc-500" : "text-zinc-400"}`}>
+            <div
+              className={`flex justify-between text-xs ${isDark ? "text-zinc-500" : "text-zinc-400"}`}
+            >
               <span>{formatMinSalary(0, lang)}</span>
               <span>{formatMinSalary(250_000, lang)}</span>
             </div>
@@ -369,13 +407,17 @@ export default function DesktopFiltersMenu({
               addLabel={t("common.add")}
               removeLabel={(value) => t("filters.removeValue", { value })}
               values={f.onlyCompanies}
-              onAdd={(value) => patch({
-                onlyCompanies: [...new Set([...f.onlyCompanies, value])],
-              })}
-              onRemove={(value) => patch({
-                hideCompanies: f.hideCompanies,
-                onlyCompanies: f.onlyCompanies.filter((item) => item !== value),
-              })}
+              onAdd={(value) =>
+                patch({
+                  onlyCompanies: [...new Set([...f.onlyCompanies, value])],
+                })
+              }
+              onRemove={(value) =>
+                patch({
+                  hideCompanies: f.hideCompanies,
+                  onlyCompanies: f.onlyCompanies.filter((item) => item !== value),
+                })
+              }
               testId="desktop-filters-only-companies"
             />
             <div className={`h-px ${isDark ? "bg-zinc-800" : "bg-zinc-200"}`} />
@@ -386,13 +428,17 @@ export default function DesktopFiltersMenu({
               addLabel={t("common.add")}
               removeLabel={(value) => t("filters.removeValue", { value })}
               values={f.hideCompanies}
-              onAdd={(value) => patch({
-                hideCompanies: [...new Set([...f.hideCompanies, value])],
-              })}
-              onRemove={(value) => patch({
-                onlyCompanies: f.onlyCompanies,
-                hideCompanies: f.hideCompanies.filter((item) => item !== value),
-              })}
+              onAdd={(value) =>
+                patch({
+                  hideCompanies: [...new Set([...f.hideCompanies, value])],
+                })
+              }
+              onRemove={(value) =>
+                patch({
+                  onlyCompanies: f.onlyCompanies,
+                  hideCompanies: f.hideCompanies.filter((item) => item !== value),
+                })
+              }
               testId="desktop-filters-hide-companies"
             />
           </div>
@@ -407,13 +453,17 @@ export default function DesktopFiltersMenu({
               addLabel={t("common.add")}
               removeLabel={(value) => t("filters.removeValue", { value })}
               values={f.onlyIndustries}
-              onAdd={(value) => patch({
-                onlyIndustries: [...new Set([...f.onlyIndustries, value])],
-              })}
-              onRemove={(value) => patch({
-                hideIndustries: f.hideIndustries,
-                onlyIndustries: f.onlyIndustries.filter((item) => item !== value),
-              })}
+              onAdd={(value) =>
+                patch({
+                  onlyIndustries: [...new Set([...f.onlyIndustries, value])],
+                })
+              }
+              onRemove={(value) =>
+                patch({
+                  hideIndustries: f.hideIndustries,
+                  onlyIndustries: f.onlyIndustries.filter((item) => item !== value),
+                })
+              }
               testId="desktop-filters-only-industries"
             />
             <div className={`h-px ${isDark ? "bg-zinc-800" : "bg-zinc-200"}`} />
@@ -424,13 +474,17 @@ export default function DesktopFiltersMenu({
               addLabel={t("common.add")}
               removeLabel={(value) => t("filters.removeValue", { value })}
               values={f.hideIndustries}
-              onAdd={(value) => patch({
-                hideIndustries: [...new Set([...f.hideIndustries, value])],
-              })}
-              onRemove={(value) => patch({
-                onlyIndustries: f.onlyIndustries,
-                hideIndustries: f.hideIndustries.filter((item) => item !== value),
-              })}
+              onAdd={(value) =>
+                patch({
+                  hideIndustries: [...new Set([...f.hideIndustries, value])],
+                })
+              }
+              onRemove={(value) =>
+                patch({
+                  onlyIndustries: f.onlyIndustries,
+                  hideIndustries: f.hideIndustries.filter((item) => item !== value),
+                })
+              }
               testId="desktop-filters-hide-industries"
             />
           </div>
@@ -477,63 +531,70 @@ export default function DesktopFiltersMenu({
       </button>
 
       {open ? (
-          <div
-            ref={flyoutRef}
-            className="fixed z-50 flex items-start"
-            style={{
-              left: flyoutPos?.left ?? 0,
-              top: flyoutPos?.top ?? 0,
-              visibility: flyoutPos ? "visible" : "hidden",
-            }}
-          >
-            <div className={`w-56 rounded-xl border p-1.5 ${menuShell}`}>
-              {panels.map(({ id, label, icon: Icon }) => (
-                <FlyoutRow
-                  key={id}
-                  isDark={isDark}
-                  active={activePanel === id}
-                  onMouseEnter={() => setActivePanel(id)}
-                  testId={`desktop-filters-panel-${id}`}
-                >
-                  <Icon className="h-4 w-4 shrink-0 text-zinc-400" />
-                  <span className="min-w-0 flex-1">{label}</span>
-                  <ChevronRight className="h-4 w-4 shrink-0 text-zinc-500" />
-                </FlyoutRow>
-              ))}
-
-              <div className={`my-1.5 h-px ${isDark ? "bg-zinc-800" : "bg-zinc-200"}`} />
-
+        <div
+          ref={flyoutRef}
+          className="fixed z-50 flex items-start"
+          style={{
+            left: flyoutPos?.left ?? 0,
+            top: flyoutPos?.top ?? 0,
+            visibility: flyoutPos ? "visible" : "hidden",
+          }}
+        >
+          <div className={`w-56 rounded-xl border p-1.5 ${menuShell}`}>
+            {panels.map(({ id, label, icon: Icon }) => (
               <FlyoutRow
+                key={id}
                 isDark={isDark}
-                active={false}
-                onClick={() => patch({ includeUnknownLocation: !f.includeUnknownLocation })}
-                testId="desktop-filters-unknown-location"
+                active={activePanel === id}
+                onMouseEnter={() => setActivePanel(id)}
+                testId={`desktop-filters-panel-${id}`}
               >
-                <Check className={`h-4 w-4 shrink-0 ${f.includeUnknownLocation ? "text-violet-400" : "text-transparent"}`} />
-                <span className="min-w-0 flex-1 text-xs leading-snug">{t("filters.includeUnknownLocation")}</span>
+                <Icon className="h-4 w-4 shrink-0 text-zinc-400" />
+                <span className="min-w-0 flex-1">{label}</span>
+                <ChevronRight className="h-4 w-4 shrink-0 text-zinc-500" />
               </FlyoutRow>
-              <FlyoutRow
-                isDark={isDark}
-                active={false}
-                onClick={() => patch({ includeUnknownSalary: !f.includeUnknownSalary })}
-                testId="desktop-filters-unknown-salary"
-              >
-                <Check className={`h-4 w-4 shrink-0 ${f.includeUnknownSalary ? "text-violet-400" : "text-transparent"}`} />
-                <span className="min-w-0 flex-1 text-xs leading-snug">{t("filters.includeUnknownSalary")}</span>
-              </FlyoutRow>
+            ))}
 
-            </div>
+            <div className={`my-1.5 h-px ${isDark ? "bg-zinc-800" : "bg-zinc-200"}`} />
 
-            {activePanel ? (
-              <div
-                className={`ml-1.5 rounded-xl border ${submenuShell}`}
-                style={{ width: submenuWidth }}
-                data-testid="desktop-filters-submenu"
-              >
-                {renderSubmenu()}
-              </div>
-            ) : null}
+            <FlyoutRow
+              isDark={isDark}
+              active={false}
+              onClick={() => patch({ includeUnknownLocation: !f.includeUnknownLocation })}
+              testId="desktop-filters-unknown-location"
+            >
+              <Check
+                className={`h-4 w-4 shrink-0 ${f.includeUnknownLocation ? "text-violet-400" : "text-transparent"}`}
+              />
+              <span className="min-w-0 flex-1 text-xs leading-snug">
+                {t("filters.includeUnknownLocation")}
+              </span>
+            </FlyoutRow>
+            <FlyoutRow
+              isDark={isDark}
+              active={false}
+              onClick={() => patch({ includeUnknownSalary: !f.includeUnknownSalary })}
+              testId="desktop-filters-unknown-salary"
+            >
+              <Check
+                className={`h-4 w-4 shrink-0 ${f.includeUnknownSalary ? "text-violet-400" : "text-transparent"}`}
+              />
+              <span className="min-w-0 flex-1 text-xs leading-snug">
+                {t("filters.includeUnknownSalary")}
+              </span>
+            </FlyoutRow>
           </div>
+
+          {activePanel ? (
+            <div
+              className={`ml-1.5 rounded-xl border ${submenuShell}`}
+              style={{ width: submenuWidth }}
+              data-testid="desktop-filters-submenu"
+            >
+              {renderSubmenu()}
+            </div>
+          ) : null}
+        </div>
       ) : null}
     </div>
   );

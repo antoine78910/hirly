@@ -15,11 +15,7 @@ import {
   type SourceRuntimePolicy,
   type ValidationResult,
 } from "@hirly/contracts";
-import {
-  classifyAtsUrl,
-  detectAtsEvidence,
-  isStrictAutoApplicableProvider,
-} from "./ats";
+import { classifyAtsUrl, detectAtsEvidence, isStrictAutoApplicableProvider } from "./ats";
 
 export interface ProviderPage<RawJob> {
   items: RawJob[];
@@ -27,10 +23,7 @@ export interface ProviderPage<RawJob> {
 }
 
 export interface ProviderTransport<RawJob> {
-  fetch(
-    request: ProviderSearchRequest,
-    signal: AbortSignal,
-  ): Promise<ProviderPage<RawJob>>;
+  fetch(request: ProviderSearchRequest, signal: AbortSignal): Promise<ProviderPage<RawJob>>;
 }
 
 export interface NormalizedProviderJob {
@@ -128,18 +121,11 @@ export interface SourceAdapter<RawJob, Cursor, Scope> {
   validateActive(raw: RawJob, now: Date): SourceLifecycleEvidence;
   classifyError(
     error: unknown,
-  ):
-    | "retryable"
-    | "rate_limited"
-    | "authorization"
-    | "permanent"
-    | "malformed";
+  ): "retryable" | "rate_limited" | "authorization" | "permanent" | "malformed";
   attribution(raw: RawJob): AttributionMetadata;
 }
 
-export class DisabledSourceTransport<RawJob>
-  implements SourceTransport<RawJob>
-{
+export class DisabledSourceTransport<RawJob> implements SourceTransport<RawJob> {
   readonly liveTransportReady = false as const;
 
   async fetch(
@@ -251,10 +237,7 @@ export function sourceActivationBlockReason(
   if (!input.policy.permittedAccessMethods.includes(input.source.accessType)) {
     return "policy_access_blocked";
   }
-  if (
-    !input.policy.expiresAt ||
-    new Date(input.policy.expiresAt).getTime() <= now.getTime()
-  ) {
+  if (!input.policy.expiresAt || new Date(input.policy.expiresAt).getTime() <= now.getTime()) {
     return "policy_expired";
   }
   return null;
@@ -301,10 +284,7 @@ export class ProviderRateGate {
     private readonly options: ProviderRateGateOptions = {},
   ) {}
 
-  async run<T>(
-    operation: () => Promise<T>,
-    signal: AbortSignal,
-  ): Promise<T> {
+  async run<T>(operation: () => Promise<T>, signal: AbortSignal): Promise<T> {
     await this.acquire(signal);
     try {
       return await this.startOperation(operation, signal);
@@ -314,10 +294,7 @@ export class ProviderRateGate {
     }
   }
 
-  private async startOperation<T>(
-    operation: () => Promise<T>,
-    signal: AbortSignal,
-  ): Promise<T> {
+  private async startOperation<T>(operation: () => Promise<T>, signal: AbortSignal): Promise<T> {
     let releaseStart!: () => void;
     const previousStart = this.startQueue;
     this.startQueue = new Promise<void>((resolve) => {
@@ -327,10 +304,7 @@ export class ProviderRateGate {
     let result: Promise<T>;
     try {
       const minimumInterval = this.nextStartIntervalMs();
-      const delay = Math.max(
-        0,
-        this.lastStartedAt + minimumInterval - this.clock(),
-      );
+      const delay = Math.max(0, this.lastStartedAt + minimumInterval - this.clock());
       if (delay > 0) await this.sleep(delay, signal);
       signal.throwIfAborted();
       this.lastStartedAt = this.clock();
@@ -352,10 +326,7 @@ export class ProviderRateGate {
     ) {
       throw new Error("invalid provider start interval");
     }
-    const random = Math.min(
-      1,
-      Math.max(0, (this.options.random ?? Math.random)()),
-    );
+    const random = Math.min(1, Math.max(0, (this.options.random ?? Math.random)()));
     return configured.min + (configured.max - configured.min) * random;
   }
 
@@ -398,8 +369,7 @@ const candidateContainerKey =
 const candidateSensitiveScalarKey =
   /^(?:candidates?|applicants?|applications?)(?:firstnames?|lastnames?|fullnames?|names?|emails?|phones?|addresses?|birthdates?|dates?ofbirth|nationalids?|profileurls?|linkedinurls?|coverletters?|personalstatements?|messages?|notes?|freetexts?|texts?|answers?)$/;
 const email = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
-const phone =
-  /(?:\+\d{1,3}[\s.-]?)?(?:\(\d{2,4}\)[\s.-]?)?\d[\d\s.-]{7,}\d/g;
+const phone = /(?:\+\d{1,3}[\s.-]?)?(?:\(\d{2,4}\)[\s.-]?)?\d[\d\s.-]{7,}\d/g;
 const bearer = /\bBearer\s+[A-Za-z0-9._~+/-]+=*/gi;
 const credentialUrl = /\b(?:postgres(?:ql)?|https?):\/\/[^/\s:@]+:[^@\s]+@/gi;
 const querySecret =
@@ -420,16 +390,10 @@ function isDocumentPiiKey(key: string): boolean {
 
 function isCandidateContainerKey(key: string): boolean {
   const normalized = normalizedSourceKey(key);
-  return (
-    candidateContainerKey.test(normalized) ||
-    candidateSensitiveScalarKey.test(normalized)
-  );
+  return candidateContainerKey.test(normalized) || candidateSensitiveScalarKey.test(normalized);
 }
 
-export function sanitizeSourceDocument(
-  value: unknown,
-  key = "",
-): unknown {
+export function sanitizeSourceDocument(value: unknown, key = ""): unknown {
   if (
     sensitiveKey.test(key) ||
     piiKey.test(key) ||
@@ -440,9 +404,7 @@ export function sanitizeSourceDocument(
   }
   if (typeof value === "string") {
     const preserveIsoTimestamp =
-      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(
-        value,
-      );
+      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(value);
     return value
       .replace(credentialUrl, (match) => {
         const schemeEnd = match.indexOf("://") + 3;
@@ -536,21 +498,13 @@ export function normalizeCountryCode(value: string): string {
   };
   const countryCode = aliases[normalized] ?? value.trim().toUpperCase();
   if (!/^[A-Z]{2}$/.test(countryCode)) {
-    throw new IngestionError(
-      "invalid_input",
-      `unsupported country code: ${value}`,
-    );
+    throw new IngestionError("invalid_input", `unsupported country code: ${value}`);
   }
   return countryCode;
 }
 
 const franceTravailApplyDomain = "candidat.francetravail.fr";
-const accountRequiredDomains = [
-  "apec.fr",
-  "hellowork.com",
-  "welcometothejungle.com",
-  "indeed.com",
-];
+const accountRequiredDomains = ["apec.fr", "hellowork.com", "welcometothejungle.com", "indeed.com"];
 const discoveryOnlyDomains: Record<string, string> = {
   "simplyhired.com": "simplyhired",
   "talent.com": "talent",
@@ -567,10 +521,7 @@ function hostname(url: string): string | null {
   }
 }
 
-function findDomainMatch(
-  host: string,
-  domains: Iterable<string>,
-): string | null {
+function findDomainMatch(host: string, domains: Iterable<string>): string | null {
   for (const domain of domains) {
     if (host === domain || host.endsWith(`.${domain}`)) return domain;
   }
@@ -597,10 +548,7 @@ export function selectApplyUrl(urls: string[]): string | null {
   );
 }
 
-export function validateApplyability(
-  job: NormalizedProviderJob,
-  now: Date,
-): ValidationResult {
+export function validateApplyability(job: NormalizedProviderJob, now: Date): ValidationResult {
   const selectedApplyUrl = selectApplyUrl(job.applyUrls);
   const checkedAt = now.toISOString();
   const rawText = JSON.stringify(job.envelope.payload).toLowerCase();
@@ -651,8 +599,7 @@ export function validateApplyability(
     return {
       ...common,
       validationStatus: "invalid",
-      validationReason:
-        "Job payload contains CAPTCHA or bot-protection signals.",
+      validationReason: "Job payload contains CAPTCHA or bot-protection signals.",
       applyabilityTier: "E",
       applyabilityScore: 0.03,
       applyFulfillmentStatus: "blocked_captcha",
@@ -662,10 +609,7 @@ export function validateApplyability(
   }
 
   const host = hostname(selectedApplyUrl);
-  if (
-    job.envelope.provider === "france_travail" &&
-    host === franceTravailApplyDomain
-  ) {
+  if (job.envelope.provider === "france_travail" && host === franceTravailApplyDomain) {
     return {
       ...common,
       validationStatus: "valid",
@@ -698,9 +642,7 @@ export function validateApplyability(
     };
   }
 
-  const accountDomain = host
-    ? findDomainMatch(host, accountRequiredDomains)
-    : null;
+  const accountDomain = host ? findDomainMatch(host, accountRequiredDomains) : null;
   if (accountDomain) {
     return {
       ...common,
@@ -716,12 +658,9 @@ export function validateApplyability(
     };
   }
 
-  const discoveryDomain = host
-    ? findDomainMatch(host, Object.keys(discoveryOnlyDomains))
-    : null;
+  const discoveryDomain = host ? findDomainMatch(host, Object.keys(discoveryOnlyDomains)) : null;
   if (discoveryDomain) {
-    const discoveryProvider =
-      discoveryOnlyDomains[discoveryDomain] ?? discoveryDomain;
+    const discoveryProvider = discoveryOnlyDomains[discoveryDomain] ?? discoveryDomain;
     return {
       ...common,
       validationStatus: "invalid",
@@ -766,10 +705,7 @@ export function buildFingerprint(job: NormalizedProviderJob): string {
   );
 }
 
-export function toCanonicalJob(
-  job: NormalizedProviderJob,
-  now: Date,
-): CanonicalJob {
+export function toCanonicalJob(job: NormalizedProviderJob, now: Date): CanonicalJob {
   const envelope = rawProviderJobEnvelopeSchema.parse(job.envelope);
   const validation = validateApplyability(job, now);
   const sourceDocument = sanitizeSourceDocument(envelope.payload) as Record<string, unknown>;
@@ -817,21 +753,14 @@ export async function runIngestion<RawJob>(input: {
   rateGate?: ProviderRateGate;
   onMetrics?: (metrics: IngestionMetrics) => void;
 }): Promise<IngestionResult> {
-  if (
-    input.provider !== input.adapter.provider ||
-    input.provider !== input.request.provider
-  ) {
-    throw new IngestionError(
-      "integrity_error",
-      "provider pipeline identity mismatch",
-    );
+  if (input.provider !== input.adapter.provider || input.provider !== input.request.provider) {
+    throw new IngestionError("integrity_error", "provider pipeline identity mismatch");
   }
   const startedAt = performance.now();
   const signal = input.signal ?? new AbortController().signal;
   const now = input.now ?? (() => new Date());
   const rateGate =
-    input.rateGate ??
-    new ProviderRateGate(input.rateLimit, input.clock, input.sleep);
+    input.rateGate ?? new ProviderRateGate(input.rateLimit, input.clock, input.sleep);
   const metrics: IngestionMetrics = {
     fetched: 0,
     accepted: 0,
@@ -858,10 +787,7 @@ export async function runIngestion<RawJob>(input: {
     signal.throwIfAborted();
     const request = { ...input.request, cursor };
     const fetchStartedAt = performance.now();
-    const page = await rateGate.run(
-      () => input.transport.fetch(request, signal),
-      signal,
-    );
+    const page = await rateGate.run(() => input.transport.fetch(request, signal), signal);
     metrics.durationsMs.fetch += performance.now() - fetchStartedAt;
     metrics.pages += 1;
     metrics.fetched += page.items.length;
@@ -870,18 +796,13 @@ export async function runIngestion<RawJob>(input: {
       const normalizationStartedAt = performance.now();
       try {
         const normalized = input.adapter.normalizeRaw(raw);
-        metrics.durationsMs.normalization +=
-          performance.now() - normalizationStartedAt;
+        metrics.durationsMs.normalization += performance.now() - normalizationStartedAt;
         if (normalized.envelope.provider !== input.provider) {
-          throw new IngestionError(
-            "integrity_error",
-            "normalized provider identity mismatch",
-          );
+          throw new IngestionError("integrity_error", "normalized provider identity mismatch");
         }
         const validationStartedAt = performance.now();
         const canonicalJob = toCanonicalJob(normalized, now());
-        metrics.durationsMs.validation +=
-          performance.now() - validationStartedAt;
+        metrics.durationsMs.validation += performance.now() - validationStartedAt;
         const identity = `${normalized.envelope.provider}:${normalized.envelope.externalId}`;
         if (identities.has(identity)) {
           metrics.deduplicated += 1;
@@ -891,8 +812,7 @@ export async function runIngestion<RawJob>(input: {
         jobs.push(canonicalJob);
         metrics.accepted += 1;
       } catch (error) {
-        metrics.durationsMs.normalization +=
-          performance.now() - normalizationStartedAt;
+        metrics.durationsMs.normalization += performance.now() - normalizationStartedAt;
         metrics.rejected += 1;
         if (error instanceof IngestionError && error.code === "integrity_error") {
           throw error;
@@ -921,10 +841,7 @@ export async function runIngestion<RawJob>(input: {
     );
   }
   if (jobs.length > 500) {
-    throw new IngestionError(
-      "invalid_input",
-      "canonical batch exceeds the 500 job writer limit",
-    );
+    throw new IngestionError("invalid_input", "canonical batch exceeds the 500 job writer limit");
   }
   if (jobs.length > 0) {
     const databaseStartedAt = performance.now();

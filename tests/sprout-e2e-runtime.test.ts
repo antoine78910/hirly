@@ -2,10 +2,7 @@ import { describe, expect, test } from "bun:test";
 import fixture from "./fixtures/sprout/france-page.sanitized.json";
 import { sourcePageCommitSchema } from "../packages/contracts/src/index";
 import type { RuntimeStore } from "../apps/worker/src/runtime/types";
-import {
-  createTaskHandlers,
-  sproutDiscoveryProfile,
-} from "../apps/worker/src/runtime/handlers";
+import { createTaskHandlers, sproutDiscoveryProfile } from "../apps/worker/src/runtime/handlers";
 import { createJsonLogger } from "../packages/observability/src/index";
 import {
   SproutHttpTransport,
@@ -53,12 +50,14 @@ describe("Sprout authenticated transport", () => {
   });
 
   test("accepts legacy chained-task counters without blocking recovery", () => {
-    expect(sproutTaskPayloadSchema.parse({
-      sourceId,
-      mode: "backfill",
-      maxResponseBytes: 1_000_000,
-      emptyInsertStreak: 3,
-    }).emptyInsertStreak).toBe(3);
+    expect(
+      sproutTaskPayloadSchema.parse({
+        sourceId,
+        mode: "backfill",
+        maxResponseBytes: 1_000_000,
+        emptyInsertStreak: 3,
+      }).emptyInsertStreak,
+    ).toBe(3);
   });
 
   test("uses only the allowlisted HTTPS origin, omits cookies, and consumes jobs once", async () => {
@@ -116,8 +115,12 @@ describe("Sprout authenticated transport", () => {
           ? new Response(null, { status: 429, headers: { "retry-after": "0" } })
           : Response.json(fixture);
       }) as typeof fetch,
-      sleep: async (milliseconds) => { sleeps.push(milliseconds); },
-      onOperation(operation) { operations.push(operation); },
+      sleep: async (milliseconds) => {
+        sleeps.push(milliseconds);
+      },
+      onOperation(operation) {
+        operations.push(operation);
+      },
     });
 
     await transport.fetchPage(
@@ -156,13 +159,18 @@ describe("Sprout authenticated transport", () => {
           return { accessToken: "private-access", refreshToken: "private-refresh" };
         },
       },
-      fetch: (async () => Response.json({
-        jobs: [{ id: 1, company: "Example", title: "Role", locations: [], unknown: "do-not-log" }],
-        count: 1,
-        next: null,
-        previous: null,
-      })) as typeof fetch,
-      onOperation(operation) { operations.push(operation); },
+      fetch: (async () =>
+        Response.json({
+          jobs: [
+            { id: 1, company: "Example", title: "Role", locations: [], unknown: "do-not-log" },
+          ],
+          count: 1,
+          next: null,
+          previous: null,
+        })) as typeof fetch,
+      onOperation(operation) {
+        operations.push(operation);
+      },
     });
 
     const page = await transport.fetchPage(
@@ -214,16 +222,19 @@ describe("Sprout authenticated transport", () => {
   });
 
   test("fails closed on origins, redirects, auth failures, and response budgets", async () => {
-    expect(() => new SproutHttpTransport({
-      endpoint: "http://api.sprout.invalid/jobs",
-      allowedOrigins: ["https://api.sprout.invalid"],
-      maxResponseBytes: 10,
-      secrets: {
-        async resolve() {
-          return { accessToken: "token", refreshToken: "refresh-token" };
-        },
-      },
-    })).toThrow("sprout_transport_origin_not_allowed");
+    expect(
+      () =>
+        new SproutHttpTransport({
+          endpoint: "http://api.sprout.invalid/jobs",
+          allowedOrigins: ["https://api.sprout.invalid"],
+          maxResponseBytes: 10,
+          secrets: {
+            async resolve() {
+              return { accessToken: "token", refreshToken: "refresh-token" };
+            },
+          },
+        }),
+    ).toThrow("sprout_transport_origin_not_allowed");
 
     for (const response of [
       new Response(null, { status: 302, headers: { location: "https://evil.invalid" } }),
@@ -295,14 +306,16 @@ describe("Sprout source commit pipeline", () => {
       "page-size-50",
       "page-size-100",
     ]);
-    await expect(runSproutPageSizeQualification({
-      pageSizes: [1, 2, 3, 4],
-      requester,
-      signal,
-      delayMs: 2_000,
-      maxResponseBytes: 1_024,
-      sleep,
-    })).rejects.toThrow("sprout_page_size_trial_request_budget_exceeded");
+    await expect(
+      runSproutPageSizeQualification({
+        pageSizes: [1, 2, 3, 4],
+        requester,
+        signal,
+        delayMs: 2_000,
+        maxResponseBytes: 1_024,
+        sleep,
+      }),
+    ).rejects.toThrow("sprout_page_size_trial_request_budget_exceeded");
   });
 
   test("normalizes, validates, canonicalizes tracking URLs, and preserves sanitized source evidence", () => {
@@ -346,18 +359,23 @@ describe("Sprout source commit pipeline", () => {
           expiresAt: new Date(Date.now() + 60_000),
         };
       },
-      async heartbeatProviderWork() { return true; },
-      async finishProviderWork() { return true; },
-      async releaseProviderWork() { released += 1; return true; },
-      async writeJobsAndComplete() { throw new Error("legacy writer must not run"); },
+      async heartbeatProviderWork() {
+        return true;
+      },
+      async finishProviderWork() {
+        return true;
+      },
+      async releaseProviderWork() {
+        released += 1;
+        return true;
+      },
+      async writeJobsAndComplete() {
+        throw new Error("legacy writer must not run");
+      },
       async beginSproutIncrementalCycle(_lease: unknown, _claim: unknown, currentSourceId: string) {
         cycleStarts.push(currentSourceId);
       },
-      async bindSproutSourceRun(
-        _lease: unknown,
-        _claim: unknown,
-        currentSourceId: string,
-      ) {
+      async bindSproutSourceRun(_lease: unknown, _claim: unknown, currentSourceId: string) {
         boundSources.push(currentSourceId);
       },
       async getSproutSourceRuntime(_sourceId: string, mode: "canary" | "backfill" | "incremental") {
@@ -371,27 +389,28 @@ describe("Sprout source commit pipeline", () => {
           approvedPageSize: 2,
           checkpoint: initialSproutCheckpoint({ approvedPageSize: 2 }),
           policyEvidenceRef: "reviewed-policy",
-          canaryEvidence: mode === "canary"
-            ? {
-              status: "pending" as const,
-              evidenceRef: null,
-              pagesCommitted: 0 as const,
-              identityReadBack: false,
-              rawSnapshotLinked: false,
-              occurrenceLinked: false,
-              checkpointReadBack: false,
-              singleWriterVerified: false,
-            }
-            : {
-              status: "passed" as const,
-              evidenceRef: "canary-readback",
-              pagesCommitted: 1 as const,
-              identityReadBack: true,
-              rawSnapshotLinked: true,
-              occurrenceLinked: true,
-              checkpointReadBack: true,
-              singleWriterVerified: true,
-            },
+          canaryEvidence:
+            mode === "canary"
+              ? {
+                  status: "pending" as const,
+                  evidenceRef: null,
+                  pagesCommitted: 0 as const,
+                  identityReadBack: false,
+                  rawSnapshotLinked: false,
+                  occurrenceLinked: false,
+                  checkpointReadBack: false,
+                  singleWriterVerified: false,
+                }
+              : {
+                  status: "passed" as const,
+                  evidenceRef: "canary-readback",
+                  pagesCommitted: 1 as const,
+                  identityReadBack: true,
+                  rawSnapshotLinked: true,
+                  occurrenceLinked: true,
+                  checkpointReadBack: true,
+                  singleWriterVerified: true,
+                },
           rollbackEvidence: {
             status: "passed" as const,
             evidenceRef: "rollback-drill",
@@ -426,21 +445,23 @@ describe("Sprout source commit pipeline", () => {
       createJsonLogger((line) => logLines.push(line)),
       undefined,
       {
-      sproutAllowedOrigins: ["https://api.sprout.invalid"],
-      sproutSecretResolver: {
-        async resolve() {
-          return {
-            accessToken: "fixture-access-token",
-            refreshToken: "fixture-refresh-token",
-          };
+        sproutAllowedOrigins: ["https://api.sprout.invalid"],
+        sproutSecretResolver: {
+          async resolve() {
+            return {
+              accessToken: "fixture-access-token",
+              refreshToken: "fixture-refresh-token",
+            };
+          },
         },
-      },
-      sproutFetch: (async () => Response.json(fixture)) as typeof fetch,
-      providerClaimHeartbeatMs: 10_000,
+        sproutFetch: (async () => Response.json(fixture)) as typeof fetch,
+        providerClaimHeartbeatMs: 10_000,
       },
     )["provider.fetch_page"]!;
 
-    await expect(handler(task("canary"), new AbortController().signal)).resolves.toEqual({ taskCompleted: true });
+    await expect(handler(task("canary"), new AbortController().signal)).resolves.toEqual({
+      taskCompleted: true,
+    });
     expect(commits).toHaveLength(1);
     const commit = sourcePageCommitSchema.parse(commits[0]);
     expect(commit.mode).toBe("canary");
@@ -503,9 +524,9 @@ describe("Sprout source commit pipeline", () => {
         providerClaimHeartbeatMs: 10_000,
       },
     )["provider.fetch_page"]!;
-    await expect(
-      failedHandler(task("canary"), new AbortController().signal),
-    ).rejects.toThrow("sprout_credential_unavailable");
+    await expect(failedHandler(task("canary"), new AbortController().signal)).rejects.toThrow(
+      "sprout_credential_unavailable",
+    );
     const terminal = failedLines
       .map((line) => JSON.parse(line))
       .find((event) => event.event === "sprout.page_terminal");
@@ -533,54 +554,55 @@ describe("Sprout source commit pipeline", () => {
             };
           },
         },
-        sproutFetch: (async () => Response.json({
-          message: "Jobs fetched successfully",
-          jobs: [],
-          count: 3,
-          next: "?offset=0&limit=2",
-          previous: null,
-        })) as typeof fetch,
+        sproutFetch: (async () =>
+          Response.json({
+            message: "Jobs fetched successfully",
+            jobs: [],
+            count: 3,
+            next: "?offset=0&limit=2",
+            previous: null,
+          })) as typeof fetch,
         providerClaimHeartbeatMs: 10_000,
       },
     )["provider.fetch_page"]!;
-    await expect(
-      fallbackHandler(task("backfill"), new AbortController().signal),
-    ).resolves.toEqual({ taskCompleted: true });
+    await expect(fallbackHandler(task("backfill"), new AbortController().signal)).resolves.toEqual({
+      taskCompleted: true,
+    });
     // An empty terminal page adds no continuation.
     expect(enqueued).toHaveLength(0);
     expect(fallbackLines.map((line) => JSON.parse(line).event)).not.toContain(
       "sprout.filter_fallback",
     );
 
-    const frontierHandler = createTaskHandlers(
-      store,
-      undefined,
-      undefined,
-      {
-        sproutAllowedOrigins: ["https://api.sprout.invalid"],
-        sproutSecretResolver: {
-          async resolve() {
-            return {
-              accessToken: "fixture-access-token",
-              refreshToken: "fixture-refresh-token",
-            };
+    const frontierHandler = createTaskHandlers(store, undefined, undefined, {
+      sproutAllowedOrigins: ["https://api.sprout.invalid"],
+      sproutSecretResolver: {
+        async resolve() {
+          return {
+            accessToken: "fixture-access-token",
+            refreshToken: "fixture-refresh-token",
+          };
+        },
+      },
+      sproutFetch: (async () => Response.json(fixture)) as typeof fetch,
+      providerClaimHeartbeatMs: 10_000,
+    })["provider.fetch_page"]!;
+    await expect(
+      frontierHandler(
+        {
+          ...task("incremental"),
+          payload: {
+            sourceId,
+            mode: "incremental",
+            maxResponseBytes: 1_000_000,
+            cycleStart: true,
+            pageCount: 0,
+            maxPages: 1,
           },
         },
-        sproutFetch: (async () => Response.json(fixture)) as typeof fetch,
-        providerClaimHeartbeatMs: 10_000,
-      },
-    )["provider.fetch_page"]!;
-    await expect(frontierHandler({
-      ...task("incremental"),
-      payload: {
-        sourceId,
-        mode: "incremental",
-        maxResponseBytes: 1_000_000,
-        cycleStart: true,
-        pageCount: 0,
-        maxPages: 1,
-      },
-    }, new AbortController().signal)).resolves.toEqual({ taskCompleted: true });
+        new AbortController().signal,
+      ),
+    ).resolves.toEqual({ taskCompleted: true });
     expect(cycleStarts).toEqual([sourceId]);
     expect(boundSources).toContain(sourceId);
     expect(boundSources.every((currentSourceId) => currentSourceId === sourceId)).toBe(true);

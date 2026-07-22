@@ -6,7 +6,8 @@ import { api } from "../../lib/api";
 import TrainingLoginPage from "./TrainingLoginPage";
 
 /** Set to false when training is invite-only again (must match backend TRAINING_OPEN_ACCESS). */
-const TRAINING_OPEN_ACCESS = (process.env.REACT_APP_TRAINING_OPEN_ACCESS ?? "true").toLowerCase() !== "false";
+const TRAINING_OPEN_ACCESS =
+  (process.env.REACT_APP_TRAINING_OPEN_ACCESS ?? "true").toLowerCase() !== "false";
 
 export default function TrainingAccessGate({ children }) {
   const { user, loading: authLoading, hasTrainingAccess, setHasTrainingAccess } = useAuth();

@@ -2,10 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 
 const up = readFileSync(
-  new URL(
-    "../backend/db/migrations/20260720001900_posthog_migration_ledger.sql",
-    import.meta.url,
-  ),
+  new URL("../backend/db/migrations/20260720001900_posthog_migration_ledger.sql", import.meta.url),
   "utf8",
 );
 const down = readFileSync(
@@ -34,18 +31,10 @@ describe("PostHog migration ledger contract", () => {
   });
 
   test("reclaims only pre-send leases and quarantines post-send expiry", () => {
-    expect(up).toMatch(
-      /lease_expires_at <= v_now[\s\S]*send_started_at IS NOT NULL/s,
-    );
-    expect(up).toMatch(
-      /status = 'uncertain'[\s\S]*claim_expired_after_send_started/s,
-    );
-    expect(up).toMatch(
-      /lease_expires_at <= v_now[\s\S]*send_started_at IS NULL/s,
-    );
-    expect(up).toMatch(
-      /WHERE run_id = p_run_id AND status = 'uncertain'[\s\S]*RETURN;/s,
-    );
+    expect(up).toMatch(/lease_expires_at <= v_now[\s\S]*send_started_at IS NOT NULL/s);
+    expect(up).toMatch(/status = 'uncertain'[\s\S]*claim_expired_after_send_started/s);
+    expect(up).toMatch(/lease_expires_at <= v_now[\s\S]*send_started_at IS NULL/s);
+    expect(up).toMatch(/WHERE run_id = p_run_id AND status = 'uncertain'[\s\S]*RETURN;/s);
     expect(up).toContain("FOR UPDATE SKIP LOCKED");
   });
 

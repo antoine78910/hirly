@@ -55,19 +55,13 @@ function snapshot(
   };
 }
 
-function repository(
-  read: FeedReadRepository["readIndexedCandidates"],
-): FeedReadRepository {
+function repository(read: FeedReadRepository["readIndexedCandidates"]): FeedReadRepository {
   return { readIndexedCandidates: read };
 }
 
 describe("Feed v2 indexed read service", () => {
   test("paginates with snapshot-bound cursors and stable score/group positions", async () => {
-    const rows = [
-      candidate("group-a", 0.9),
-      candidate("group-b", 0.8),
-      candidate("group-c", 0.7),
-    ];
+    const rows = [candidate("group-a", 0.9), candidate("group-b", 0.8), candidate("group-c", 0.7)];
     const calls: Array<{ candidateId: string; effectiveQuery: unknown; after: unknown }> = [];
     const service = new FeedV2ReadService(
       repository(async (input) => {
@@ -77,9 +71,7 @@ describe("Feed v2 indexed read service", () => {
           after: input.after,
         });
         const start = input.after
-          ? rows.findIndex(
-              (row) => row.canonicalGroupId === input.after?.canonicalGroupId,
-            ) + 1
+          ? rows.findIndex((row) => row.canonicalGroupId === input.after?.canonicalGroupId) + 1
           : 0;
         return snapshot(rows.slice(start), { hasMore: false });
       }),
@@ -87,10 +79,7 @@ describe("Feed v2 indexed read service", () => {
     );
 
     const first = await service.read({ assertion, limit: 2 });
-    expect(first.jobs.map((job) => job.canonicalGroupId)).toEqual([
-      "group-a",
-      "group-b",
-    ]);
+    expect(first.jobs.map((job) => job.canonicalGroupId)).toEqual(["group-a", "group-b"]);
     expect(first.nextCursor).not.toBeNull();
 
     const second = await service.read({
@@ -122,9 +111,9 @@ describe("Feed v2 indexed read service", () => {
     );
     const first = await service.read({ assertion, limit: 1 });
     version = "inventory-2";
-    await expect(
-      service.read({ assertion, cursor: first.nextCursor }),
-    ).rejects.toEqual(new FeedCursorError("stale_cursor"));
+    await expect(service.read({ assertion, cursor: first.nextCursor })).rejects.toEqual(
+      new FeedCursorError("stale_cursor"),
+    );
   });
 
   test("filters actioned, policy-hidden, blocked, and duplicate groups before diversity", async () => {
@@ -166,22 +155,16 @@ describe("Feed v2 indexed read service", () => {
   test.each([
     ["PROFILE_NOT_READY", snapshot([], { profileReady: false })],
     ["NO_MATCHING_INVENTORY", snapshot([])],
-    [
-      "ALL_MATCHES_ACTIONED",
-      snapshot([candidate("a", 1, { actionExcluded: true })]),
-    ],
-    [
-      "ALL_MATCHES_POLICY_HIDDEN",
-      snapshot([candidate("a", 1, { policyEligible: false })]),
-    ],
-    [
-      "ALL_MATCHES_BLOCKED",
-      snapshot([candidate("a", 1, { lifecycleEligible: false })]),
-    ],
+    ["ALL_MATCHES_ACTIONED", snapshot([candidate("a", 1, { actionExcluded: true })])],
+    ["ALL_MATCHES_POLICY_HIDDEN", snapshot([candidate("a", 1, { policyEligible: false })])],
+    ["ALL_MATCHES_BLOCKED", snapshot([candidate("a", 1, { lifecycleEligible: false })])],
   ] as const)("returns typed empty state %s", async (expected, state) => {
-    const service = new FeedV2ReadService(repository(async () => state), {
-      now: () => new Date("2026-07-21T12:00:00Z"),
-    });
+    const service = new FeedV2ReadService(
+      repository(async () => state),
+      {
+        now: () => new Date("2026-07-21T12:00:00Z"),
+      },
+    );
     const response = await service.read({ assertion });
     expect(response.jobs).toEqual([]);
     expect(response.emptyReason).toBe(expected);
@@ -202,13 +185,11 @@ describe("Feed v2 indexed read service", () => {
         assertion: { ...assertion, expiresAt: "2026-07-21T11:59:59Z" },
       }),
     ).rejects.toEqual(new FeedAuthorizationError("assertion_expired"));
-    await expect(
-      service.read({ assertion: { ...assertion, scopes: [] } }),
-    ).rejects.toEqual(new FeedAuthorizationError("feed_scope_required"));
+    await expect(service.read({ assertion: { ...assertion, scopes: [] } })).rejects.toEqual(
+      new FeedAuthorizationError("feed_scope_required"),
+    );
     expect(reads).toBe(0);
-    expect(Object.keys(repository(async () => snapshot([])))).toEqual([
-      "readIndexedCandidates",
-    ]);
+    expect(Object.keys(repository(async () => snapshot([])))).toEqual(["readIndexedCandidates"]);
   });
 
   test("rejects malformed cursors without touching inventory", async () => {
@@ -220,9 +201,9 @@ describe("Feed v2 indexed read service", () => {
       }),
       { now: () => new Date("2026-07-21T12:00:00Z") },
     );
-    await expect(
-      service.read({ assertion, cursor: "not-a-cursor" }),
-    ).rejects.toEqual(new FeedCursorError("invalid_cursor"));
+    await expect(service.read({ assertion, cursor: "not-a-cursor" })).rejects.toEqual(
+      new FeedCursorError("invalid_cursor"),
+    );
     expect(reads).toBe(0);
   });
   test("binds a cursor to the signed effective-query fingerprint before reading", async () => {
@@ -231,14 +212,16 @@ describe("Feed v2 indexed read service", () => {
         version: FEED_EFFECTIVE_QUERY_VERSION,
         role,
         radiusKm: 52,
-        locations: [{
-          label: "Paris, France",
-          country: "France",
-          countryCode: "FR",
-          placeId: null,
-          latitude: 48.8566,
-          longitude: 2.3522,
-        }],
+        locations: [
+          {
+            label: "Paris, France",
+            country: "France",
+            countryCode: "FR",
+            placeId: null,
+            latitude: 48.8566,
+            longitude: 2.3522,
+          },
+        ],
         countryCode: "FR",
         workModes: ["hybrid"],
         jobTypes: ["permanent"],
@@ -260,8 +243,7 @@ describe("Feed v2 indexed read service", () => {
       repository(async (input) => {
         reads += 1;
         return snapshot([candidate("group-a", 1), candidate("group-b", 0.5)], {
-          queryFingerprint:
-            input.effectiveQuery?.fingerprint ?? "candidate-profile",
+          queryFingerprint: input.effectiveQuery?.fingerprint ?? "candidate-profile",
         });
       }),
       { now: () => new Date("2026-07-21T12:00:00Z") },
@@ -269,11 +251,12 @@ describe("Feed v2 indexed read service", () => {
     const firstAssertion = { ...assertion, effectiveQuery: query("Fullstack Engineer") };
     const first = await service.read({ assertion: firstAssertion, limit: 1 });
     expect(first.nextCursor).not.toBeNull();
-    await expect(service.read({
-      assertion: { ...assertion, effectiveQuery: query("Backend Engineer") },
-      cursor: first.nextCursor,
-    })).rejects.toEqual(new FeedCursorError("stale_cursor"));
+    await expect(
+      service.read({
+        assertion: { ...assertion, effectiveQuery: query("Backend Engineer") },
+        cursor: first.nextCursor,
+      }),
+    ).rejects.toEqual(new FeedCursorError("stale_cursor"));
     expect(reads).toBe(1);
   });
-
 });

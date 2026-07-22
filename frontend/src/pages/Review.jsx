@@ -1,13 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import {
-  ArrowRight,
-  CheckCircle2,
-  Loader2,
-  MapPin,
-  ShieldCheck,
-} from "lucide-react";
+import { ArrowRight, CheckCircle2, Loader2, MapPin, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../lib/api";
 import { filterApplicationsForReview } from "../lib/applicationReview";
@@ -34,7 +28,10 @@ export default function Review() {
   const navigate = useNavigate();
   const { settings, updateSetting } = useAiSettings();
   const reviewEnabled = settings.reviewDocuments;
-  const reviewRow = useMemo(() => getAiSettingRows(t).find((row) => row.id === "reviewDocuments"), [t]);
+  const reviewRow = useMemo(
+    () => getAiSettingRows(t).find((row) => row.id === "reviewDocuments"),
+    [t],
+  );
   const [apps, setApps] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -110,7 +107,9 @@ export default function Review() {
               <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-violet-500/15 text-violet-400">
                 <ShieldCheck className="h-7 w-7" />
               </div>
-              <h2 className="mt-5 font-display text-xl font-bold shell-title">{t("review.disabledTitle")}</h2>
+              <h2 className="mt-5 font-display text-xl font-bold shell-title">
+                {t("review.disabledTitle")}
+              </h2>
               <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed shell-body">
                 {t("review.disabledBody")}
               </p>
@@ -124,7 +123,9 @@ export default function Review() {
               <div className="shell-surface mx-auto grid h-14 w-14 place-items-center rounded-2xl text-sprout-muted shadow-sm">
                 <CheckCircle2 className="h-7 w-7" />
               </div>
-              <h2 className="mt-5 font-display text-xl font-bold shell-title">{t("review.allCaughtUp")}</h2>
+              <h2 className="mt-5 font-display text-xl font-bold shell-title">
+                {t("review.allCaughtUp")}
+              </h2>
               <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed shell-body">
                 {t("review.emptyBody")}
               </p>

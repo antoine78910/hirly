@@ -15,7 +15,9 @@ export default function RolePicker({
   inline = false,
 }) {
   const light = variant === "light";
-  const labelClass = light ? "text-sm font-semibold text-zinc-700" : "text-sm font-semibold text-zinc-200";
+  const labelClass = light
+    ? "text-sm font-semibold text-zinc-700"
+    : "text-sm font-semibold text-zinc-200";
   const triggerClass = light
     ? "w-full h-11 rounded-xl bg-white border border-zinc-200 text-zinc-900 px-4 flex items-center justify-between text-left"
     : "w-full h-11 rounded-xl bg-sprout-surface-2 border border-sprout-border text-white px-4 flex items-center justify-between text-left";
@@ -29,13 +31,17 @@ export default function RolePicker({
   const listClass = light
     ? "max-h-[42vh] overflow-y-auto rounded-2xl border border-zinc-200 bg-white divide-y divide-zinc-100"
     : "max-h-[42vh] overflow-y-auto rounded-2xl border border-sprout-border bg-sprout-surface divide-y divide-sprout-border";
-  const emptyClass = light ? "px-4 py-5 text-sm text-zinc-500" : "px-4 py-5 text-sm text-sprout-muted";
+  const emptyClass = light
+    ? "px-4 py-5 text-sm text-zinc-500"
+    : "px-4 py-5 text-sm text-sprout-muted";
   const groupTitleClass = light
     ? "px-4 pb-2 text-[11px] uppercase tracking-[0.16em] text-zinc-500"
     : "px-4 pb-2 text-[11px] uppercase tracking-[0.16em] text-sprout-muted";
   const roleOnClass = sel.listOn;
   const roleOffClass = light ? sel.listOff : `${sel.listOff} text-zinc-700`;
-  const searchIconClass = light ? "w-4 h-4 text-zinc-400 absolute left-3 top-3.5" : "w-4 h-4 text-sprout-muted absolute left-3 top-3.5";
+  const searchIconClass = light
+    ? "w-4 h-4 text-zinc-400 absolute left-3 top-3.5"
+    : "w-4 h-4 text-sprout-muted absolute left-3 top-3.5";
 
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(inline);
@@ -52,12 +58,10 @@ export default function RolePicker({
     const matchingRoles = new Set(
       searchRoleSuggestions(q, { limit: 200, lang }).map((entry) => entry.role),
     );
-    return ROLE_GROUPS
-      .map((group) => ({
-        ...group,
-        roles: group.roles.filter((role) => matchingRoles.has(role)),
-      }))
-      .filter((group) => group.roles.length > 0);
+    return ROLE_GROUPS.map((group) => ({
+      ...group,
+      roles: group.roles.filter((role) => matchingRoles.has(role)),
+    })).filter((group) => group.roles.length > 0);
   }, [lang, query]);
 
   const trimmedQuery = query.trim();
@@ -100,8 +104,12 @@ export default function RolePicker({
 
   const roleLabel = isFrench(lang) ? "Métier ciblé" : "Target role";
   const searchLabel = isFrench(lang) ? "Rechercher ou saisir un métier" : "Search or enter a role";
-  const placeholder = isFrench(lang) ? "Ex. Coiffeur, Analyste crédit…" : "e.g. Hair stylist, Credit analyst…";
-  const choosePlaceholder = isFrench(lang) ? "Choisir ou saisir un métier" : "Choose or enter a role";
+  const placeholder = isFrench(lang)
+    ? "Ex. Coiffeur, Analyste crédit…"
+    : "e.g. Hair stylist, Credit analyst…";
+  const choosePlaceholder = isFrench(lang)
+    ? "Choisir ou saisir un métier"
+    : "Choose or enter a role";
 
   const suggestionsList = (
     <div className={listClass}>
@@ -137,7 +145,9 @@ export default function RolePicker({
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={() => selectRole(role)}
                   className={`w-full px-4 py-2.5 text-left text-sm font-medium transition-colors ${
-                    displayValue === (translateRoleLabel(role, lang) || role) ? roleOnClass : roleOffClass
+                    displayValue === (translateRoleLabel(role, lang) || role)
+                      ? roleOnClass
+                      : roleOffClass
                   }`}
                   data-testid={`${testId}-role`}
                 >
@@ -173,7 +183,7 @@ export default function RolePicker({
             ? "Toute saisie fonctionne, même si le métier n'est pas dans la liste."
             : "Any entry works, even if the role is not in the list."}
         </p>
-        {(trimmedQuery.length >= 1) ? suggestionsList : null}
+        {trimmedQuery.length >= 1 ? suggestionsList : null}
       </div>
     );
   }
@@ -188,10 +198,10 @@ export default function RolePicker({
           className={triggerClass}
           data-testid={`${testId}-toggle`}
         >
-          <span className={valueClass}>
-            {displayValue || choosePlaceholder}
-          </span>
-          <ChevronDown className={`${chevronClass} transition-transform ${open ? "rotate-180" : ""}`} />
+          <span className={valueClass}>{displayValue || choosePlaceholder}</span>
+          <ChevronDown
+            className={`${chevronClass} transition-transform ${open ? "rotate-180" : ""}`}
+          />
         </button>
       </div>
 

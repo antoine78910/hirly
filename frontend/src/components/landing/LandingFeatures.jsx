@@ -72,9 +72,7 @@ function PersonalizationMock({ generatingLabel }) {
     <div className="relative mt-6 overflow-hidden rounded-xl border border-zinc-200 bg-zinc-50">
       <div className="border-b border-zinc-200 bg-white px-4 py-3">
         <div className="flex items-center gap-2">
-          <span
-            className="bg-[length:200%_100%] bg-gradient-to-r from-linkedin via-violet-500 to-linkedin bg-clip-text text-sm font-semibold text-transparent animate-[landing-shimmer_1.8s_linear_infinite]"
-          >
+          <span className="bg-[length:200%_100%] bg-gradient-to-r from-linkedin via-violet-500 to-linkedin bg-clip-text text-sm font-semibold text-transparent animate-[landing-shimmer_1.8s_linear_infinite]">
             Hirly AI
           </span>
           <Loader2 className="h-3.5 w-3.5 animate-spin text-linkedin/70" aria-hidden />
@@ -135,7 +133,9 @@ function AiApplyMock({ successLabel }) {
 
 function TrackerCard({ company, role, location, status, statusTone, activity, className = "" }) {
   return (
-    <article className={`shrink-0 rounded-xl border border-zinc-200 bg-zinc-50/80 p-4 sm:w-[240px] ${className || "w-[min(82vw,260px)]"}`}>
+    <article
+      className={`shrink-0 rounded-xl border border-zinc-200 bg-zinc-50/80 p-4 sm:w-[240px] ${className || "w-[min(82vw,260px)]"}`}
+    >
       <div className="flex items-start gap-3">
         <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-white text-xs font-bold text-linkedin shadow-sm">
           {company.slice(0, 1)}
@@ -168,7 +168,11 @@ function TrackingPhoneGallery({ cards }) {
     <div className="trust-marquee-mask mt-6 overflow-hidden rounded-xl border border-zinc-200 bg-zinc-50 py-4 lg:hidden">
       <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {cards.map((card) => (
-          <TrackerCard key={card.company} {...card} className="w-[min(82vw,260px)] shrink-0 snap-center" />
+          <TrackerCard
+            key={card.company}
+            {...card}
+            className="w-[min(82vw,260px)] shrink-0 snap-center"
+          />
         ))}
       </div>
     </div>
@@ -179,7 +183,10 @@ function TrackingMarquee({ cards }) {
   const copies = 3;
   return (
     <div className="trust-marquee-mask mt-6 hidden overflow-hidden rounded-xl border border-zinc-200 bg-zinc-50 py-4 lg:block">
-      <div className="pain-marquee-left flex w-max flex-nowrap gap-3" style={{ animationDuration: "42s" }}>
+      <div
+        className="pain-marquee-left flex w-max flex-nowrap gap-3"
+        style={{ animationDuration: "42s" }}
+      >
         {Array.from({ length: copies }, (_, copy) => (
           <div key={copy} className="flex gap-3 pr-3" aria-hidden={copy > 0 || undefined}>
             {cards.map((card) => (
@@ -221,8 +228,7 @@ export default function LandingFeatures({ lang }) {
         <div className="max-w-3xl">
           <FeatureBadge>{copy.badge}</FeatureBadge>
           <h2 className="mt-5 font-display text-3xl font-black tracking-tight text-zinc-900 sm:text-4xl lg:text-[2.65rem] lg:leading-[1.1]">
-            {copy.title}{" "}
-            <span className="text-zinc-500">{copy.titleMuted}</span>
+            {copy.title} <span className="text-zinc-500">{copy.titleMuted}</span>
           </h2>
           <p className="mt-4 max-w-2xl text-sm leading-relaxed text-zinc-600 sm:text-base">
             {copy.subtitle}

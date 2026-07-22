@@ -91,7 +91,9 @@ export default function CreatorApply() {
       case "email":
         return /\S+@\S+\.\S+/.test(form.email.trim());
       case "location":
-        return Boolean(form.country) && (form.country !== "other" || form.countryOther.trim().length > 0);
+        return (
+          Boolean(form.country) && (form.country !== "other" || form.countryOther.trim().length > 0)
+        );
       default:
         return true;
     }
@@ -123,7 +125,9 @@ export default function CreatorApply() {
         instagram_handle: form.instagram.trim() || null,
         has_company: form.hasCompany || null,
         whatsapp_country: form.whatsappCountry || null,
-        whatsapp_number: form.whatsappNumber ? `${form.whatsappDial} ${form.whatsappNumber}`.trim() : null,
+        whatsapp_number: form.whatsappNumber
+          ? `${form.whatsappDial} ${form.whatsappNumber}`.trim()
+          : null,
         country: form.country === "other" ? form.countryOther.trim() : form.country,
         referred_by: form.referredBy.trim() || null,
         message: form.message.trim() || null,
@@ -305,7 +309,11 @@ function CompanyStep({ form, set }) {
       <StepTitle>Es-tu propriétaire d'une entreprise ?</StepTitle>
       <div className="space-y-3">
         {options.map((opt) => (
-          <RadioCard key={opt.id} selected={form.hasCompany === opt.id} onClick={() => set({ hasCompany: opt.id })}>
+          <RadioCard
+            key={opt.id}
+            selected={form.hasCompany === opt.id}
+            onClick={() => set({ hasCompany: opt.id })}
+          >
             {opt.label}
           </RadioCard>
         ))}
@@ -528,7 +536,8 @@ function FinalConfirmation() {
         Candidature envoyée !
       </h1>
       <p className="text-zinc-500 max-w-md mx-auto mb-8">
-        Merci ! Nous examinons ton profil et te recontactons par WhatsApp sous 48h si ta candidature est acceptée.
+        Merci ! Nous examinons ton profil et te recontactons par WhatsApp sous 48h si ta candidature
+        est acceptée.
       </p>
       <Link
         to="/"

@@ -143,8 +143,8 @@ function normalizeSegment(segment: SupplySegment, path: string): SupplySegment {
   const countryCode = nonEmpty(segment.countryCode, `${path}.countryCode`).toUpperCase();
   if (!/^[A-Z]{2}$/.test(countryCode)) fail(`${path}.countryCode must be ISO alpha-2`);
   if (
-    segment.radiusKm !== undefined
-    && (!Number.isFinite(segment.radiusKm) || segment.radiusKm <= 0)
+    segment.radiusKm !== undefined &&
+    (!Number.isFinite(segment.radiusKm) || segment.radiusKm <= 0)
   ) {
     fail(`${path}.radiusKm must be a positive finite number`);
   }
@@ -157,10 +157,12 @@ function normalizeSegment(segment: SupplySegment, path: string): SupplySegment {
 }
 
 function sameSegment(left: SupplySegment, right: SupplySegment): boolean {
-  return left.countryCode === right.countryCode
-    && left.cohortId === right.cohortId
-    && left.roleFamilyId === right.roleFamilyId
-    && left.radiusKm === right.radiusKm;
+  return (
+    left.countryCode === right.countryCode &&
+    left.cohortId === right.cohortId &&
+    left.roleFamilyId === right.roleFamilyId &&
+    left.radiusKm === right.radiusKm
+  );
 }
 
 function canonicalize(value: unknown): unknown {
@@ -193,10 +195,7 @@ function normalizeThreshold(
       threshold.minimumFreshVisibleCanonicalGroups,
       "threshold.minimumFreshVisibleCanonicalGroups",
     ),
-    approvedByProduct: nonEmpty(
-      threshold.approvedByProduct,
-      "threshold.approvedByProduct",
-    ),
+    approvedByProduct: nonEmpty(threshold.approvedByProduct, "threshold.approvedByProduct"),
     approvedAt: timestamp(threshold.approvedAt, "threshold.approvedAt"),
   };
   if (!sameSegment(normalized.segment, segment)) {
@@ -222,10 +221,7 @@ function normalizeException(
       exception.minimumFreshVisibleCanonicalGroups,
       "exception.minimumFreshVisibleCanonicalGroups",
     ),
-    approvedByProduct: nonEmpty(
-      exception.approvedByProduct,
-      "exception.approvedByProduct",
-    ),
+    approvedByProduct: nonEmpty(exception.approvedByProduct, "exception.approvedByProduct"),
     approvedAt: timestamp(exception.approvedAt, "exception.approvedAt"),
     expiresAt: timestamp(exception.expiresAt, "exception.expiresAt"),
     reason: nonEmpty(exception.reason, "exception.reason"),
@@ -234,8 +230,7 @@ function normalizeException(
     fail("exception segment does not match scorecard segment");
   }
   if (
-    normalized.minimumFreshVisibleCanonicalGroups
-      >= threshold.minimumFreshVisibleCanonicalGroups
+    normalized.minimumFreshVisibleCanonicalGroups >= threshold.minimumFreshVisibleCanonicalGroups
   ) {
     fail("exception minimum must be lower than the approved threshold");
   }
@@ -287,10 +282,7 @@ export function buildSupplyReadinessScorecard(
   if (input.canonicalIdentityContract !== "canonical_group_id_only") {
     fail("canonicalIdentityContract must exclude provider fallback identities");
   }
-  if (
-    input.eligibilityContract
-      !== "active_valid_fresh_visible_canonical_groups"
-  ) {
+  if (input.eligibilityContract !== "active_valid_fresh_visible_canonical_groups") {
     fail("eligibilityContract must bind active, valid, fresh, visible groups");
   }
   const evidenceBinding = {
@@ -301,10 +293,7 @@ export function buildSupplyReadinessScorecard(
   };
 
   if (input.status === "BLOCKED_EXTERNAL") {
-    const blockerReason = nonEmpty(
-      input.blockerReason ?? "",
-      "blockerReason",
-    );
+    const blockerReason = nonEmpty(input.blockerReason ?? "", "blockerReason");
     const unsigned: Omit<SupplyReadinessScorecard, "digest"> = {
       schemaVersion: "hirly.supply-readiness.v1",
       status: "BLOCKED",
@@ -318,8 +307,7 @@ export function buildSupplyReadinessScorecard(
       freshnessCutoff,
       segment,
       threshold,
-      appliedMinimumFreshVisibleCanonicalGroups:
-        threshold.minimumFreshVisibleCanonicalGroups,
+      appliedMinimumFreshVisibleCanonicalGroups: threshold.minimumFreshVisibleCanonicalGroups,
       counts: {
         segmentCanonicalGroups: null,
         freshCanonicalGroups: null,
@@ -366,14 +354,14 @@ export function buildSupplyReadinessScorecard(
       fail(`observations[${index}].visible must be boolean`);
     }
     if (
-      !Array.isArray(observation.cohortIds)
-      || observation.cohortIds.some((value) => typeof value !== "string")
+      !Array.isArray(observation.cohortIds) ||
+      observation.cohortIds.some((value) => typeof value !== "string")
     ) {
       fail(`observations[${index}].cohortIds must be a string array`);
     }
     if (
-      !Array.isArray(observation.roleFamilyIds)
-      || observation.roleFamilyIds.some((value) => typeof value !== "string")
+      !Array.isArray(observation.roleFamilyIds) ||
+      observation.roleFamilyIds.some((value) => typeof value !== "string")
     ) {
       fail(`observations[${index}].roleFamilyIds must be a string array`);
     }
@@ -381,9 +369,11 @@ export function buildSupplyReadinessScorecard(
       fail(`observations[${index}] cannot be visible with a blocked route`);
     }
     if (
-      countryCode === segment.countryCode
-      && observation.cohortIds.map((value) => value.trim().toLowerCase()).includes(segment.cohortId)
-      && observation.roleFamilyIds.map((value) => value.trim().toLowerCase()).includes(segment.roleFamilyId)
+      countryCode === segment.countryCode &&
+      observation.cohortIds.map((value) => value.trim().toLowerCase()).includes(segment.cohortId) &&
+      observation.roleFamilyIds
+        .map((value) => value.trim().toLowerCase())
+        .includes(segment.roleFamilyId)
     ) {
       matching.push({ ...observation, canonicalGroupId, countryCode });
     }
@@ -391,9 +381,7 @@ export function buildSupplyReadinessScorecard(
 
   const fresh = matching.filter((observation) => observation.fresh);
   const visible = matching.filter((observation) => observation.visible);
-  const freshVisible = matching.filter(
-    (observation) => observation.fresh && observation.visible,
-  );
+  const freshVisible = matching.filter((observation) => observation.fresh && observation.visible);
   const freshVisibleByFulfillmentRoute = Object.fromEntries(
     fulfillmentRoutes.map((route) => [
       route,
@@ -405,12 +393,15 @@ export function buildSupplyReadinessScorecard(
   const normalizedException = options.exception
     ? normalizeException(options.exception, segment, threshold, evaluatedAt)
     : null;
-  const exceptionReady = !baseReady
-    && normalizedException?.active === true
-    && freshVisible.length >= normalizedException.minimumFreshVisibleCanonicalGroups;
-  const status = baseReady ? "READY" as const
-    : exceptionReady ? "EXCEPTION" as const
-    : "BLOCKED" as const;
+  const exceptionReady =
+    !baseReady &&
+    normalizedException?.active === true &&
+    freshVisible.length >= normalizedException.minimumFreshVisibleCanonicalGroups;
+  const status = baseReady
+    ? ("READY" as const)
+    : exceptionReady
+      ? ("EXCEPTION" as const)
+      : ("BLOCKED" as const);
   const failedGates: string[] = [];
   if (status === "BLOCKED") {
     failedGates.push("fresh_visible_canonical_groups_below_approved_minimum");
@@ -420,18 +411,19 @@ export function buildSupplyReadinessScorecard(
       failedGates.push("fresh_visible_canonical_groups_below_exception_minimum");
     }
   }
-  const appliedException = exceptionReady && normalizedException
-    ? {
-        exceptionId: normalizedException.exceptionId,
-        name: normalizedException.name,
-        segment: normalizedException.segment,
-        minimumFreshVisibleCanonicalGroups:
-          normalizedException.minimumFreshVisibleCanonicalGroups,
-        approvedByProduct: normalizedException.approvedByProduct,
-        approvedAt: normalizedException.approvedAt,
-        expiresAt: normalizedException.expiresAt,
-      }
-    : null;
+  const appliedException =
+    exceptionReady && normalizedException
+      ? {
+          exceptionId: normalizedException.exceptionId,
+          name: normalizedException.name,
+          segment: normalizedException.segment,
+          minimumFreshVisibleCanonicalGroups:
+            normalizedException.minimumFreshVisibleCanonicalGroups,
+          approvedByProduct: normalizedException.approvedByProduct,
+          approvedAt: normalizedException.approvedAt,
+          expiresAt: normalizedException.expiresAt,
+        }
+      : null;
   const unsigned: Omit<SupplyReadinessScorecard, "digest"> = {
     schemaVersion: "hirly.supply-readiness.v1",
     status,
@@ -457,9 +449,10 @@ export function buildSupplyReadinessScorecard(
     },
     appliedException,
     failedGates,
-    blockerReason: status === "BLOCKED"
-      ? "Supply evidence does not meet the approved threshold or an active Product exception."
-      : null,
+    blockerReason:
+      status === "BLOCKED"
+        ? "Supply evidence does not meet the approved threshold or an active Product exception."
+        : null,
     safeguards: safeguards(),
   };
   return { ...unsigned, digest: digest(unsigned) };

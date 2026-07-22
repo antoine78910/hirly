@@ -56,14 +56,27 @@ export default function AdminOverview() {
     <AdminShell
       title="Overview"
       subtitle="Operational health across users and applications."
-      actions={<Button variant="outline" onClick={load} disabled={loading}>{loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}Refresh</Button>}
+      actions={
+        <Button variant="outline" onClick={load} disabled={loading}>
+          {loading ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <RefreshCw className="h-4 w-4" />
+          )}
+          Refresh
+        </Button>
+      }
     >
       {loading ? (
-        <div className="grid min-h-64 place-items-center"><Loader2 className="h-6 w-6 animate-spin text-zinc-500" /></div>
+        <div className="grid min-h-64 place-items-center">
+          <Loader2 className="h-6 w-6 animate-spin text-zinc-500" />
+        </div>
       ) : accessDenied ? (
         <AdminAccessDenied />
       ) : error ? (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">{error}</div>
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+          {error}
+        </div>
       ) : (
         <div className="space-y-6">
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -74,34 +87,57 @@ export default function AdminOverview() {
             <MetricCard title="Action required" value={metrics.action_required} />
             <MetricCard title="Failed / blocked" value={metrics.failed_blocked} />
             <MetricCard title="Submitted" value={metrics.submitted} />
-            <MetricCard title="Generated to submitted" value={conversion.submitted} sub={`${fmt(conversion.generated)} generated · ${fmt(conversion.prepared)} prepared`} />
+            <MetricCard
+              title="Generated to submitted"
+              value={conversion.submitted}
+              sub={`${fmt(conversion.generated)} generated · ${fmt(conversion.prepared)} prepared`}
+            />
           </div>
 
           <div className="grid gap-5 lg:grid-cols-2">
             <section className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm">
               <h2 className="font-display text-lg font-bold">Top blockers</h2>
               <div className="mt-4 space-y-2">
-                {(data.top_blockers || []).length ? data.top_blockers.map((item) => (
-                  <div key={item.label} className="flex items-center justify-between rounded-md bg-zinc-50 px-3 py-2 text-sm">
-                    <span>{item.label}</span>
-                    <span className="font-semibold">{fmt(item.count)}</span>
-                  </div>
-                )) : <p className="text-sm text-zinc-500">No blockers recorded.</p>}
+                {(data.top_blockers || []).length ? (
+                  data.top_blockers.map((item) => (
+                    <div
+                      key={item.label}
+                      className="flex items-center justify-between rounded-md bg-zinc-50 px-3 py-2 text-sm"
+                    >
+                      <span>{item.label}</span>
+                      <span className="font-semibold">{fmt(item.count)}</span>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-sm text-zinc-500">No blockers recorded.</p>
+                )}
               </div>
             </section>
 
             <section className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm">
               <h2 className="font-display text-lg font-bold">Latest needing attention</h2>
               <div className="mt-4 space-y-2">
-                {(data.latest_attention || []).length ? data.latest_attention.map((app) => (
-                  <Link key={app.application_id} to={`/admin/applications/${app.application_id}`} className="block rounded-md bg-zinc-50 px-3 py-2 text-sm hover:bg-zinc-100">
-                    <div className="flex justify-between gap-3">
-                      <span className="font-semibold">{app.company || "Unknown"}</span>
-                      <span className="capitalize text-zinc-500">{label(app.submission_status)}</span>
-                    </div>
-                    <p className="mt-1 text-zinc-500">{app.title || "Unknown role"} · {app.user_email || app.user_id}</p>
-                  </Link>
-                )) : <p className="text-sm text-zinc-500">No applications currently need attention.</p>}
+                {(data.latest_attention || []).length ? (
+                  data.latest_attention.map((app) => (
+                    <Link
+                      key={app.application_id}
+                      to={`/admin/applications/${app.application_id}`}
+                      className="block rounded-md bg-zinc-50 px-3 py-2 text-sm hover:bg-zinc-100"
+                    >
+                      <div className="flex justify-between gap-3">
+                        <span className="font-semibold">{app.company || "Unknown"}</span>
+                        <span className="capitalize text-zinc-500">
+                          {label(app.submission_status)}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-zinc-500">
+                        {app.title || "Unknown role"} · {app.user_email || app.user_id}
+                      </p>
+                    </Link>
+                  ))
+                ) : (
+                  <p className="text-sm text-zinc-500">No applications currently need attention.</p>
+                )}
               </div>
             </section>
           </div>

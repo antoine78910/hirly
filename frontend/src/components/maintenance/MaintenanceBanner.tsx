@@ -12,7 +12,8 @@ const COPY = {
   },
   fr: {
     title: "Maintenance en cours",
-    message: "Certaines fonctionnalités peuvent être temporairement indisponibles. Nous rétablissons le service au plus vite.",
+    message:
+      "Certaines fonctionnalités peuvent être temporairement indisponibles. Nous rétablissons le service au plus vite.",
   },
 } as const;
 
@@ -34,8 +35,7 @@ export default function MaintenanceBanner() {
       <div className="mx-auto flex max-w-6xl items-start justify-center gap-2 sm:items-center">
         <Wrench aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0 sm:mt-0" />
         <p className="text-left text-sm leading-5 sm:text-center">
-          <strong className="font-semibold">{copy.title}.</strong>{" "}
-          <span>{copy.message}</span>
+          <strong className="font-semibold">{copy.title}.</strong> <span>{copy.message}</span>
         </p>
       </div>
     </aside>

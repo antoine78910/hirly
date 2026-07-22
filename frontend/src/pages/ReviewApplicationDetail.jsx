@@ -1,14 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { motion } from "framer-motion";
-import {
-  ArrowLeft,
-  ChevronRight,
-  FileText,
-  Loader2,
-  Mail,
-  MapPin,
-} from "lucide-react";
+import { ArrowLeft, ChevronRight, FileText, Loader2, Mail, MapPin } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../lib/api";
 import { useAiSettings } from "../hooks/useAiSettings";
@@ -138,11 +131,15 @@ export default function ReviewApplicationDetail() {
     if (!application?.application_id || source === cvSource || cvSourceSaving) return;
     setCvSourceSaving(true);
     try {
-      const { data } = await api.post(`/applications/${application.application_id}/cv-source`, { source });
+      const { data } = await api.post(`/applications/${application.application_id}/cv-source`, {
+        source,
+      });
       setApplication(data);
     } catch (e) {
       const detail = e?.response?.data?.detail;
-      toast.error(detail?.message || (typeof detail === "string" ? detail : t("review.cvSourceUpdateError")));
+      toast.error(
+        detail?.message || (typeof detail === "string" ? detail : t("review.cvSourceUpdateError")),
+      );
     } finally {
       setCvSourceSaving(false);
     }
@@ -165,7 +162,9 @@ export default function ReviewApplicationDetail() {
       toast.success(t("review.coverLetterSaved"));
     } catch (e) {
       const detail = e?.response?.data?.detail;
-      toast.error(detail?.message || (typeof detail === "string" ? detail : t("review.coverLetterSaveError")));
+      toast.error(
+        detail?.message || (typeof detail === "string" ? detail : t("review.coverLetterSaveError")),
+      );
     } finally {
       setSavingCoverLetter(false);
     }
@@ -193,11 +192,15 @@ export default function ReviewApplicationDetail() {
   };
 
   const updateExperienceField = (index, field, value) => {
-    setCvExperienceDraft((prev) => prev.map((entry, i) => (i === index ? { ...entry, [field]: value } : entry)));
+    setCvExperienceDraft((prev) =>
+      prev.map((entry, i) => (i === index ? { ...entry, [field]: value } : entry)),
+    );
   };
 
   const updateEducationField = (index, field, value) => {
-    setCvEducationDraft((prev) => prev.map((entry, i) => (i === index ? { ...entry, [field]: value } : entry)));
+    setCvEducationDraft((prev) =>
+      prev.map((entry, i) => (i === index ? { ...entry, [field]: value } : entry)),
+    );
   };
 
   const saveCv = async () => {
@@ -210,17 +213,25 @@ export default function ReviewApplicationDetail() {
           company: entry.company,
           location: entry.location,
           duration: entry.duration,
-          highlights: entry.highlightsText.split("\n").map((line) => line.trim()).filter(Boolean),
+          highlights: entry.highlightsText
+            .split("\n")
+            .map((line) => line.trim())
+            .filter(Boolean),
         })),
         education: cvEducationDraft,
-        languages: cvLanguagesDraft.split("\n").map((line) => line.trim()).filter(Boolean),
+        languages: cvLanguagesDraft
+          .split("\n")
+          .map((line) => line.trim())
+          .filter(Boolean),
       });
       setApplication(data);
       setEditingCv(false);
       toast.success(t("review.cvSaved"));
     } catch (e) {
       const detail = e?.response?.data?.detail;
-      toast.error(detail?.message || (typeof detail === "string" ? detail : t("review.cvSaveError")));
+      toast.error(
+        detail?.message || (typeof detail === "string" ? detail : t("review.cvSaveError")),
+      );
     } finally {
       setSavingCv(false);
     }
@@ -252,7 +263,9 @@ export default function ReviewApplicationDetail() {
       navigate("/review", { replace: true });
     } catch (e) {
       const detail = e?.response?.data?.detail;
-      toast.error(detail?.message || (typeof detail === "string" ? detail : t("review.submitError")));
+      toast.error(
+        detail?.message || (typeof detail === "string" ? detail : t("review.submitError")),
+      );
     } finally {
       setSubmitting(false);
     }
@@ -265,7 +278,11 @@ export default function ReviewApplicationDetail() {
       <BrandHeader />
 
       <AppPageScroll withBottomNavPad={!isReader}>
-        <div className={isReader ? "mx-auto w-full max-w-4xl px-4 py-4 md:px-8 md:py-6" : APP_CONTENT_WIDTH}>
+        <div
+          className={
+            isReader ? "mx-auto w-full max-w-4xl px-4 py-4 md:px-8 md:py-6" : APP_CONTENT_WIDTH
+          }
+        >
           <div className="mb-4 flex items-center gap-2">
             <Link
               to={isReader ? `/review/${applicationId}` : "/review"}
@@ -306,7 +323,9 @@ export default function ReviewApplicationDetail() {
                             key={option.value}
                             type="button"
                             onClick={() => changeCvSource(option.value)}
-                            disabled={cvSourceSaving || (option.value === "original" && !hasOriginalCv)}
+                            disabled={
+                              cvSourceSaving || (option.value === "original" && !hasOriginalCv)
+                            }
                             data-testid={`cv-source-${option.value}`}
                             className={`rounded-full px-4 py-1.5 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
                               cvSource === option.value
@@ -348,39 +367,54 @@ export default function ReviewApplicationDetail() {
                       <div className="ph-no-capture space-y-6" data-testid="cv-edit-form">
                         {cvExperienceDraft.length > 0 ? (
                           <div>
-                            <h3 className="mb-2 text-xs font-bold uppercase tracking-wide shell-body">{t("review.experience")}</h3>
+                            <h3 className="mb-2 text-xs font-bold uppercase tracking-wide shell-body">
+                              {t("review.experience")}
+                            </h3>
                             <div className="space-y-4">
                               {cvExperienceDraft.map((entry, index) => (
-                                <div key={index} className="shell-surface space-y-2 rounded-2xl border shell-border p-3">
+                                <div
+                                  key={index}
+                                  className="shell-surface space-y-2 rounded-2xl border shell-border p-3"
+                                >
                                   <div className="grid grid-cols-2 gap-2">
                                     <input
                                       className="rounded-lg border shell-border bg-transparent px-3 py-2 text-sm"
                                       placeholder={t("review.role")}
                                       value={entry.role}
-                                      onChange={(e) => updateExperienceField(index, "role", e.target.value)}
+                                      onChange={(e) =>
+                                        updateExperienceField(index, "role", e.target.value)
+                                      }
                                     />
                                     <input
                                       className="rounded-lg border shell-border bg-transparent px-3 py-2 text-sm"
                                       placeholder={t("review.duration")}
                                       value={entry.duration}
-                                      onChange={(e) => updateExperienceField(index, "duration", e.target.value)}
+                                      onChange={(e) =>
+                                        updateExperienceField(index, "duration", e.target.value)
+                                      }
                                     />
                                     <input
                                       className="rounded-lg border shell-border bg-transparent px-3 py-2 text-sm"
                                       placeholder={t("review.company")}
                                       value={entry.company}
-                                      onChange={(e) => updateExperienceField(index, "company", e.target.value)}
+                                      onChange={(e) =>
+                                        updateExperienceField(index, "company", e.target.value)
+                                      }
                                     />
                                     <input
                                       className="rounded-lg border shell-border bg-transparent px-3 py-2 text-sm"
                                       placeholder={t("review.location")}
                                       value={entry.location}
-                                      onChange={(e) => updateExperienceField(index, "location", e.target.value)}
+                                      onChange={(e) =>
+                                        updateExperienceField(index, "location", e.target.value)
+                                      }
                                     />
                                   </div>
                                   <Textarea
                                     value={entry.highlightsText}
-                                    onChange={(e) => updateExperienceField(index, "highlightsText", e.target.value)}
+                                    onChange={(e) =>
+                                      updateExperienceField(index, "highlightsText", e.target.value)
+                                    }
                                     rows={4}
                                     placeholder={t("review.highlightsHint")}
                                     className="text-sm"
@@ -393,27 +427,38 @@ export default function ReviewApplicationDetail() {
 
                         {cvEducationDraft.length > 0 ? (
                           <div>
-                            <h3 className="mb-2 text-xs font-bold uppercase tracking-wide shell-body">{t("review.education")}</h3>
+                            <h3 className="mb-2 text-xs font-bold uppercase tracking-wide shell-body">
+                              {t("review.education")}
+                            </h3>
                             <div className="space-y-3">
                               {cvEducationDraft.map((entry, index) => (
-                                <div key={index} className="shell-surface grid grid-cols-3 gap-2 rounded-2xl border shell-border p-3">
+                                <div
+                                  key={index}
+                                  className="shell-surface grid grid-cols-3 gap-2 rounded-2xl border shell-border p-3"
+                                >
                                   <input
                                     className="rounded-lg border shell-border bg-transparent px-3 py-2 text-sm"
                                     placeholder={t("review.degree")}
                                     value={entry.degree}
-                                    onChange={(e) => updateEducationField(index, "degree", e.target.value)}
+                                    onChange={(e) =>
+                                      updateEducationField(index, "degree", e.target.value)
+                                    }
                                   />
                                   <input
                                     className="rounded-lg border shell-border bg-transparent px-3 py-2 text-sm"
                                     placeholder={t("review.school")}
                                     value={entry.school}
-                                    onChange={(e) => updateEducationField(index, "school", e.target.value)}
+                                    onChange={(e) =>
+                                      updateEducationField(index, "school", e.target.value)
+                                    }
                                   />
                                   <input
                                     className="rounded-lg border shell-border bg-transparent px-3 py-2 text-sm"
                                     placeholder={t("review.year")}
                                     value={entry.year}
-                                    onChange={(e) => updateEducationField(index, "year", e.target.value)}
+                                    onChange={(e) =>
+                                      updateEducationField(index, "year", e.target.value)
+                                    }
                                   />
                                 </div>
                               ))}
@@ -422,7 +467,9 @@ export default function ReviewApplicationDetail() {
                         ) : null}
 
                         <div>
-                          <h3 className="mb-2 text-xs font-bold uppercase tracking-wide shell-body">{t("review.languages")}</h3>
+                          <h3 className="mb-2 text-xs font-bold uppercase tracking-wide shell-body">
+                            {t("review.languages")}
+                          </h3>
                           <Textarea
                             value={cvLanguagesDraft}
                             onChange={(e) => setCvLanguagesDraft(e.target.value)}
@@ -443,7 +490,9 @@ export default function ReviewApplicationDetail() {
                     )}
                   </div>
                 ) : (
-                  <p className="py-10 text-center text-sm shell-body">{t("tracker.cvUnavailable")}</p>
+                  <p className="py-10 text-center text-sm shell-body">
+                    {t("tracker.cvUnavailable")}
+                  </p>
                 )
               ) : hasCover ? (
                 <div>
@@ -463,12 +512,18 @@ export default function ReviewApplicationDetail() {
                           disabled={savingCoverLetter}
                           data-testid="cover-letter-save"
                         >
-                          {savingCoverLetter ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                          {savingCoverLetter ? (
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          ) : null}
                           {t("review.saveCoverLetter")}
                         </Button>
                       </div>
                     ) : (
-                      <Button variant="outline" onClick={startEditCoverLetter} data-testid="cover-letter-edit">
+                      <Button
+                        variant="outline"
+                        onClick={startEditCoverLetter}
+                        data-testid="cover-letter-edit"
+                      >
                         {t("review.editCoverLetter")}
                       </Button>
                     )}
@@ -491,7 +546,9 @@ export default function ReviewApplicationDetail() {
                   )}
                 </div>
               ) : (
-                <p className="py-10 text-center text-sm shell-body">{t("tracker.coverUnavailable")}</p>
+                <p className="py-10 text-center text-sm shell-body">
+                  {t("tracker.coverUnavailable")}
+                </p>
               )}
             </div>
           ) : (
@@ -516,9 +573,7 @@ export default function ReviewApplicationDetail() {
                 </div>
               </div>
 
-              <p className="mt-5 text-sm leading-relaxed shell-body">
-                {t("review.pageHint")}
-              </p>
+              <p className="mt-5 text-sm leading-relaxed shell-body">{t("review.pageHint")}</p>
 
               <div className="mt-6 space-y-4">
                 {hasCv ? (

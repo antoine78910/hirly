@@ -70,7 +70,15 @@ describe("DesktopJobCard", () => {
     expect(container.querySelector("[data-testid='job-match-badge']")).not.toBeNull();
 
     const text = container.textContent;
-    ["Type de contrat", "CDI", "Contrat travail", "Durée du travail", "Travail en journée", "Expérience", "Débutant accepté"].forEach((value) => {
+    [
+      "Type de contrat",
+      "CDI",
+      "Contrat travail",
+      "Durée du travail",
+      "Travail en journée",
+      "Expérience",
+      "Débutant accepté",
+    ].forEach((value) => {
       expect(text.split(value).length - 1).toBe(1);
     });
   });

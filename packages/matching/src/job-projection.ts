@@ -98,9 +98,14 @@ function read(source: Record<string, unknown>, ...keys: string[]): unknown {
 }
 
 function contractTypes(data: Record<string, unknown>): string[] {
-  return strings(read(data, "contractTypes", "contract_types", "contractType", "contract_type"), 16).map(
+  return strings(
+    read(data, "contractTypes", "contract_types", "contractType", "contract_type"),
+    16,
+  ).map(
     (value) =>
-      ({ cdi: "permanent", permanent: "permanent", cdd: "fixed-term", stage: "internship" })[value] ?? value,
+      ({ cdi: "permanent", permanent: "permanent", cdd: "fixed-term", stage: "internship" })[
+        value
+      ] ?? value,
   );
 }
 
@@ -130,12 +135,14 @@ const INDUSTRY_ALIASES: Array<[string, RegExp]> = [
 
 function sectorIds(source: JobProjectionSource, families: string[]): string[] {
   const explicit = strings(read(source.data, "sectorIds", "sector_ids", "sectors", "sector"), 32);
-  return [...new Set([
-    ...explicit,
-    ...(families.includes("software-engineering") ? ["software-engineering"] : []),
-    ...(families.includes("data-engineering") ? ["data-analytics"] : []),
-    ...(families.includes("product-management") ? ["product-management"] : []),
-  ])].sort();
+  return [
+    ...new Set([
+      ...explicit,
+      ...(families.includes("software-engineering") ? ["software-engineering"] : []),
+      ...(families.includes("data-engineering") ? ["data-analytics"] : []),
+      ...(families.includes("product-management") ? ["product-management"] : []),
+    ]),
+  ].sort();
 }
 
 function industryIds(source: JobProjectionSource): string[] {
@@ -144,29 +151,39 @@ function industryIds(source: JobProjectionSource): string[] {
     ...explicit,
     ...strings(read(source.data, "industry", "industry_name", "company_industry"), 16),
   ].join(" ");
-  return [...new Set([
-    ...explicit,
-    ...INDUSTRY_ALIASES.filter(([, pattern]) => pattern.test(raw)).map(([id]) => id),
-  ])].sort();
+  return [
+    ...new Set([
+      ...explicit,
+      ...INDUSTRY_ALIASES.filter(([, pattern]) => pattern.test(raw)).map(([id]) => id),
+    ]),
+  ].sort();
 }
 
 function roleFamilies(source: JobProjectionSource): string[] {
-  const explicit = strings(read(source.data, "roleFamilyIds", "role_family_ids", "roleFamilyCodes", "role_family_codes"), 32);
+  const explicit = strings(
+    read(source.data, "roleFamilyIds", "role_family_ids", "roleFamilyCodes", "role_family_codes"),
+    32,
+  );
   if (explicit.length > 0) return explicit;
   const title = token(source.normalizedTitle ?? source.title);
   if (/security|securite/.test(title)) return ["security-engineering"];
   if (/data/.test(title)) return ["data-engineering"];
   if (/product/.test(title)) return ["product-management"];
-  if (/developer|developpeur|engineer|full-?stack|backend|frontend|software/.test(title)) return ["software-engineering"];
+  if (/developer|developpeur|engineer|full-?stack|backend|frontend|software/.test(title))
+    return ["software-engineering"];
   if (/marketing/.test(title)) return ["marketing"];
   if (/sales|commercial/.test(title)) return ["sales"];
   return [];
 }
 
-function lifecycle(source: JobProjectionSource, now: Date): "active" | "stale" | "removed" | "expired" | "blocked" {
+function lifecycle(
+  source: JobProjectionSource,
+  now: Date,
+): "active" | "stale" | "removed" | "expired" | "blocked" {
   const explicit = source.lifecycleState;
   if (["active", "stale", "removed", "expired", "blocked"].includes(explicit ?? "")) {
-    if (explicit === "active" && source.expiresAt && new Date(source.expiresAt) <= now) return "expired";
+    if (explicit === "active" && source.expiresAt && new Date(source.expiresAt) <= now)
+      return "expired";
     return explicit as "active" | "stale" | "removed" | "expired" | "blocked";
   }
   if (source.expiresAt && new Date(source.expiresAt) <= now) return "expired";
@@ -180,9 +197,11 @@ function route(source: JobProjectionSource): "auto" | "assisted" | "manual" | "b
     source.applyabilityTier === "E" ||
     source.applyFulfillmentStatus.startsWith("blocked_") ||
     source.applyFulfillmentStatus === "discovery_only"
-  ) return "blocked";
+  )
+    return "blocked";
   if (source.autoApplySupported) return "auto";
-  if (source.manualFulfillmentReady || source.applyFulfillmentStatus === "manual_ready") return "manual";
+  if (source.manualFulfillmentReady || source.applyFulfillmentStatus === "manual_ready")
+    return "manual";
   return "assisted";
 }
 
@@ -238,8 +257,18 @@ export async function projectJobSearchDocument(
   const skillIds = strings(read(source.data, "skillIds", "skill_ids", "skills"), 256);
   const contractTypesValue = contractTypes(source.data);
   const workModesValue = workModes(source);
-  const publishedAt = iso(source.publishedAt, source.firstSeenAt, source.importedAt, source.lastSeenAt);
-  const lastSeenAt = iso(source.lastSeenAt, source.importedAt, source.firstSeenAt, source.publishedAt);
+  const publishedAt = iso(
+    source.publishedAt,
+    source.firstSeenAt,
+    source.importedAt,
+    source.lastSeenAt,
+  );
+  const lastSeenAt = iso(
+    source.lastSeenAt,
+    source.importedAt,
+    source.firstSeenAt,
+    source.publishedAt,
+  );
   const lifecycleStatus = lifecycle(source, projectedAt);
   const validationStatus: JobSearchDocumentPersistenceRow["validation_status"] =
     source.validationStatus === "valid"
@@ -328,5 +357,11 @@ export async function projectJobSearchDocument(
     },
     { normalizedTitle, searchText: content.searchText },
   );
-  return { action: "upsert", canonicalGroupId: source.canonicalGroupId, preferredJobId: source.preferredJobId, sourceContentHash, row };
+  return {
+    action: "upsert",
+    canonicalGroupId: source.canonicalGroupId,
+    preferredJobId: source.preferredJobId,
+    sourceContentHash,
+    row,
+  };
 }

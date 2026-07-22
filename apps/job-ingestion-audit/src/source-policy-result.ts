@@ -2,12 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 
-const REQUIRED_RIGHTS = [
-  "commercial_use",
-  "redisplay",
-  "retention",
-  "access_method",
-] as const;
+const REQUIRED_RIGHTS = ["commercial_use", "redisplay", "retention", "access_method"] as const;
 
 type RequiredRight = (typeof REQUIRED_RIGHTS)[number];
 
@@ -27,12 +22,7 @@ const BLOCKER_CODES = new Set([
   "SOURCE_TERMS_UNVERIFIED",
 ]);
 
-const ACCESS_METHODS = new Set([
-  "open_data",
-  "partner_feed",
-  "public_api",
-  "tenant_feed",
-]);
+const ACCESS_METHODS = new Set(["open_data", "partner_feed", "public_api", "tenant_feed"]);
 
 function assertOnlyKeys(
   value: Record<string, unknown>,
@@ -90,9 +80,7 @@ export interface BlockedExternalSourcePolicy {
   unblockProcedure: string;
 }
 
-export type SourcePolicyResult =
-  | CapturedSourcePolicyEvidence
-  | BlockedExternalSourcePolicy;
+export type SourcePolicyResult = CapturedSourcePolicyEvidence | BlockedExternalSourcePolicy;
 
 export type PersistedSourcePolicyResult = SourcePolicyResult & {
   recordDigest: string;
@@ -115,10 +103,8 @@ function text(value: unknown, path: string): string {
 function timestamp(value: unknown, path: string): string {
   const parsed = text(value, path);
   if (
-    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/.test(
-      parsed,
-    )
-    || !Number.isFinite(Date.parse(parsed))
+    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/.test(parsed) ||
+    !Number.isFinite(Date.parse(parsed))
   ) {
     throw new Error(`${path}_must_be_an_iso_timestamp`);
   }
@@ -149,44 +135,25 @@ function parseEvidence(value: unknown): SourcePolicyEvidenceItem[] {
     const candidate = record(item, `evidence_${index}`);
     assertOnlyKeys(
       candidate,
-      [
-        "kind",
-        "reference",
-        "artifactPath",
-        "artifactSha256",
-        "supports",
-      ],
+      ["kind", "reference", "artifactPath", "artifactSha256", "supports"],
       `evidence_${index}`,
     );
     const kind = text(candidate.kind, `evidence_${index}_kind`);
     if (!EVIDENCE_KINDS.has(kind)) {
       throw new Error(`evidence_${index}_kind_is_not_rights_evidence`);
     }
-    const artifactSha256 = text(
-      candidate.artifactSha256,
-      `evidence_${index}_artifactSha256`,
-    );
+    const artifactSha256 = text(candidate.artifactSha256, `evidence_${index}_artifactSha256`);
     if (!/^[0-9a-f]{64}$/.test(artifactSha256)) {
       throw new Error(`evidence_${index}_artifactSha256_must_be_sha256`);
     }
-    const supports = stringList(
-      candidate.supports,
-      `evidence_${index}_supports`,
-    );
-    if (
-      supports.some(
-        (right) => !(REQUIRED_RIGHTS as readonly string[]).includes(right),
-      )
-    ) {
+    const supports = stringList(candidate.supports, `evidence_${index}_supports`);
+    if (supports.some((right) => !(REQUIRED_RIGHTS as readonly string[]).includes(right))) {
       throw new Error(`evidence_${index}_supports_unknown_right`);
     }
     return {
       kind: kind as SourcePolicyEvidenceItem["kind"],
       reference: text(candidate.reference, `evidence_${index}_reference`),
-      artifactPath: text(
-        candidate.artifactPath,
-        `evidence_${index}_artifactPath`,
-      ),
+      artifactPath: text(candidate.artifactPath, `evidence_${index}_artifactPath`),
       artifactSha256,
       supports: [...new Set(supports)] as RequiredRight[],
     };
@@ -215,19 +182,14 @@ export function parseSourcePolicyResult(
     resourceKey: nullableText(candidate.resourceKey, "resourceKey"),
     tenantKey: nullableText(candidate.tenantKey, "tenantKey"),
     capturedAt: timestamp(candidate.capturedAt, "capturedAt"),
-    productionEligible: falseLiteral(
-      candidate.productionEligible,
-      "productionEligible",
-    ),
+    productionEligible: falseLiteral(candidate.productionEligible, "productionEligible"),
   };
   if (
-    expectedScope
-    && (
-      common.provider !== expectedScope.provider
-      || common.sourceKey !== expectedScope.sourceKey
-      || common.resourceKey !== expectedScope.resourceKey
-      || common.tenantKey !== expectedScope.tenantKey
-    )
+    expectedScope &&
+    (common.provider !== expectedScope.provider ||
+      common.sourceKey !== expectedScope.sourceKey ||
+      common.resourceKey !== expectedScope.resourceKey ||
+      common.tenantKey !== expectedScope.tenantKey)
   ) {
     throw new Error("source_policy_scope_mismatch");
   }
@@ -259,22 +221,16 @@ export function parseSourcePolicyResult(
     return {
       ...common,
       status: "BLOCKED_EXTERNAL",
-      blockerCode:
-        blockerCode as BlockedExternalSourcePolicy["blockerCode"],
+      blockerCode: blockerCode as BlockedExternalSourcePolicy["blockerCode"],
       reason: text(candidate.reason, "reason"),
-      evidenceReferences: stringList(
-        candidate.evidenceReferences,
-        "evidenceReferences",
-      ),
+      evidenceReferences: stringList(candidate.evidenceReferences, "evidenceReferences"),
       missingEvidence: stringList(candidate.missingEvidence, "missingEvidence"),
       unblockProcedure: text(candidate.unblockProcedure, "unblockProcedure"),
     };
   }
 
   if (candidate.status !== "EVIDENCE_CAPTURED") {
-    throw new Error(
-      "status_must_be_EVIDENCE_CAPTURED_or_BLOCKED_EXTERNAL",
-    );
+    throw new Error("status_must_be_EVIDENCE_CAPTURED_or_BLOCKED_EXTERNAL");
   }
 
   assertOnlyKeys(
@@ -295,24 +251,15 @@ export function parseSourcePolicyResult(
     ],
     "source_policy_result",
   );
-  const permittedAccessMethod = text(
-    candidate.permittedAccessMethod,
-    "permittedAccessMethod",
-  );
+  const permittedAccessMethod = text(candidate.permittedAccessMethod, "permittedAccessMethod");
   if (!ACCESS_METHODS.has(permittedAccessMethod)) {
     throw new Error("unsupported_permittedAccessMethod");
   }
   const evidence = parseEvidence(candidate.evidence);
-  const supportedRights = new Set(
-    evidence.flatMap((item) => item.supports),
-  );
-  const missingRights = REQUIRED_RIGHTS.filter(
-    (right) => !supportedRights.has(right),
-  );
+  const supportedRights = new Set(evidence.flatMap((item) => item.supports));
+  const missingRights = REQUIRED_RIGHTS.filter((right) => !supportedRights.has(right));
   if (missingRights.length > 0) {
-    throw new Error(
-      `rights_evidence_incomplete:${missingRights.join(",")}`,
-    );
+    throw new Error(`rights_evidence_incomplete:${missingRights.join(",")}`);
   }
 
   return {
@@ -320,10 +267,7 @@ export function parseSourcePolicyResult(
     status: "EVIDENCE_CAPTURED",
     permittedAccessMethod,
     reviewedBy: text(candidate.reviewedBy, "reviewedBy"),
-    approvalReference: text(
-      candidate.approvalReference,
-      "approvalReference",
-    ),
+    approvalReference: text(candidate.approvalReference, "approvalReference"),
     evidence,
   };
 }

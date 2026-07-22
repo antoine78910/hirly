@@ -1,21 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
-import {
-  Check,
-  HeartHandshake,
-  Loader2,
-  Rocket,
-  Sparkles,
-  Star,
-  Zap,
-} from "lucide-react";
+import { Check, HeartHandshake, Loader2, Rocket, Sparkles, Star, Zap } from "lucide-react";
 import { toast } from "sonner";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api } from "@/lib/api";
 import { withDatafastAttribution } from "@/lib/datafast";
@@ -31,7 +18,13 @@ import {
 import LegalLink from "@/components/legal/LegalLink";
 import { trackEvent } from "@/lib/analytics";
 
-const FEATURE_ICONS = { zap: Zap, sparkles: Sparkles, rocket: Rocket, check: Check, heart: HeartHandshake };
+const FEATURE_ICONS = {
+  zap: Zap,
+  sparkles: Sparkles,
+  rocket: Rocket,
+  check: Check,
+  heart: HeartHandshake,
+};
 
 function FeatureItem({ title, description, icon, roundIcon = true }) {
   const Icon = FEATURE_ICONS[icon] || Zap;
@@ -79,7 +72,9 @@ function TierCard({ tier, selected, onSelect, isMonthly, t, lang }) {
         </div>
       ) : null}
       <div className="space-y-0.5">
-        <div className="text-[10px] font-medium uppercase tracking-wide text-linkedin sm:text-xs">{tier.name}</div>
+        <div className="text-[10px] font-medium uppercase tracking-wide text-linkedin sm:text-xs">
+          {tier.name}
+        </div>
         <div className="text-base font-bold sm:text-xl lg:text-2xl">{formatMoney(price, lang)}</div>
         <div className="text-[10px] text-muted-foreground sm:text-xs">{period}</div>
         <div className="text-[9px] font-semibold leading-tight text-foreground [overflow-wrap:anywhere] sm:text-xs">
@@ -130,7 +125,11 @@ export default function DesktopUpgradeModal({ open, onClose }) {
   const { t, lang } = useAppLocale();
   const location = useLocation();
   const returnPath = `${location.pathname}${location.search}`;
-  const { features: UPGRADE_FEATURES, stats: UPGRADE_STATS, benefits: UPGRADE_BENEFITS } = getUpgradeContent(t);
+  const {
+    features: UPGRADE_FEATURES,
+    stats: UPGRADE_STATS,
+    benefits: UPGRADE_BENEFITS,
+  } = getUpgradeContent(t);
   const [billingInterval, setBillingInterval] = useState("monthly");
   const [selectedTier, setSelectedTier] = useState("ultra");
   const [checkoutLoading, setCheckoutLoading] = useState(false);
@@ -206,21 +205,32 @@ export default function DesktopUpgradeModal({ open, onClose }) {
           return_path: returnPath,
         });
         if (data?.url) {
-          trackEvent("checkout_started", { source: "app_upgrade", plan: selectedTier, interval: billingInterval });
+          trackEvent("checkout_started", {
+            source: "app_upgrade",
+            plan: selectedTier,
+            interval: billingInterval,
+          });
           window.location.href = data.url;
           return;
         }
         toast.error(t("upgrade.checkoutError"));
         return;
       }
-      const { data } = await api.post("/billing/create-checkout-session", withDatafastAttribution({
-        plan: selectedTier,
-        interval: billingInterval,
-        source: "app",
-        return_path: returnPath,
-      }));
+      const { data } = await api.post(
+        "/billing/create-checkout-session",
+        withDatafastAttribution({
+          plan: selectedTier,
+          interval: billingInterval,
+          source: "app",
+          return_path: returnPath,
+        }),
+      );
       if (data?.url) {
-        trackEvent("checkout_started", { source: "app", plan: selectedTier, interval: billingInterval });
+        trackEvent("checkout_started", {
+          source: "app",
+          plan: selectedTier,
+          interval: billingInterval,
+        });
         window.location.href = data.url;
         return;
       }
@@ -239,9 +249,7 @@ export default function DesktopUpgradeModal({ open, onClose }) {
         onOpenAutoFocus={(e) => e.preventDefault()}
       >
         <DialogTitle className="sr-only">{t("upgrade.title")}</DialogTitle>
-        <DialogDescription className="sr-only">
-          {t("upgrade.subtitle")}
-        </DialogDescription>
+        <DialogDescription className="sr-only">{t("upgrade.subtitle")}</DialogDescription>
 
         <div className="absolute top-6 left-6 z-20 hidden lg:block">
           <Logo size={32} className="h-8 w-auto" />
@@ -258,8 +266,13 @@ export default function DesktopUpgradeModal({ open, onClose }) {
             </div>
             <div className="grid grid-cols-3 gap-2">
               {UPGRADE_STATS.map((stat) => (
-                <div key={stat.label} className="min-w-0 rounded-lg border bg-background/80 px-1 py-2.5 text-center sm:px-2 sm:py-3">
-                  <div className="text-base font-bold leading-none text-linkedin sm:text-lg">{stat.value}</div>
+                <div
+                  key={stat.label}
+                  className="min-w-0 rounded-lg border bg-background/80 px-1 py-2.5 text-center sm:px-2 sm:py-3"
+                >
+                  <div className="text-base font-bold leading-none text-linkedin sm:text-lg">
+                    {stat.value}
+                  </div>
                   <div className="mt-1 text-[10px] leading-tight text-muted-foreground [overflow-wrap:anywhere] sm:text-xs">
                     {stat.label}
                   </div>
@@ -280,7 +293,9 @@ export default function DesktopUpgradeModal({ open, onClose }) {
                     <Star className="mr-1.5 size-3.5 sm:mr-2 sm:size-4" aria-hidden />
                     {t("upgrade.limitedOffer")}
                   </div>
-                  <h1 className="mb-1 text-xl font-bold sm:mb-2 sm:text-3xl">{t("upgrade.title")}</h1>
+                  <h1 className="mb-1 text-xl font-bold sm:mb-2 sm:text-3xl">
+                    {t("upgrade.title")}
+                  </h1>
                   <p className="hidden text-sm text-muted-foreground sm:block">
                     {t("upgrade.subtitle")}
                   </p>
@@ -289,13 +304,16 @@ export default function DesktopUpgradeModal({ open, onClose }) {
                 {!hasUpgradeOption ? (
                   <div className="rounded-xl border border-border bg-muted px-6 py-8 text-center">
                     <h2 className="text-lg font-semibold">{t("upgrade.bestPlanTitle")}</h2>
-                    <p className="mt-1.5 text-sm text-muted-foreground">{t("upgrade.bestPlanDesc")}</p>
+                    <p className="mt-1.5 text-sm text-muted-foreground">
+                      {t("upgrade.bestPlanDesc")}
+                    </p>
                   </div>
                 ) : isExistingSubscriber ? (
                   <>
                     <div className="flex justify-center">
                       <span className="inline-flex items-center gap-1.5 rounded-full border bg-muted px-3 py-1 text-xs font-medium text-muted-foreground">
-                        {t("upgrade.yourBilling")}: {isMonthly ? t("upgrade.monthly") : t("upgrade.weekly")}
+                        {t("upgrade.yourBilling")}:{" "}
+                        {isMonthly ? t("upgrade.monthly") : t("upgrade.weekly")}
                       </span>
                     </div>
                     <PricingGrid
@@ -318,10 +336,16 @@ export default function DesktopUpgradeModal({ open, onClose }) {
                           {t("upgrade.save25")}
                         </span>
                         <TabsList className="grid h-9 w-full min-w-0 max-w-full grid-cols-2 rounded-lg bg-muted p-[3px] sm:min-w-80">
-                          <TabsTrigger value="monthly" className="h-[calc(100%-1px)] min-w-0 flex-1 px-2 text-xs sm:text-sm">
+                          <TabsTrigger
+                            value="monthly"
+                            className="h-[calc(100%-1px)] min-w-0 flex-1 px-2 text-xs sm:text-sm"
+                          >
                             {t("upgrade.monthly")}
                           </TabsTrigger>
-                          <TabsTrigger value="weekly" className="h-[calc(100%-1px)] min-w-0 flex-1 px-2 text-xs sm:text-sm">
+                          <TabsTrigger
+                            value="weekly"
+                            className="h-[calc(100%-1px)] min-w-0 flex-1 px-2 text-xs sm:text-sm"
+                          >
                             {t("upgrade.weekly")}
                           </TabsTrigger>
                         </TabsList>
@@ -354,7 +378,9 @@ export default function DesktopUpgradeModal({ open, onClose }) {
                 <div className="hidden sm:block">
                   <div className="flex flex-col gap-6 rounded-xl border bg-muted py-6 text-card-foreground shadow-sm">
                     <div className="px-6">
-                      <h3 className="mb-4 text-center text-lg font-semibold">{t("upgrade.title")}</h3>
+                      <h3 className="mb-4 text-center text-lg font-semibold">
+                        {t("upgrade.title")}
+                      </h3>
                       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                         {UPGRADE_BENEFITS.map((benefit) => (
                           <FeatureItem key={benefit.title} {...benefit} roundIcon={false} />
@@ -379,7 +405,9 @@ export default function DesktopUpgradeModal({ open, onClose }) {
                     disabled={checkoutLoading}
                     className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md gradient-linkedin px-6 text-sm font-medium whitespace-nowrap text-white shadow-[0_8px_32px_-8px_rgba(124,58,237,0.35)] transition-all hover:opacity-90 disabled:pointer-events-none disabled:opacity-50"
                   >
-                    {checkoutLoading ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
+                    {checkoutLoading ? (
+                      <Loader2 className="size-4 animate-spin" aria-hidden />
+                    ) : null}
                     {t("upgrade.manageSubscription")}
                   </button>
                 ) : (
@@ -399,8 +427,15 @@ export default function DesktopUpgradeModal({ open, onClose }) {
                 )}
 
                 <div className="flex flex-wrap justify-center gap-x-2 gap-y-1 text-[10px] text-muted-foreground sm:gap-x-4 sm:text-xs">
-                  {[t("upgrade.cancelAnytime"), t("upgrade.securePayments"), t("upgrade.instantAccess")].map((label) => (
-                    <span key={label} className="flex max-w-full min-w-0 items-center gap-1 text-center leading-tight">
+                  {[
+                    t("upgrade.cancelAnytime"),
+                    t("upgrade.securePayments"),
+                    t("upgrade.instantAccess"),
+                  ].map((label) => (
+                    <span
+                      key={label}
+                      className="flex max-w-full min-w-0 items-center gap-1 text-center leading-tight"
+                    >
                       <Check className="size-3 shrink-0 text-linkedin sm:size-4" aria-hidden />
                       <span className="[overflow-wrap:anywhere]">{label}</span>
                     </span>

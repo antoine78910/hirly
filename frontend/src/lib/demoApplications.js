@@ -1,12 +1,6 @@
 import { isFinanceDemoEnabled } from "./demoSettings";
-import {
-  isDemoAccountEnabled,
-  mergeApplications,
-} from "./demoAccount";
-import {
-  getFinanceDemoApplications,
-  getFinanceDemoSwipeHistory,
-} from "./financeDemoApi";
+import { isDemoAccountEnabled, mergeApplications } from "./demoAccount";
+import { getFinanceDemoApplications, getFinanceDemoSwipeHistory } from "./financeDemoApi";
 import { mergeDemoCvIntoProfile } from "./demoCvUpload";
 import { FINANCE_DEMO_PROFILE } from "./financeDemoJobs";
 import { ensureDemoScreenshotData } from "./demoScreenshotSeed";

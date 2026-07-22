@@ -14,10 +14,7 @@ import type { ProviderCore } from "../apps/worker/src/providers/core";
 import { createTaskHandlers } from "../apps/worker/src/runtime/handlers";
 import { Consumer } from "../apps/worker/src/runtime/consumer";
 import { PermanentTaskError } from "../apps/worker/src/runtime/retry";
-import type {
-  ConsumerRepository,
-  RuntimeStore,
-} from "../apps/worker/src/runtime/types";
+import type { ConsumerRepository, RuntimeStore } from "../apps/worker/src/runtime/types";
 import type {
   CanonicalJob,
   Provider,
@@ -51,9 +48,7 @@ type Fixture = {
 };
 
 async function loadFixture(provider: Provider): Promise<Fixture> {
-  return JSON.parse(
-    await readFile(new URL(`${provider}.json`, fixtureRoot), "utf8"),
-  ) as Fixture;
+  return JSON.parse(await readFile(new URL(`${provider}.json`, fixtureRoot), "utf8")) as Fixture;
 }
 
 function request(provider: Provider): ProviderSearchRequest {
@@ -109,9 +104,7 @@ describe("G004 stable canonical identity and normalization", () => {
   test("matches frozen Python SHA-1 vectors without implicit ID trimming", () => {
     expect(stableJobId("apec", "123")).toBe("job_7168250cba955547");
     expect(stableJobId("apec", " 123 ")).toBe("job_ef15c8ba7c19df18");
-    expect(stableJobId("hellowork", "éxterne-42")).toBe(
-      "job_837bf2604f073d51",
-    );
+    expect(stableJobId("hellowork", "éxterne-42")).toBe("job_837bf2604f073d51");
     expect(stableJobId("indeed", "same")).toBe("job_321fefdcd17f3790");
     expect(stableJobId("wttj", "same")).toBe("job_a2f8696030a40817");
   });
@@ -141,9 +134,7 @@ describe("G004 stable canonical identity and normalization", () => {
     const normalized = providerModules.apec.adapter.normalizeRaw(fixture);
     const job = toCanonicalJob(normalized, fixedNow);
 
-    expect(job.selectedApplyUrl).toBe(
-      "https://boards.greenhouse.io/example/jobs/001",
-    );
+    expect(job.selectedApplyUrl).toBe("https://boards.greenhouse.io/example/jobs/001");
     expect(job.validationStatus).toBe("valid");
     expect(job.applyabilityTier).toBe("A");
     expect(job.atsProvider).toBe("greenhouse");
@@ -167,26 +158,20 @@ describe("G004 stable canonical identity and normalization", () => {
   });
 
   test.each([
-    [
-      "https://jobs.smartrecruiters.com/example/744000000000001-role",
-      "smartrecruiters",
-    ],
+    ["https://jobs.smartrecruiters.com/example/744000000000001-role", "smartrecruiters"],
     ["https://example.taleez.com/jobs/001", "taleez"],
-  ])(
-    "marks a catalogued queue driver auto-applicable: %s",
-    async (applyUrl, provider) => {
-      const fixture = await loadFixture("apec");
-      const normalized = providerModules.apec.adapter.normalizeRaw({
-        ...fixture,
-        applyUrls: [applyUrl],
-      });
-      const job = toCanonicalJob(normalized, fixedNow);
+  ])("marks a catalogued queue driver auto-applicable: %s", async (applyUrl, provider) => {
+    const fixture = await loadFixture("apec");
+    const normalized = providerModules.apec.adapter.normalizeRaw({
+      ...fixture,
+      applyUrls: [applyUrl],
+    });
+    const job = toCanonicalJob(normalized, fixedNow);
 
-      expect(job.atsProvider).toBe(provider);
-      expect(job.applyabilityTier).toBe("A");
-      expect(job.autoApplySupported).toBeTrue();
-    },
-  );
+    expect(job.atsProvider).toBe(provider);
+    expect(job.applyabilityTier).toBe("A");
+    expect(job.autoApplySupported).toBeTrue();
+  });
 
   test("keeps fingerprints stable across non-semantic source-document ordering", async () => {
     const fixture = await loadFixture("hellowork");
@@ -198,9 +183,7 @@ describe("G004 stable canonical identity and normalization", () => {
       },
     };
     const adapter = providerModules.hellowork.adapter;
-    expect(
-      toCanonicalJob(adapter.normalizeRaw(fixture), fixedNow).fingerprint,
-    ).toBe(
+    expect(toCanonicalJob(adapter.normalizeRaw(fixture), fixedNow).fingerprint).toBe(
       toCanonicalJob(adapter.normalizeRaw(reordered), fixedNow).fingerprint,
     );
   });
@@ -284,9 +267,7 @@ describe("G004 provider core authorization and fixture contracts", () => {
         approvalRef: ".omx/plans/prd-nextjs-bun-foundation.md#phase-4",
         containsPersonalData: false,
       });
-      expect(JSON.stringify(fixture)).not.toMatch(
-        /@(?:gmail|outlook|yahoo)\.|Bearer\s|password/i,
-      );
+      expect(JSON.stringify(fixture)).not.toMatch(/@(?:gmail|outlook|yahoo)\.|Bearer\s|password/i);
     }
   });
 
@@ -406,10 +387,7 @@ describe("G004 provider-neutral ingestion behavior", () => {
       },
     });
 
-    expect(result.jobs.map((job) => job.externalId)).toEqual([
-      "apec-001",
-      "apec-002",
-    ]);
+    expect(result.jobs.map((job) => job.externalId)).toEqual(["apec-001", "apec-002"]);
     expect(repository.calls).toBe(1);
     expect(repository.rows.size).toBe(2);
     expect(result.metrics).toMatchObject({
@@ -421,11 +399,9 @@ describe("G004 provider-neutral ingestion behavior", () => {
       pages: 2,
     });
     expect(emittedMetrics).toEqual(result.metrics);
-    expect(
-      result.metrics.accepted +
-        result.metrics.rejected +
-        result.metrics.deduplicated,
-    ).toBe(result.metrics.fetched);
+    expect(result.metrics.accepted + result.metrics.rejected + result.metrics.deduplicated).toBe(
+      result.metrics.fetched,
+    );
   });
 
   test("is idempotent when the same fixture run is repeated", async () => {
@@ -574,11 +550,9 @@ describe("G004 provider-neutral ingestion behavior", () => {
 
     for (const { raw, expected } of cases) {
       const job = toCanonicalJob(adapter.normalizeRaw(raw), fixedNow);
-      expect([
-        job.applyFulfillmentStatus,
-        job.applyabilityTier,
-        job.validationStatus,
-      ]).toEqual(expected);
+      expect([job.applyFulfillmentStatus, job.applyabilityTier, job.validationStatus]).toEqual(
+        expected,
+      );
     }
   });
 });
@@ -765,18 +739,14 @@ describe("G004 Bun runtime dispatch", () => {
         },
       },
     } as unknown as Record<Provider, ProviderCore<unknown>>;
-    const handler = createTaskHandlers(store, logger, modules)[
-      "provider.fetch_page"
-    ];
+    const handler = createTaskHandlers(store, logger, modules)["provider.fetch_page"];
 
     const result = await handler?.(task, new AbortController().signal);
 
     expect(result).toEqual({ taskCompleted: true });
     expect(writes).toHaveLength(1);
     expect(writes[0]).toHaveLength(1);
-    expect(writes[0]?.[0]?.jobId).toBe(
-      stableJobId("apec", fixture.externalId),
-    );
+    expect(writes[0]?.[0]?.jobId).toBe(stableJobId("apec", fixture.externalId));
     expect(lines).toHaveLength(1);
     expect(JSON.parse(lines[0] ?? "{}")).toMatchObject({
       event: "provider.ingestion_batch",
@@ -825,9 +795,7 @@ describe("G004 Bun runtime dispatch", () => {
         },
       },
     } as unknown as Record<Provider, ProviderCore<unknown>>;
-    const handler = createTaskHandlers(store, undefined, modules)[
-      "provider.fetch_page"
-    ];
+    const handler = createTaskHandlers(store, undefined, modules)["provider.fetch_page"];
 
     await expect(
       handler?.(claimedProviderTask(), new AbortController().signal),
@@ -886,9 +854,7 @@ describe("G004 Bun runtime dispatch", () => {
         },
       },
     } as unknown as Record<Provider, ProviderCore<unknown>>;
-    const handler = createTaskHandlers(store, undefined, modules)[
-      "provider.fetch_page"
-    ];
+    const handler = createTaskHandlers(store, undefined, modules)["provider.fetch_page"];
 
     await expect(
       handler?.(claimedProviderTask(), new AbortController().signal),
@@ -952,12 +918,9 @@ describe("G004 Bun runtime dispatch", () => {
       },
     } as unknown as Record<Provider, ProviderCore<unknown>>;
 
-    const result = await createTaskHandlers(
-      store,
-      undefined,
-      modules,
-      { providerClaimHeartbeatMs: 5 },
-    )["provider.fetch_page"]?.(task, new AbortController().signal);
+    const result = await createTaskHandlers(store, undefined, modules, {
+      providerClaimHeartbeatMs: 5,
+    })["provider.fetch_page"]?.(task, new AbortController().signal);
 
     expect(result).toEqual({ taskCompleted: true });
     expect(heartbeats).toBeGreaterThan(0);
@@ -1016,9 +979,10 @@ describe("G004 Bun runtime dispatch", () => {
       },
     } as unknown as Record<Provider, ProviderCore<unknown>>;
 
-    const result = await createTaskHandlers(store, undefined, modules)[
-      "provider.fetch_page"
-    ]?.(task, new AbortController().signal);
+    const result = await createTaskHandlers(store, undefined, modules)["provider.fetch_page"]?.(
+      task,
+      new AbortController().signal,
+    );
 
     expect(result).toEqual({ taskCompleted: true });
     expect(finishes).toBe(1);
@@ -1076,9 +1040,10 @@ describe("G004 Bun runtime dispatch", () => {
     } as unknown as Record<Provider, ProviderCore<unknown>>;
 
     await expect(
-      createTaskHandlers(store, undefined, modules)[
-        "provider.fetch_page"
-      ]?.(task, new AbortController().signal),
+      createTaskHandlers(store, undefined, modules)["provider.fetch_page"]?.(
+        task,
+        new AbortController().signal,
+      ),
     ).rejects.toThrow("provider unavailable");
     expect(releases).toBe(1);
   });
@@ -1115,10 +1080,7 @@ describe("G004 Bun runtime dispatch", () => {
       repository,
       {
         "provider.fetch_page": async () => {
-          throw new PermanentTaskError(
-            "authorization_blocked",
-            "provider disabled",
-          );
+          throw new PermanentTaskError("authorization_blocked", "provider disabled");
         },
       },
       createJsonLogger((line) => lines.push(line)),
@@ -1137,9 +1099,7 @@ describe("G004 Bun runtime dispatch", () => {
     await Bun.sleep(20);
     await consumer.stop(100);
 
-    expect(finishes).toEqual([
-      { outcome: "failed", errorCode: "authorization_blocked" },
-    ]);
+    expect(finishes).toEqual([{ outcome: "failed", errorCode: "authorization_blocked" }]);
     const terminal = lines
       .map((line) => JSON.parse(line))
       .find((event) => event.event === "worker.task_terminal");

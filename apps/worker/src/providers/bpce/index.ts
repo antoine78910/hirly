@@ -36,9 +36,7 @@ export const bpceOpenFeedRawRecordSchema = z
   })
   .strict();
 
-export type BpceOpenFeedRawRecord = z.infer<
-  typeof bpceOpenFeedRawRecordSchema
->;
+export type BpceOpenFeedRawRecord = z.infer<typeof bpceOpenFeedRawRecordSchema>;
 
 export const bpceOpenFeedFixtureSchema = z
   .object({
@@ -57,9 +55,7 @@ export const bpceOpenFeedFixtureSchema = z
   })
   .strict();
 
-export type BpceOpenFeedFixture = z.infer<
-  typeof bpceOpenFeedFixtureSchema
->;
+export type BpceOpenFeedFixture = z.infer<typeof bpceOpenFeedFixtureSchema>;
 
 function toDataGouvRawJob(
   datasetId: string,

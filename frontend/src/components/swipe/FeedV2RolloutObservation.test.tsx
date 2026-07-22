@@ -1,13 +1,11 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 
-import {
-  FEED_V2_ROLLOUT_FLAG_KEY,
-  useFeedV2RolloutObservation,
-} from "./FeedV2RolloutObservation";
+import { FEED_V2_ROLLOUT_FLAG_KEY, useFeedV2RolloutObservation } from "./FeedV2RolloutObservation";
 
-(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean })
-  .IS_REACT_ACT_ENVIRONMENT = true;
+(
+  globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
+).IS_REACT_ACT_ENVIRONMENT = true;
 
 const mockUseFeatureFlagEnabled = jest.fn<boolean, [string, boolean]>();
 
@@ -43,10 +41,7 @@ describe("useFeedV2RolloutObservation", () => {
       root.render(<Probe analyticsUserId="123e4567-e89b-12d3-a456-426614174000" />);
     });
 
-    expect(mockUseFeatureFlagEnabled).toHaveBeenCalledWith(
-      FEED_V2_ROLLOUT_FLAG_KEY,
-      false,
-    );
+    expect(mockUseFeatureFlagEnabled).toHaveBeenCalledWith(FEED_V2_ROLLOUT_FLAG_KEY, false);
     expect(container.textContent).toBe("false");
   });
 

@@ -8,16 +8,11 @@ import {
   type SourceTrialResult,
 } from "@hirly/contracts";
 import { stableDataGouvExternalId } from "@hirly/ingestion/data-gouv";
-import type {
-  AtsTrialFetch,
-  AtsTrialTransportBudgets,
-} from "./providers/ats-trial-transport";
+import type { AtsTrialFetch, AtsTrialTransportBudgets } from "./providers/ats-trial-transport";
 import type { SourceTrialEvidenceRepository } from "./source-trial";
 
-export const QUALIFIED_CSP_DATASET_ID =
-  "6322e99e12175f7eb26ff465" as const;
-export const QUALIFIED_CSP_RESOURCE_ID =
-  "867034a2-2fa1-41b4-bd39-c84691ea618f" as const;
+export const QUALIFIED_CSP_DATASET_ID = "6322e99e12175f7eb26ff465" as const;
+export const QUALIFIED_CSP_RESOURCE_ID = "867034a2-2fa1-41b4-bd39-c84691ea618f" as const;
 export const QUALIFIED_CSP_RESOURCE_URL =
   "https://static.data.gouv.fr/resources/les-offres-diffusees-sur-choisir-le-service-public/20260720-060055/offres-datagouv-20260628.csv" as const;
 export const QUALIFIED_CSP_CONTENT_SHA256 =
@@ -147,9 +142,7 @@ const manifestSchema = z
     }
   });
 
-export type CspTrialResourceManifestInput = z.input<
-  typeof manifestBaseSchema
->;
+export type CspTrialResourceManifestInput = z.input<typeof manifestBaseSchema>;
 export type CspTrialResourceManifest = z.output<typeof manifestSchema>;
 
 export interface CspEvidenceCandidate {
@@ -235,9 +228,7 @@ export function sealCspTrialResourceManifest(
   );
 }
 
-export function parseCspTrialResourceManifest(
-  input: unknown,
-): CspTrialResourceManifest {
+export function parseCspTrialResourceManifest(input: unknown): CspTrialResourceManifest {
   return deepFreeze(manifestSchema.parse(input));
 }
 
@@ -348,14 +339,8 @@ export async function previewCspSourceTrial(input: {
   const manifest = validateCspTrialInput(input);
   const transport = createCspTrialTransport(input);
   const now = input.now?.() ?? new Date();
-  const csv = await transport.fetch(
-    input.signal ?? new AbortController().signal,
-  );
-  const parsed = parseCspCsv(
-    csv,
-    transport.resourceManifest,
-    manifest.budget.maxCandidates,
-  );
+  const csv = await transport.fetch(input.signal ?? new AbortController().signal);
+  const parsed = parseCspCsv(csv, transport.resourceManifest, manifest.budget.maxCandidates);
   const evidencePage = {
     schemaVersion: "hirly.csp-evidence-page.v1",
     resourceManifest: transport.resourceManifest,
@@ -387,11 +372,9 @@ export async function previewCspSourceTrial(input: {
     rejected: parsed.counts.rejected,
     deduplicated: parsed.counts.deduplicated,
     activeAtSnapshotRows: parsed.counts.activeAtSnapshotRows,
-    activeAtSnapshotUniqueReferences:
-      parsed.counts.activeAtSnapshotUniqueReferences,
+    activeAtSnapshotUniqueReferences: parsed.counts.activeAtSnapshotUniqueReferences,
     activeAtCaptureRows: parsed.counts.activeAtCaptureRows,
-    activeAtCaptureUniqueReferences:
-      parsed.counts.activeAtCaptureUniqueReferences,
+    activeAtCaptureUniqueReferences: parsed.counts.activeAtCaptureUniqueReferences,
     actionable: 0 as const,
     candidates: parsed.candidates,
     evidencePage,
@@ -488,10 +471,7 @@ function validateCspTrialInput(input: {
   now?: () => Date;
 }): SourceTrialManifest {
   const manifest = sourceTrialManifestSchema.parse(input.manifest);
-  const resource = validateApprovedManifest(
-    input.resourceManifest,
-    input.approvedManifestDigests,
-  );
+  const resource = validateApprovedManifest(input.resourceManifest, input.approvedManifestDigests);
   if (
     manifest.provider !== "data_gouv" ||
     manifest.sourceId !== resource.sourceId ||
@@ -524,10 +504,7 @@ function validateApprovedManifest(
 ): CspTrialResourceManifest {
   const manifest = deepFreeze(manifestSchema.parse(input));
   if (!approvedManifestDigests.includes(manifest.manifestDigest)) {
-    throw new CspTrialTransportError(
-      "permanent",
-      "CSP trial resource manifest is not allowlisted",
-    );
+    throw new CspTrialTransportError("permanent", "CSP trial resource manifest is not allowlisted");
   }
   return manifest;
 }
@@ -562,10 +539,7 @@ function parseCspCsv(
     required.map((name) => [name, header.indexOf(name)]),
   ) as Record<(typeof required)[number], number>;
   if (Object.values(indexes).some((index) => index < 0)) {
-    throw new CspTrialTransportError(
-      "malformed",
-      "CSP CSV is missing a required evidence column",
-    );
+    throw new CspTrialTransportError("malformed", "CSP CSV is missing a required evidence column");
   }
 
   const candidates = new Map<string, CspEvidenceCandidate>();
@@ -585,17 +559,11 @@ function parseCspCsv(
     const reference = cell(row, indexes["Référence"]);
     const title = cell(row, indexes["Intitulé du poste"]);
     const employer =
-      cell(row, indexes["Employeur"]) ||
-      cell(row, indexes["Organisme de rattachement"]);
+      cell(row, indexes["Employeur"]) || cell(row, indexes["Organisme de rattachement"]);
     const location =
-      cell(row, indexes["Localisation du poste"]) ||
-      cell(row, indexes["Lieu d'affectation"]);
-    const startsAt = parseFrenchDate(
-      cell(row, indexes["Date de début de publication par défaut"]),
-    );
-    const endsAt = parseFrenchDate(
-      cell(row, indexes["Date de fin de publication par défaut"]),
-    );
+      cell(row, indexes["Localisation du poste"]) || cell(row, indexes["Lieu d'affectation"]);
+    const startsAt = parseFrenchDate(cell(row, indexes["Date de début de publication par défaut"]));
+    const endsAt = parseFrenchDate(cell(row, indexes["Date de fin de publication par défaut"]));
     if (reference) allReferences.add(reference);
     const activeAtSnapshot = isActive(startsAt, endsAt, snapshotDate);
     const activeAtCapture = isActive(startsAt, endsAt, captureDate);
@@ -611,11 +579,7 @@ function parseCspCsv(
       rejected += 1;
       continue;
     }
-    const externalId = stableDataGouvExternalId(
-      manifest.datasetId,
-      manifest.resourceId,
-      reference,
-    );
+    const externalId = stableDataGouvExternalId(manifest.datasetId, manifest.resourceId, reference);
     const candidateKey = `data_gouv:${externalId}`;
     if (candidates.has(candidateKey)) {
       deduplicated += 1;
@@ -656,19 +620,13 @@ function parseCspCsv(
   };
   for (const [key, expected] of Object.entries(manifest.expectedCounts)) {
     if (counts[key as keyof typeof counts] !== expected) {
-      throw new CspTrialTransportError(
-        "malformed",
-        `CSP CSV count mismatch:${key}`,
-      );
+      throw new CspTrialTransportError("malformed", `CSP CSV count mismatch:${key}`);
     }
   }
   return { candidates: [...candidates.values()], counts };
 }
 
-function* parseDelimitedRows(
-  input: string,
-  delimiter: string,
-): Generator<string[]> {
+function* parseDelimitedRows(input: string, delimiter: string): Generator<string[]> {
   let row: string[] = [];
   let field = "";
   let quoted = false;
@@ -700,10 +658,7 @@ function* parseDelimitedRows(
     }
   }
   if (quoted) {
-    throw new CspTrialTransportError(
-      "malformed",
-      "CSP CSV ends inside a quoted field",
-    );
+    throw new CspTrialTransportError("malformed", "CSP CSV ends inside a quoted field");
   }
   if (field.length > 0 || row.length > 0) {
     row.push(stripCarriageReturn(field));
@@ -722,9 +677,7 @@ function stripCarriageReturn(value: string): string {
 function parseFrenchDate(value: string): Date | null {
   const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(value);
   if (!match) return null;
-  const date = new Date(
-    Date.UTC(Number(match[3]), Number(match[2]) - 1, Number(match[1])),
-  );
+  const date = new Date(Date.UTC(Number(match[3]), Number(match[2]) - 1, Number(match[1])));
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
@@ -732,11 +685,7 @@ function parseIsoDate(value: string): Date {
   return new Date(`${value}T00:00:00.000Z`);
 }
 
-function isActive(
-  startsAt: Date | null,
-  endsAt: Date | null,
-  at: Date,
-): boolean {
+function isActive(startsAt: Date | null, endsAt: Date | null, at: Date): boolean {
   return (
     startsAt !== null &&
     endsAt !== null &&
@@ -758,13 +707,10 @@ async function fetchBoundedBytes(input: {
   const callerAbort = () => controller.abort(input.signal.reason);
   input.signal.addEventListener("abort", callerAbort, { once: true });
   let timedOut = false;
-  const timeout = setTimeout(
-    () => {
-      timedOut = true;
-      controller.abort(new Error("CSP trial time budget exceeded"));
-    },
-    input.budgets.timeoutMs,
-  );
+  const timeout = setTimeout(() => {
+    timedOut = true;
+    controller.abort(new Error("CSP trial time budget exceeded"));
+  }, input.budgets.timeoutMs);
   try {
     let response: Response;
     try {
@@ -782,23 +728,14 @@ async function fetchBoundedBytes(input: {
       );
     } catch (error) {
       throw new CspTrialTransportError(
-        input.signal.aborted
-          ? "cancelled"
-          : timedOut
-            ? "budget_exceeded"
-            : "retryable",
+        input.signal.aborted ? "cancelled" : timedOut ? "budget_exceeded" : "retryable",
         "CSP trial network request failed",
         null,
         { cause: error },
       );
     }
     if (!response.ok) throw classifyStatus(response.status);
-    if (
-      !response.headers
-        .get("content-type")
-        ?.toLowerCase()
-        .startsWith("text/csv")
-    ) {
+    if (!response.headers.get("content-type")?.toLowerCase().startsWith("text/csv")) {
       throw new CspTrialTransportError(
         "malformed",
         "CSP trial response is not CSV",
@@ -808,8 +745,7 @@ async function fetchBoundedBytes(input: {
     const declared = response.headers.get("content-length");
     if (
       declared !== null &&
-      (!/^\d+$/.test(declared) ||
-        Number(declared) > input.budgets.maxBytes)
+      (!/^\d+$/.test(declared) || Number(declared) > input.budgets.maxBytes)
     ) {
       throw new CspTrialTransportError(
         "budget_exceeded",
@@ -829,10 +765,7 @@ async function fetchBoundedBytes(input: {
     let total = 0;
     try {
       while (true) {
-        const { done, value } = await awaitWithAbort(
-          reader.read(),
-          controller.signal,
-        );
+        const { done, value } = await awaitWithAbort(reader.read(), controller.signal);
         if (done) break;
         total += value.byteLength;
         if (total > input.budgets.maxBytes) {
@@ -848,11 +781,7 @@ async function fetchBoundedBytes(input: {
     } catch (error) {
       if (error instanceof CspTrialTransportError) throw error;
       throw new CspTrialTransportError(
-        input.signal.aborted
-          ? "cancelled"
-          : timedOut
-            ? "budget_exceeded"
-            : "retryable",
+        input.signal.aborted ? "cancelled" : timedOut ? "budget_exceeded" : "retryable",
         "CSP trial response body could not be read",
         response.status,
         { cause: error },
@@ -871,10 +800,7 @@ async function fetchBoundedBytes(input: {
   }
 }
 
-function awaitWithAbort<T>(
-  promise: Promise<T>,
-  signal: AbortSignal,
-): Promise<T> {
+function awaitWithAbort<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
   if (signal.aborted) return Promise.reject(signal.reason);
   return new Promise<T>((resolve, reject) => {
     const abort = () => reject(signal.reason);
@@ -890,24 +816,12 @@ function classifyStatus(status: number): CspTrialTransportError {
     return new CspTrialTransportError("not_found", "CSP resource not found", status);
   }
   if (status === 429) {
-    return new CspTrialTransportError(
-      "rate_limited",
-      "CSP resource request rate limited",
-      status,
-    );
+    return new CspTrialTransportError("rate_limited", "CSP resource request rate limited", status);
   }
   if (status >= 500) {
-    return new CspTrialTransportError(
-      "retryable",
-      "CSP resource request failed",
-      status,
-    );
+    return new CspTrialTransportError("retryable", "CSP resource request failed", status);
   }
-  return new CspTrialTransportError(
-    "permanent",
-    "CSP resource request rejected",
-    status,
-  );
+  return new CspTrialTransportError("permanent", "CSP resource request rejected", status);
 }
 
 async function recordResult(
@@ -937,10 +851,7 @@ function classifyFailure(
   }
   if (error instanceof CspTrialTransportError) {
     return {
-      status:
-        error.classification === "budget_exceeded"
-          ? "budget_exhausted"
-          : "failed",
+      status: error.classification === "budget_exceeded" ? "budget_exhausted" : "failed",
       stopReason: error.classification,
     };
   }
@@ -948,9 +859,7 @@ function classifyFailure(
   if (message.startsWith("trial_budget_exceeded:")) {
     return {
       status: "budget_exhausted",
-      stopReason: sourceTrialBudgetStopReasonSchema.parse(
-        message.slice("trial_".length),
-      ),
+      stopReason: sourceTrialBudgetStopReasonSchema.parse(message.slice("trial_".length)),
     };
   }
   if (message === "trial_policy_window_invalid") {

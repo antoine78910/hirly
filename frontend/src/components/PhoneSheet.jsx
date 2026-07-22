@@ -2,13 +2,7 @@ import { useEffect, useState } from "react";
 import { Loader2, Phone } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../lib/api";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "./ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Button } from "./ui/button";
 import { useAppLocale } from "../context/AppLocaleContext";
 import OnboardingContactPhoneStep from "./onboarding/OnboardingContactPhoneStep";

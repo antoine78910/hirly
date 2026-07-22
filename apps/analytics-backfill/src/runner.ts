@@ -66,9 +66,7 @@ export function buildBackfillManifest(
     if (disposition.reason) increment(reasonCounts, disposition.reason);
   }
   const last = dispositions.at(-1);
-  const checkpoint = last
-    ? { createdAt: last.sourceCreatedAt, eventId: last.sourceEventId }
-    : null;
+  const checkpoint = last ? { createdAt: last.sourceCreatedAt, eventId: last.sourceEventId } : null;
   const unsigned = {
     schemaVersion: "hirly.analytics-backfill-manifest.v1" as const,
     transformVersion: ANALYTICS_BACKFILL_TRANSFORM_VERSION,
@@ -93,18 +91,14 @@ function asSeed(disposition: BackfillDisposition): MigrationLedgerSeed {
     identityQuality: disposition.identityQuality,
     status: disposition.status,
     dispositionReason: disposition.reason,
-    transformedPayload: disposition.payload
-      ? { ...disposition.payload }
-      : null,
+    transformedPayload: disposition.payload ? { ...disposition.payload } : null,
   };
 }
 
 const sleep = (milliseconds: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, milliseconds));
 
-export async function runBackfill(
-  options: RunBackfillOptions,
-): Promise<BackfillManifest> {
+export async function runBackfill(options: RunBackfillOptions): Promise<BackfillManifest> {
   const cutoff = new Date(options.sourceCutoffAt);
   if (!Number.isFinite(cutoff.valueOf())) throw new Error("invalid_source_cutoff");
   const batchSize = options.batchSize ?? 100;
@@ -123,20 +117,12 @@ export async function runBackfill(
     .filter((row) => afterCheckpoint(row, options.checkpoint ?? null))
     .filter((row) => {
       const sourceCreatedAt = new Date(row.createdAt).valueOf();
-      return (
-        !Number.isFinite(sourceCreatedAt) ||
-        sourceCreatedAt <= cutoff.valueOf()
-      );
+      return !Number.isFinite(sourceCreatedAt) || sourceCreatedAt <= cutoff.valueOf();
     });
   const dispositions = rows.map(transformLegacyAnalyticsRow);
   const manifest = buildBackfillManifest(dispositions, cutoff.toISOString());
   if (options.dryRun) return manifest;
-  if (
-    !options.repository ||
-    !options.transport ||
-    !options.runId ||
-    !options.leaseOwner
-  ) {
+  if (!options.repository || !options.transport || !options.runId || !options.leaseOwner) {
     throw new Error("execute_mode_requires_repository_transport_run_and_owner");
   }
 

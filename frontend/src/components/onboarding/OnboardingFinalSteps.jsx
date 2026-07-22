@@ -87,7 +87,8 @@ function SetupSpinner() {
         style={{
           background:
             "conic-gradient(from 90deg, transparent 0deg, transparent 250deg, #7C3AED 300deg, #A78BFA 330deg, transparent 360deg)",
-          WebkitMask: "radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 3px))",
+          WebkitMask:
+            "radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 3px))",
           mask: "radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 3px))",
         }}
         animate={{ rotate: 360 }}
@@ -130,7 +131,9 @@ export function ProfileSetupStep({ onComplete }) {
       <div className="relative flex flex-col items-center">
         <div className="mb-6 flex items-center gap-2.5">
           <Logo size={32} />
-          <span className="font-display text-lg font-bold text-swiipr-gradient sm:text-xl">{BRAND.NAME}</span>
+          <span className="font-display text-lg font-bold text-swiipr-gradient sm:text-xl">
+            {BRAND.NAME}
+          </span>
         </div>
 
         <SetupSpinner />
@@ -173,10 +176,7 @@ const PAIN_MARQUEE_COPIES = 4;
 
 function PainTagTrack({ tags, suffix, hidden = false }) {
   return (
-    <div
-      className="flex shrink-0 items-center gap-2 pr-2"
-      aria-hidden={hidden || undefined}
-    >
+    <div className="flex shrink-0 items-center gap-2 pr-2" aria-hidden={hidden || undefined}>
       {tags.map((point, index) => (
         <PainTagPill key={`${point.id}-${suffix}-${index}`} point={point} />
       ))}
@@ -199,12 +199,7 @@ function ScrollingPainTagRow({ tags, reverse = false, duration = 30, delayOffset
         }}
       >
         {Array.from({ length: PAIN_MARQUEE_COPIES }, (_, copy) => (
-          <PainTagTrack
-            key={copy}
-            tags={tags}
-            suffix={`c${copy}`}
-            hidden={copy > 0}
-          />
+          <PainTagTrack key={copy} tags={tags} suffix={`c${copy}`} hidden={copy > 0} />
         ))}
       </div>
     </div>
@@ -235,9 +230,13 @@ export function ProfileWelcomeStep({
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
       >
-        <h1 className={ob.title}>{lang === "fr" ? `Bienvenue sur ${BRAND.NAME} !` : `Welcome to ${BRAND.NAME}!`}</h1>
+        <h1 className={ob.title}>
+          {lang === "fr" ? `Bienvenue sur ${BRAND.NAME} !` : `Welcome to ${BRAND.NAME}!`}
+        </h1>
         <p className={`${ob.subtitle} mt-2`}>
-          {lang === "fr" ? "Voici comment nous allons vous aider à réussir :" : "Based on your profile, here\u2019s how we\u2019ll help you succeed:"}
+          {lang === "fr"
+            ? "Voici comment nous allons vous aider à réussir :"
+            : "Based on your profile, here\u2019s how we\u2019ll help you succeed:"}
         </p>
       </motion.div>
 
@@ -257,9 +256,7 @@ export function ProfileWelcomeStep({
             <p className="font-display text-[15px] font-bold leading-snug text-zinc-900 sm:text-base">
               {index + 1}. {item.title}
             </p>
-            <p className={`mt-2 text-[13px] leading-relaxed sm:text-sm ${ob.muted}`}>
-              {item.body}
-            </p>
+            <p className={`mt-2 text-[13px] leading-relaxed sm:text-sm ${ob.muted}`}>{item.body}</p>
           </motion.div>
         ))}
       </motion.div>
@@ -274,7 +271,9 @@ export function ShowcaseLandingStep() {
       <div className="mb-1.5 shrink-0 sm:mb-2">
         <div className="mb-1.5 flex items-center justify-center gap-2 sm:mb-2">
           <Logo size={24} />
-          <span className="font-display text-base font-bold text-swiipr-gradient">{BRAND.NAME}</span>
+          <span className="font-display text-base font-bold text-swiipr-gradient">
+            {BRAND.NAME}
+          </span>
         </div>
 
         <h1 className="mt-2 font-display text-lg font-bold leading-tight tracking-tight text-zinc-900 sm:text-xl">
@@ -311,10 +310,14 @@ export function ShowcaseAllInOneStep() {
         {lang === "fr" ? "Tout au même endroit" : "All in one place"}
       </h1>
       <p className={`mt-1.5 max-w-sm px-2 text-sm leading-snug sm:text-base ${ob.muted}`}>
-        {lang === "fr" ? "Conçu pour de vrais résultats : tout ce que votre recherche d\u2019emploi aurait dû être." : "Built for real results: everything your job search should\u2019ve been."}
+        {lang === "fr"
+          ? "Conçu pour de vrais résultats : tout ce que votre recherche d\u2019emploi aurait dû être."
+          : "Built for real results: everything your job search should\u2019ve been."}
       </p>
 
-      <div className={`${ob.stepBody} flex min-h-0 flex-col items-center justify-center gap-2 overflow-hidden sm:gap-3`}>
+      <div
+        className={`${ob.stepBody} flex min-h-0 flex-col items-center justify-center gap-2 overflow-hidden sm:gap-3`}
+      >
         <div
           className="relative left-1/2 w-screen max-w-none shrink-0 -translate-x-1/2 space-y-1.5 sm:space-y-2"
           aria-hidden
@@ -360,7 +363,9 @@ export function ShowcasePricingStep({
       <div className="shrink-0 text-center">
         <div className="mb-0.5 flex items-center justify-center gap-2">
           <Logo size={22} />
-          <span className="font-display text-sm font-bold text-swiipr-gradient sm:text-base">{BRAND.NAME}</span>
+          <span className="font-display text-sm font-bold text-swiipr-gradient sm:text-base">
+            {BRAND.NAME}
+          </span>
         </div>
         <OnboardingValueTagline prominent className="mt-0.5 px-2" />
         <p className={`mt-0.5 text-xs font-medium ${ob.muted}`}>
@@ -414,7 +419,9 @@ export function ShowcasePricingStep({
                   </div>
                   <p className="shrink-0 text-xs font-bold text-zinc-900 sm:text-sm">
                     {item.weekly}
-                    <span className={`block text-right text-[9px] font-medium ${ob.dim}`}>{lang === "fr" ? "/ semaine" : "/ week"}</span>
+                    <span className={`block text-right text-[9px] font-medium ${ob.dim}`}>
+                      {lang === "fr" ? "/ semaine" : "/ week"}
+                    </span>
                   </p>
                 </div>
               </button>
@@ -433,10 +440,16 @@ export function ShowcasePricingStep({
             className="w-full h-11 sm:h-12 rounded-full gradient-linkedin text-white font-bold text-sm sm:text-base disabled:opacity-40 disabled:cursor-not-allowed hover:opacity-90 transition-opacity shadow-[0_12px_40px_-12px_rgba(124,58,237,0.45)]"
           >
             {checkoutLoading
-              ? (lang === "fr" ? "Ouverture du paiement..." : "Opening checkout...")
+              ? lang === "fr"
+                ? "Ouverture du paiement..."
+                : "Opening checkout..."
               : redeemingAccessCode || saving
-                ? (lang === "fr" ? "Activation..." : "Activating...")
-                : (lang === "fr" ? "Continuer" : "Continue")}
+                ? lang === "fr"
+                  ? "Activation..."
+                  : "Activating..."
+                : lang === "fr"
+                  ? "Continuer"
+                  : "Continue"}
           </button>
         </div>
       </div>
@@ -459,8 +472,10 @@ export function FinishOnboardingButton({ saving, onClick }) {
           <Loader2 className="h-4 w-4 animate-spin" />
           {lang === "fr" ? "Démarrage…" : "Starting…"}
         </span>
+      ) : lang === "fr" ? (
+        "Commencer à swiper"
       ) : (
-        lang === "fr" ? "Commencer à swiper" : "Start swiping"
+        "Start swiping"
       )}
     </button>
   );

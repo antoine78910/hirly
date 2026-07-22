@@ -50,7 +50,9 @@ describe("matching supply readiness", () => {
     expect(READINESS_SQL).toContain("public.candidate_action_projection");
     expect(READINESS_SQL).toContain("distance_km <= $3");
     expect(READINESS_SQL).not.toMatch(/\b(?:INSERT|UPDATE|DELETE|CREATE|ALTER|DROP|CALL)\b/i);
-    expect(READINESS_SQL).not.toMatch(/provider_registry|projection_reconciliation_tasks|worker_tasks/i);
+    expect(READINESS_SQL).not.toMatch(
+      /provider_registry|projection_reconciliation_tasks|worker_tasks/i,
+    );
   });
 
   test("fails closed without complete rows, indexes, and query-plan evidence", () => {
@@ -99,13 +101,21 @@ describe("matching supply readiness", () => {
         reason: "time-bounded launch evidence",
       },
     };
-    const scorecard = buildReadinessScorecard(unsafeManifest, [
-      row({ lifecycle_status: "blocked", fulfillment_route: "blocked", validation_status: "invalid" }),
-      row({
-        canonical_group_id: "00000000-0000-4000-8000-000000000002",
-        action_excluded: true,
-      }),
-    ], completeEvidence);
+    const scorecard = buildReadinessScorecard(
+      unsafeManifest,
+      [
+        row({
+          lifecycle_status: "blocked",
+          fulfillment_route: "blocked",
+          validation_status: "invalid",
+        }),
+        row({
+          canonical_group_id: "00000000-0000-4000-8000-000000000002",
+          action_excluded: true,
+        }),
+      ],
+      completeEvidence,
+    );
     expect(scorecard.decision).toBe("disabled");
     expect(scorecard.failedGates).toContain("BLOCKED_RATE_EXCEEDED");
     expect(scorecard.failedGates).toContain("INVALID_RATE_EXCEEDED");
@@ -118,10 +128,11 @@ describe("matching supply readiness", () => {
       ...manifest,
       thresholds: { ...manifest.thresholds, expiresAt: "2026-07-21T08:00:00Z" },
     };
-    const scorecard = buildReadinessScorecard(expired, [
-      row(),
-      row({ canonical_group_id: "00000000-0000-4000-8000-000000000002" }),
-    ], completeEvidence);
+    const scorecard = buildReadinessScorecard(
+      expired,
+      [row(), row({ canonical_group_id: "00000000-0000-4000-8000-000000000002" })],
+      completeEvidence,
+    );
     expect(scorecard.decision).toBe("disabled");
     expect(scorecard.failedGates).toContain("THRESHOLD_EXPIRED");
     expect(scorecard.rollbackReason).toBe("THRESHOLD_EXPIRED");

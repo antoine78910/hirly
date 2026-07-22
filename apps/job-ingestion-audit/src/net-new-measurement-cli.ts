@@ -1,9 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
-import {
-  buildNetNewMeasurement,
-  type NetNewMeasurementInput,
-} from "./net-new-measurement";
+import { buildNetNewMeasurement, type NetNewMeasurementInput } from "./net-new-measurement";
 
 function parseArgs(argv: string[]): { input: string; output: string } {
   const parsed = {
@@ -33,10 +30,12 @@ const report = buildNetNewMeasurement(input);
 const output = resolve(root, args.output);
 await mkdir(dirname(output), { recursive: true });
 await writeFile(output, `${JSON.stringify(report, null, 2)}\n`);
-console.log(JSON.stringify({
-  status: report.status,
-  incrementalNetNew: report.uplift.incrementalNetNew,
-  incrementalAutoApplicable: report.uplift.incrementalAutoApplicable,
-  output: args.output,
-  digest: report.digest,
-}));
+console.log(
+  JSON.stringify({
+    status: report.status,
+    incrementalNetNew: report.uplift.incrementalNetNew,
+    incrementalAutoApplicable: report.uplift.incrementalAutoApplicable,
+    output: args.output,
+    digest: report.digest,
+  }),
+);

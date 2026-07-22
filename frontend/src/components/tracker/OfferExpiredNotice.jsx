@@ -7,9 +7,10 @@ export default function OfferExpiredNotice({
   testId = "offer-expired-notice",
 }) {
   const { lang, t } = useAppLocale();
-  const title = lang === "fr"
-    ? (application?.failure_message_fr || t("tracker.offerExpiredSorry"))
-    : (application?.failure_message_en || t("tracker.offerExpiredSorry"));
+  const title =
+    lang === "fr"
+      ? application?.failure_message_fr || t("tracker.offerExpiredSorry")
+      : application?.failure_message_en || t("tracker.offerExpiredSorry");
   const body = application?.credit_refunded_at
     ? t("tracker.expiredRefundBody")
     : t("tracker.offerExpiredBody");

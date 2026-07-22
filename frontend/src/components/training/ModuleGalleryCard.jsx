@@ -82,7 +82,9 @@ export default function ModuleGalleryCard({
         }`}
       >
         {isReference && (
-          <span className={`absolute left-2.5 top-2.5 rounded-full bg-white/15 font-semibold uppercase tracking-wider text-white/80 sm:left-3 sm:top-3 ${s.refBadge}`}>
+          <span
+            className={`absolute left-2.5 top-2.5 rounded-full bg-white/15 font-semibold uppercase tracking-wider text-white/80 sm:left-3 sm:top-3 ${s.refBadge}`}
+          >
             {t("refBadge")}
           </span>
         )}
@@ -90,12 +92,16 @@ export default function ModuleGalleryCard({
           {coverLabel(module.title)}
         </p>
         {module.completed ? (
-          <span className={`absolute right-2.5 top-2.5 rounded-full bg-black/30 sm:right-3 sm:top-3 ${s.iconWrap}`}>
+          <span
+            className={`absolute right-2.5 top-2.5 rounded-full bg-black/30 sm:right-3 sm:top-3 ${s.iconWrap}`}
+          >
             <CheckCircle2 className={`text-emerald-300 ${s.checkIcon}`} />
           </span>
         ) : null}
         {locked ? (
-          <span className={`absolute left-2.5 top-2.5 rounded-full bg-black/30 sm:left-3 sm:top-3 ${s.lockWrap}`}>
+          <span
+            className={`absolute left-2.5 top-2.5 rounded-full bg-black/30 sm:left-3 sm:top-3 ${s.lockWrap}`}
+          >
             <Lock className={`text-white/80 ${s.lockIcon}`} />
           </span>
         ) : null}

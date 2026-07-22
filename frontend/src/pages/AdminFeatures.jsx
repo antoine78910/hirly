@@ -47,25 +47,49 @@ function FeedbackDetailPanel({ submission, onClose }) {
       <div className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-xl border border-zinc-200 bg-white p-5 shadow-xl">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Feedback detail</p>
-            <h3 className="font-display text-lg font-bold">{submission.user_name || submission.user_email || "Anonymous"}</h3>
+            <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+              Feedback detail
+            </p>
+            <h3 className="font-display text-lg font-bold">
+              {submission.user_name || submission.user_email || "Anonymous"}
+            </h3>
             <p className="text-sm text-zinc-500">{fmtDate(submission.created_at)}</p>
           </div>
-          <Button variant="outline" size="sm" onClick={onClose}>Close</Button>
+          <Button variant="outline" size="sm" onClick={onClose}>
+            Close
+          </Button>
         </div>
         <div className="mt-4 space-y-3 text-sm text-zinc-700">
           {submission.feedback_type === "training_completion" ? (
             <>
-              <p><span className="font-semibold text-zinc-900">Helpful:</span> {beneficialLabel(submission.beneficial)}</p>
-              <p><span className="font-semibold text-zinc-900">Rating:</span> {submission.rating}/5</p>
-              <p><span className="font-semibold text-zinc-900">Course:</span> {submission.course_id}</p>
+              <p>
+                <span className="font-semibold text-zinc-900">Helpful:</span>{" "}
+                {beneficialLabel(submission.beneficial)}
+              </p>
+              <p>
+                <span className="font-semibold text-zinc-900">Rating:</span> {submission.rating}/5
+              </p>
+              <p>
+                <span className="font-semibold text-zinc-900">Course:</span> {submission.course_id}
+              </p>
             </>
           ) : (
-            <p><span className="font-semibold text-zinc-900">Category:</span> {categoryLabel(submission.category)}</p>
+            <p>
+              <span className="font-semibold text-zinc-900">Category:</span>{" "}
+              {categoryLabel(submission.category)}
+            </p>
           )}
-          <p><span className="font-semibold text-zinc-900">User ID:</span> {submission.user_id || "—"}</p>
-          <p><span className="font-semibold text-zinc-900">Email:</span> {submission.user_email || "—"}</p>
-          <div className="rounded-lg bg-zinc-50 p-3 whitespace-pre-wrap">{submission.message || submission.message_preview || "—"}</div>
+          <p>
+            <span className="font-semibold text-zinc-900">User ID:</span>{" "}
+            {submission.user_id || "—"}
+          </p>
+          <p>
+            <span className="font-semibold text-zinc-900">Email:</span>{" "}
+            {submission.user_email || "—"}
+          </p>
+          <div className="rounded-lg bg-zinc-50 p-3 whitespace-pre-wrap">
+            {submission.message || submission.message_preview || "—"}
+          </div>
         </div>
       </div>
     </div>
@@ -75,43 +99,55 @@ function FeedbackDetailPanel({ submission, onClose }) {
 const columnHelper = createColumnHelper();
 
 function SuggestionTable({ rows, onSelect, emptyLabel }) {
-  const columns = useMemo(() => [
-    columnHelper.accessor((row) => (row.created_at ? new Date(row.created_at).getTime() : 0), {
-      id: "created_at",
-      header: "Date",
-      cell: (info) => fmtDate(info.row.original.created_at),
-    }),
-    columnHelper.accessor((row) => `${row.user_name || ""} ${row.user_email || ""} ${row.user_id || ""}`, {
-      id: "user",
-      header: "User",
-      cell: (info) => {
-        const row = info.row.original;
-        return (
-          <button type="button" onClick={() => onSelect(row.id)} className="text-left font-medium text-linkedin hover:underline">
-            {row.user_name || "—"}
-            <span className="block text-xs font-normal text-zinc-500">{row.user_email || row.user_id}</span>
-          </button>
-        );
-      },
-    }),
-    columnHelper.accessor((row) => categoryLabel(row.category), {
-      id: "category",
-      header: "Category",
-      meta: {
-        filterVariant: "select",
-        filterOptions: [
-          { value: "Feature idea", label: "Feature idea" },
-          { value: "Problem / bug", label: "Problem / bug" },
-          { value: "Other", label: "Other" },
-        ],
-      },
-    }),
-    columnHelper.accessor("message_preview", {
-      header: "Preview",
-      enableSorting: false,
-      cell: (info) => info.getValue() || "—",
-    }),
-  ], [onSelect]);
+  const columns = useMemo(
+    () => [
+      columnHelper.accessor((row) => (row.created_at ? new Date(row.created_at).getTime() : 0), {
+        id: "created_at",
+        header: "Date",
+        cell: (info) => fmtDate(info.row.original.created_at),
+      }),
+      columnHelper.accessor(
+        (row) => `${row.user_name || ""} ${row.user_email || ""} ${row.user_id || ""}`,
+        {
+          id: "user",
+          header: "User",
+          cell: (info) => {
+            const row = info.row.original;
+            return (
+              <button
+                type="button"
+                onClick={() => onSelect(row.id)}
+                className="text-left font-medium text-linkedin hover:underline"
+              >
+                {row.user_name || "—"}
+                <span className="block text-xs font-normal text-zinc-500">
+                  {row.user_email || row.user_id}
+                </span>
+              </button>
+            );
+          },
+        },
+      ),
+      columnHelper.accessor((row) => categoryLabel(row.category), {
+        id: "category",
+        header: "Category",
+        meta: {
+          filterVariant: "select",
+          filterOptions: [
+            { value: "Feature idea", label: "Feature idea" },
+            { value: "Problem / bug", label: "Problem / bug" },
+            { value: "Other", label: "Other" },
+          ],
+        },
+      }),
+      columnHelper.accessor("message_preview", {
+        header: "Preview",
+        enableSorting: false,
+        cell: (info) => info.getValue() || "—",
+      }),
+    ],
+    [onSelect],
+  );
 
   return (
     <AdminDataTable
@@ -126,52 +162,64 @@ function SuggestionTable({ rows, onSelect, emptyLabel }) {
 }
 
 function TrainingFeedbackTable({ rows, onSelect }) {
-  const columns = useMemo(() => [
-    columnHelper.accessor((row) => (row.created_at ? new Date(row.created_at).getTime() : 0), {
-      id: "created_at",
-      header: "Date",
-      cell: (info) => fmtDate(info.row.original.created_at),
-    }),
-    columnHelper.accessor((row) => `${row.user_name || ""} ${row.user_email || ""} ${row.user_id || ""}`, {
-      id: "creator",
-      header: "Creator",
-      cell: (info) => {
-        const row = info.row.original;
-        return (
-          <button type="button" onClick={() => onSelect(row.id)} className="text-left font-medium text-linkedin hover:underline">
-            {row.user_name || "—"}
-            <span className="block text-xs font-normal text-zinc-500">{row.user_email || row.user_id}</span>
-          </button>
-        );
-      },
-    }),
-    columnHelper.accessor((row) => beneficialLabel(row.beneficial), {
-      id: "beneficial",
-      header: "Helpful",
-      meta: {
-        filterVariant: "select",
-        filterOptions: [
-          { value: "Very helpful", label: "Very helpful" },
-          { value: "Somewhat helpful", label: "Somewhat helpful" },
-          { value: "Not really", label: "Not really" },
-        ],
-      },
-    }),
-    columnHelper.accessor("rating", {
-      header: "Rating",
-      cell: (info) => (
-        <span className="inline-flex items-center gap-1 font-semibold text-amber-600">
-          <Star className="h-3.5 w-3.5 fill-current" />
-          {info.getValue() || "—"}/5
-        </span>
+  const columns = useMemo(
+    () => [
+      columnHelper.accessor((row) => (row.created_at ? new Date(row.created_at).getTime() : 0), {
+        id: "created_at",
+        header: "Date",
+        cell: (info) => fmtDate(info.row.original.created_at),
+      }),
+      columnHelper.accessor(
+        (row) => `${row.user_name || ""} ${row.user_email || ""} ${row.user_id || ""}`,
+        {
+          id: "creator",
+          header: "Creator",
+          cell: (info) => {
+            const row = info.row.original;
+            return (
+              <button
+                type="button"
+                onClick={() => onSelect(row.id)}
+                className="text-left font-medium text-linkedin hover:underline"
+              >
+                {row.user_name || "—"}
+                <span className="block text-xs font-normal text-zinc-500">
+                  {row.user_email || row.user_id}
+                </span>
+              </button>
+            );
+          },
+        },
       ),
-    }),
-    columnHelper.accessor("message_preview", {
-      header: "Comment",
-      enableSorting: false,
-      cell: (info) => info.getValue() || "—",
-    }),
-  ], [onSelect]);
+      columnHelper.accessor((row) => beneficialLabel(row.beneficial), {
+        id: "beneficial",
+        header: "Helpful",
+        meta: {
+          filterVariant: "select",
+          filterOptions: [
+            { value: "Very helpful", label: "Very helpful" },
+            { value: "Somewhat helpful", label: "Somewhat helpful" },
+            { value: "Not really", label: "Not really" },
+          ],
+        },
+      }),
+      columnHelper.accessor("rating", {
+        header: "Rating",
+        cell: (info) => (
+          <span className="inline-flex items-center gap-1 font-semibold text-amber-600">
+            <Star className="h-3.5 w-3.5 fill-current" />
+            {info.getValue() || "—"}/5
+          </span>
+        ),
+      }),
+      columnHelper.accessor("message_preview", {
+        header: "Comment",
+        enableSorting: false,
+        cell: (info) => info.getValue() || "—",
+      }),
+    ],
+    [onSelect],
+  );
 
   return (
     <AdminDataTable
@@ -264,7 +312,7 @@ export default function AdminFeatures() {
     <AdminShell
       title="Features & feedback"
       subtitle="Feature ideas from app users and creators, plus training completion reviews."
-      actions={(
+      actions={
         <>
           <Button variant="outline" onClick={recoverFromResend} disabled={loading || recovering}>
             {recovering ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
@@ -275,7 +323,7 @@ export default function AdminFeatures() {
             Refresh
           </Button>
         </>
-      )}
+      }
     >
       {accessDenied ? (
         <AdminAccessDenied />
@@ -288,7 +336,9 @@ export default function AdminFeatures() {
                 type="button"
                 onClick={() => setTab(item.id)}
                 className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors ${
-                  tab === item.id ? "bg-linkedin text-white" : "bg-white text-zinc-700 border border-zinc-200 hover:bg-zinc-50"
+                  tab === item.id
+                    ? "bg-linkedin text-white"
+                    : "bg-white text-zinc-700 border border-zinc-200 hover:bg-zinc-50"
                 }`}
               >
                 {item.label}
@@ -307,7 +357,9 @@ export default function AdminFeatures() {
                   <Sparkles className="h-5 w-5 text-violet-600" />
                   <div>
                     <h2 className="font-display text-lg font-bold">General user suggestions</h2>
-                    <p className="text-sm text-zinc-500">Feature ideas and bug reports from the main app.</p>
+                    <p className="text-sm text-zinc-500">
+                      Feature ideas and bug reports from the main app.
+                    </p>
                   </div>
                 </div>
               </div>
@@ -326,8 +378,12 @@ export default function AdminFeatures() {
                   <div className="flex items-center gap-2">
                     <MessageSquare className="h-5 w-5 text-violet-600" />
                     <div>
-                      <h2 className="font-display text-lg font-bold">Training completion feedback</h2>
-                      <p className="text-sm text-zinc-500">Reviews submitted after creators finish the course at 100%.</p>
+                      <h2 className="font-display text-lg font-bold">
+                        Training completion feedback
+                      </h2>
+                      <p className="text-sm text-zinc-500">
+                        Reviews submitted after creators finish the course at 100%.
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -341,8 +397,12 @@ export default function AdminFeatures() {
                   <div className="flex items-center gap-2">
                     <Sparkles className="h-5 w-5 text-violet-600" />
                     <div>
-                      <h2 className="font-display text-lg font-bold">Creator feature suggestions</h2>
-                      <p className="text-sm text-zinc-500">Ideas submitted by users with training access.</p>
+                      <h2 className="font-display text-lg font-bold">
+                        Creator feature suggestions
+                      </h2>
+                      <p className="text-sm text-zinc-500">
+                        Ideas submitted by users with training access.
+                      </p>
                     </div>
                   </div>
                 </div>

@@ -5,38 +5,20 @@ import {
   CREATING_CONTENT_SECTIONS_FR,
 } from "./creatingContentSections";
 
-import {
-  WARM_UP_SECTIONS_EN,
-  WARM_UP_SECTIONS_FR,
-} from "./warmupSections";
+import { WARM_UP_SECTIONS_EN, WARM_UP_SECTIONS_FR } from "./warmupSections";
 
-import {
-  CONTENT_BANK_SECTIONS_EN,
-  CONTENT_BANK_SECTIONS_FR,
-} from "./contentBankSections";
+import { CONTENT_BANK_SECTIONS_EN, CONTENT_BANK_SECTIONS_FR } from "./contentBankSections";
 
-import {
-  WARM_UP_PLAYBOOK_EN,
-  WARM_UP_PLAYBOOK_FR,
-} from "./warmUpPlaybook";
+import { WARM_UP_PLAYBOOK_EN, WARM_UP_PLAYBOOK_FR } from "./warmUpPlaybook";
 
 export { CREATING_CONTENT_SECTIONS_EN, CREATING_CONTENT_SECTIONS_FR };
 export { WARM_UP_PLAYBOOK_EN, WARM_UP_PLAYBOOK_FR };
 
-import {
-  GETTING_STARTED_EN,
-  GETTING_STARTED_FR,
-} from "./gettingStartedContent";
+import { GETTING_STARTED_EN, GETTING_STARTED_FR } from "./gettingStartedContent";
 
-import {
-  ACCOUNT_MANAGEMENT_EN,
-  ACCOUNT_MANAGEMENT_FR,
-} from "./accountManagementContent";
+import { ACCOUNT_MANAGEMENT_EN, ACCOUNT_MANAGEMENT_FR } from "./accountManagementContent";
 
-import {
-  SUBMIT_DRAFTS_EN,
-  SUBMIT_DRAFTS_FR,
-} from "./submitDraftsContent";
+import { SUBMIT_DRAFTS_EN, SUBMIT_DRAFTS_FR } from "./submitDraftsContent";
 
 export function moduleContentFor(moduleId, lang = "en") {
   if (moduleId === "mod_getting_started") {

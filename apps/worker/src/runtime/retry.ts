@@ -10,10 +10,7 @@ export class PermanentTaskError extends Error {
   }
 }
 
-export function retryDelayMs(
-  attempt: number,
-  random: () => number = Math.random,
-): number {
+export function retryDelayMs(attempt: number, random: () => number = Math.random): number {
   const base = Math.min(60_000, 1_000 * 2 ** Math.max(0, attempt - 1));
   return Math.round(base * (0.8 + random() * 0.4));
 }

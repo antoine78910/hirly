@@ -51,14 +51,14 @@ export function adminApiErrorMessage(err, fallback) {
     const rawMsg = String(err?.message || "");
     if (/ReadTimeout|ConnectTimeout/i.test(rawMsg)) {
       return (
-        "Database/API timed out (Supabase ReadTimeout). "
-        + "Retry in a few seconds — often overload, not Bright Data."
+        "Database/API timed out (Supabase ReadTimeout). " +
+        "Retry in a few seconds — often overload, not Bright Data."
       );
     }
     if (err?.code === "ECONNABORTED" || /timeout/i.test(rawMsg)) {
       return (
-        `${fallback || "The admin request"} timed out. `
-        + "Refresh and retry; if it continues, check Railway or Supabase health."
+        `${fallback || "The admin request"} timed out. ` +
+        "Refresh and retry; if it continues, check Railway or Supabase health."
       );
     }
     const networkMsg = String(err?.message || "").trim();
@@ -69,9 +69,9 @@ export function adminApiErrorMessage(err, fallback) {
       return "Could not reach the API server. Start the backend (port 8001) and refresh.";
     }
     return (
-      "Could not reach the API (network blip or deploy restart). "
-      + "Auto-apply now calls Railway directly — wait a few seconds and retry. "
-      + "If it keeps failing, check Railway logs."
+      "Could not reach the API (network blip or deploy restart). " +
+      "Auto-apply now calls Railway directly — wait a few seconds and retry. " +
+      "If it keeps failing, check Railway logs."
     );
   }
 
@@ -80,8 +80,8 @@ export function adminApiErrorMessage(err, fallback) {
 
   if (status === 502 || status === 504) {
     return (
-      `Gateway timeout (${status}): Railway likely killed the long browser/proxy run. `
-      + "Retry, or check BROWSER_PROXY / Railway logs."
+      `Gateway timeout (${status}): Railway likely killed the long browser/proxy run. ` +
+      "Retry, or check BROWSER_PROXY / Railway logs."
     );
   }
   if (status === 503) {
@@ -90,10 +90,7 @@ export function adminApiErrorMessage(err, fallback) {
 
   // Soft ExecutionReport sometimes nested under result when a proxy strips status codes oddly.
   const nested =
-    data?.result?.error?.message
-    || data?.result?.reason
-    || data?.error?.message
-    || data?.message;
+    data?.result?.error?.message || data?.result?.reason || data?.error?.message || data?.message;
   if (typeof nested === "string" && nested.trim()) return nested.trim();
 
   const detail = data?.detail;
@@ -101,9 +98,9 @@ export function adminApiErrorMessage(err, fallback) {
     const trimmed = detail.trim();
     if (trimmed === "Internal Server Error" || /^internal server error$/i.test(trimmed)) {
       return (
-        "Server error (500) while starting or polling auto-apply. "
-        + "Often a deploy restart or an oversized status payload — retry in a moment, "
-        + "or check Railway logs."
+        "Server error (500) while starting or polling auto-apply. " +
+        "Often a deploy restart or an oversized status payload — retry in a moment, " +
+        "or check Railway logs."
       );
     }
     return trimmed;
@@ -136,15 +133,18 @@ export function adminApiErrorMessage(err, fallback) {
 export function syntheticAutoApplyErrorReport(err, fallbackMessage) {
   const detail = err?.response?.data?.detail;
   const nestedResult = err?.response?.data?.result;
-  if (nestedResult && typeof nestedResult === "object" && (nestedResult.error || nestedResult.status)) {
+  if (
+    nestedResult &&
+    typeof nestedResult === "object" &&
+    (nestedResult.error || nestedResult.status)
+  ) {
     return nestedResult;
   }
 
   const status = err?.response?.status || null;
   const pollDeadline = err?.code === "POLL_DEADLINE";
-  const timedOut = !pollDeadline && (
-    err?.code === "ECONNABORTED" || /timeout/i.test(String(err?.message || ""))
-  );
+  const timedOut =
+    !pollDeadline && (err?.code === "ECONNABORTED" || /timeout/i.test(String(err?.message || "")));
   const message = adminApiErrorMessage(err, fallbackMessage || "Execution failed");
 
   let phase = "execute";
@@ -163,10 +163,15 @@ export function syntheticAutoApplyErrorReport(err, fallbackMessage) {
       timed_out: timedOut || pollDeadline,
       exception_class: pollDeadline
         ? "PollDeadline"
-        : (timedOut ? "Timeout" : (status ? `HTTP${status}` : "NetworkError")),
-      hint: timedOut || pollDeadline || status === 502 || status === 504
-        ? "Long browser runs with proxy retries can exceed the gateway limit. Retry, or check Railway logs."
-        : undefined,
+        : timedOut
+          ? "Timeout"
+          : status
+            ? `HTTP${status}`
+            : "NetworkError",
+      hint:
+        timedOut || pollDeadline || status === 502 || status === 504
+          ? "Long browser runs with proxy retries can exceed the gateway limit. Retry, or check Railway logs."
+          : undefined,
     };
   }
 
@@ -177,11 +182,13 @@ export function syntheticAutoApplyErrorReport(err, fallbackMessage) {
     error: errorPayload,
     debug: {
       error: errorPayload,
-      timeline: [{
-        stage,
-        status: "error",
-        detail: message,
-      }],
+      timeline: [
+        {
+          stage,
+          status: "error",
+          detail: message,
+        },
+      ],
     },
   };
 }

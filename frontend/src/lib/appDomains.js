@@ -38,7 +38,7 @@ const APP_ROUTE_PREFIXES = [
 ];
 
 const MARKETING_ROUTE_PREFIXES = [
-  '/reset-password',
+  "/reset-password",
   "/how-it-works",
   "/use-cases",
   "/blog",
@@ -95,9 +95,7 @@ export function isMarketingHost() {
 
 export function isAppPath(pathname) {
   const path = pathname || "";
-  return APP_ROUTE_PREFIXES.some(
-    (prefix) => path === prefix || path.startsWith(`${prefix}/`),
-  );
+  return APP_ROUTE_PREFIXES.some((prefix) => path === prefix || path.startsWith(`${prefix}/`));
 }
 
 export function isMarketingPath(pathname) {
@@ -111,9 +109,7 @@ export function isMarketingPath(pathname) {
 
 export function isSharedPath(pathname) {
   const path = pathname || "";
-  return SHARED_ROUTE_PREFIXES.some(
-    (prefix) => path === prefix || path.startsWith(`${prefix}/`),
-  );
+  return SHARED_ROUTE_PREFIXES.some((prefix) => path === prefix || path.startsWith(`${prefix}/`));
 }
 
 export function marketingUrl(path = "/", search = "", hash = "") {

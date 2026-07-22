@@ -4,10 +4,14 @@ import type { Logger } from "@hirly/observability";
 const sleep = (milliseconds: number, signal: AbortSignal) =>
   new Promise<void>((resolve) => {
     const timer = setTimeout(resolve, milliseconds);
-    signal.addEventListener("abort", () => {
-      clearTimeout(timer);
-      resolve();
-    }, { once: true });
+    signal.addEventListener(
+      "abort",
+      () => {
+        clearTimeout(timer);
+        resolve();
+      },
+      { once: true },
+    );
   });
 
 export class CandidateProjectionRelay {

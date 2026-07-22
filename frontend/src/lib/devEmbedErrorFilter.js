@@ -8,8 +8,7 @@ export function installDevEmbedErrorFilter() {
   window.addEventListener(
     "error",
     (event) => {
-      const genericCrossOrigin =
-        event.message === "Script error." && !event.filename;
+      const genericCrossOrigin = event.message === "Script error." && !event.filename;
       const embedFrame = event.target instanceof HTMLIFrameElement;
 
       if (genericCrossOrigin || embedFrame) {

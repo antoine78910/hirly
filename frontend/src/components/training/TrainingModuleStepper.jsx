@@ -19,19 +19,8 @@ function ProgressBadge({ pct, lang, progressTick }) {
       aria-label={`${label}: ${pct}%`}
     >
       <div className="relative flex h-9 w-9 items-center justify-center">
-        <svg
-          className="absolute inset-0 h-9 w-9 -rotate-90"
-          viewBox="0 0 24 24"
-          aria-hidden
-        >
-          <circle
-            cx="12"
-            cy="12"
-            r={RING_R}
-            fill="none"
-            stroke="#ede9fe"
-            strokeWidth="2.5"
-          />
+        <svg className="absolute inset-0 h-9 w-9 -rotate-90" viewBox="0 0 24 24" aria-hidden>
+          <circle cx="12" cy="12" r={RING_R} fill="none" stroke="#ede9fe" strokeWidth="2.5" />
           <motion.circle
             key={`${progressTick}-${pct}`}
             cx="12"
@@ -99,9 +88,7 @@ export default function TrainingModuleStepper({
 
   const quizResults = enrollment?.quiz_results || {};
   const fractions = scored.map((m) => moduleProgressFraction(courseId, m, quizResults));
-  const overallPct = Math.round(
-    (fractions.reduce((a, b) => a + b, 0) / scored.length) * 100,
-  );
+  const overallPct = Math.round((fractions.reduce((a, b) => a + b, 0) / scored.length) * 100);
 
   const isModuleValidated = (m) =>
     m.completed || isQuizPassed(enrollment, quizIdForModule(m.module_id), courseId);
@@ -148,9 +135,13 @@ export default function TrainingModuleStepper({
                 navigable ? "cursor-pointer hover:ring-violet-400" : "cursor-default",
               ].join(" ")}
               onClick={navigable ? () => onModuleSelect(m.module_id) : undefined}
-              onKeyDown={navigable ? (e) => {
-                if (e.key === "Enter" || e.key === " ") onModuleSelect(m.module_id);
-              } : undefined}
+              onKeyDown={
+                navigable
+                  ? (e) => {
+                      if (e.key === "Enter" || e.key === " ") onModuleSelect(m.module_id);
+                    }
+                  : undefined
+              }
               role={navigable ? "button" : undefined}
               tabIndex={navigable ? 0 : undefined}
               aria-label={`${stepNum}. ${m.title}`}

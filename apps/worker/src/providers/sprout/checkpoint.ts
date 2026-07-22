@@ -12,10 +12,7 @@ export const sproutCheckpointSchema = z
   })
   .strict()
   .superRefine((checkpoint, context) => {
-    if (
-      checkpoint.observedTotal !== null &&
-      checkpoint.offset > checkpoint.observedTotal
-    ) {
+    if (checkpoint.observedTotal !== null && checkpoint.offset > checkpoint.observedTotal) {
       context.addIssue({
         code: "custom",
         message: "checkpoint offset cannot exceed the observed total",
@@ -49,14 +46,15 @@ export function nextSproutCheckpoint(input: {
   if (!Number.isInteger(input.returnedItemCount) || input.returnedItemCount < 0) {
     throw new Error("sprout_checkpoint_invalid_returned_item_count");
   }
-  if (
-    !Number.isInteger(input.sourceReportedTotal) ||
-    input.sourceReportedTotal < 0
-  ) {
+  if (!Number.isInteger(input.sourceReportedTotal) || input.sourceReportedTotal < 0) {
     throw new Error("sprout_checkpoint_invalid_source_total");
   }
   const expectedOffset = current.offset + input.returnedItemCount;
-  const observedTotal = Math.max(current.observedTotal ?? 0, input.sourceReportedTotal, expectedOffset);
+  const observedTotal = Math.max(
+    current.observedTotal ?? 0,
+    input.sourceReportedTotal,
+    expectedOffset,
+  );
 
   // Sprout can return an empty collection with a stale/self-referential `next`
   // link when filters have drifted. There is no safe offset advancement in

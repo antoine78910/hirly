@@ -18,8 +18,9 @@ export const INVITE_BASE_URL = normalizeInviteBaseUrl(
 
 export function buildInviteUrl(code) {
   const normalized = String(code || "").trim();
-  const base = INVITE_BASE_URL
-    || (typeof window !== "undefined" ? window.location.origin : "https://tryhirly.com");
+  const base =
+    INVITE_BASE_URL ||
+    (typeof window !== "undefined" ? window.location.origin : "https://tryhirly.com");
   return `${base}/invite/${normalized}`;
 }
 

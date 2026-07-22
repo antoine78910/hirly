@@ -1,17 +1,16 @@
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 
-const databaseUrl =
-  process.env.G014_TEST_DATABASE_URL ?? process.env.G002_TEST_DATABASE_URL;
+const databaseUrl = process.env.G014_TEST_DATABASE_URL ?? process.env.G002_TEST_DATABASE_URL;
 const repoRoot = join(import.meta.dir, "..");
 const runIntegration = databaseUrl ? test : test.skip;
 
 async function psql(args: string[]): Promise<string> {
   if (!databaseUrl) throw new Error("G014_TEST_DATABASE_URL is required");
-  const process = Bun.spawn(
-    ["psql", databaseUrl, "-X", "-v", "ON_ERROR_STOP=1", ...args],
-    { stdout: "pipe", stderr: "pipe" },
-  );
+  const process = Bun.spawn(["psql", databaseUrl, "-X", "-v", "ON_ERROR_STOP=1", ...args], {
+    stdout: "pipe",
+    stderr: "pipe",
+  });
   const [exitCode, stdout, stderr] = await Promise.all([
     process.exited,
     new Response(process.stdout).text(),
@@ -47,7 +46,12 @@ describe("G014 real-Postgres source trial isolation", () => {
         await apply(`backend/db/migrations/${migration}`);
       }
 
-      const result = await psql(["-A", "-t", "-q", "-c", `
+      const result = await psql([
+        "-A",
+        "-t",
+        "-q",
+        "-c",
+        `
         BEGIN;
 
         CREATE TABLE IF NOT EXISTS public.applications (
@@ -986,7 +990,8 @@ describe("G014 real-Postgres source trial isolation", () => {
         );
 
         ROLLBACK;
-      `]);
+      `,
+      ]);
 
       const proof = JSON.parse(result.split("\n").at(-1) ?? "{}");
       expect(proof).toEqual({
@@ -1017,21 +1022,21 @@ describe("G014 real-Postgres source trial isolation", () => {
       await apply(
         "backend/db/migrations/20260720001150_source_trial_tenant_selection_binding.down.sql",
       );
-      await apply(
-        "backend/db/migrations/20260720001100_source_trial_foundation.down.sql",
-      );
+      await apply("backend/db/migrations/20260720001100_source_trial_foundation.down.sql");
       expect(
-        await psql(["-A", "-t", "-q", "-c", `
+        await psql([
+          "-A",
+          "-t",
+          "-q",
+          "-c",
+          `
           SELECT to_regclass('public.source_trial_runs') IS NULL
             AND to_regclass('public.jobs') IS NOT NULL;
-        `]),
+        `,
+        ]),
       ).toBe("t");
-      await apply(
-        "backend/db/migrations/20260720001100_source_trial_foundation.sql",
-      );
-      await apply(
-        "backend/db/migrations/20260720001150_source_trial_tenant_selection_binding.sql",
-      );
+      await apply("backend/db/migrations/20260720001100_source_trial_foundation.sql");
+      await apply("backend/db/migrations/20260720001150_source_trial_tenant_selection_binding.sql");
     },
     30_000,
   );

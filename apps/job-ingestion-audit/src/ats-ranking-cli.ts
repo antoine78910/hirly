@@ -43,9 +43,7 @@ function parseArgs(argv: string[]): { input: string; output: string } {
 
 const root = resolve(import.meta.dir, "../../..");
 const args = parseArgs(Bun.argv.slice(2));
-const input = JSON.parse(
-  await readFile(resolve(root, args.input), "utf8"),
-) as AtsRankingInput;
+const input = JSON.parse(await readFile(resolve(root, args.input), "utf8")) as AtsRankingInput;
 const report = rankAtsCandidates(input);
 const output = resolve(root, args.output);
 await mkdir(dirname(output), { recursive: true });

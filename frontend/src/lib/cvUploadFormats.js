@@ -27,7 +27,8 @@ export const CV_ACCEPTED_MIME_TYPES = [
   "text/plain",
 ];
 
-export const CV_ACCEPT_ATTR = ".pdf,.png,.jpg,.jpeg,.heic,.webp,.docx,.rtf,.txt,image/*,application/pdf";
+export const CV_ACCEPT_ATTR =
+  ".pdf,.png,.jpg,.jpeg,.heic,.webp,.docx,.rtf,.txt,image/*,application/pdf";
 
 /** Max upload size shared by the CV, additional documents, and cover-letter uploads (matches backend). */
 export const CV_MAX_BYTES = 20 * 1024 * 1024;

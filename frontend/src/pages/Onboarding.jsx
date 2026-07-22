@@ -11,17 +11,17 @@ import {
   trackOnboardingSkip,
 } from "../lib/datafast";
 import { shouldMockCvUpload, uploadProfileCv } from "../lib/demoCvUpload";
-import { CV_ACCEPT_ATTR, CV_MAX_BYTES, CV_MAX_MB, isAcceptedCvFile, isLegacyDocFile } from "../lib/cvUploadFormats";
+import {
+  CV_ACCEPT_ATTR,
+  CV_MAX_BYTES,
+  CV_MAX_MB,
+  isAcceptedCvFile,
+  isLegacyDocFile,
+} from "../lib/cvUploadFormats";
 import { useAuth } from "../context/AuthContext";
 import { useAppLocale } from "../context/AppLocaleContext";
 import { Slider } from "../components/ui/slider";
-import {
-  Upload,
-  FileText,
-  Loader2,
-  CheckCircle2,
-  Plus,
-} from "lucide-react";
+import { Upload, FileText, Loader2, CheckCircle2, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 import PlacesAutocomplete from "../components/PlacesAutocomplete";
@@ -45,7 +45,9 @@ import {
   LongTermResultsChart,
   InterviewTargetDashes,
 } from "../components/onboarding/OnboardingVisuals";
-import OnboardingContactPhoneStep, { getContactPhoneCopy } from "../components/onboarding/OnboardingContactPhoneStep";
+import OnboardingContactPhoneStep, {
+  getContactPhoneCopy,
+} from "../components/onboarding/OnboardingContactPhoneStep";
 import {
   formatContactPhone,
   isValidContactPhone,
@@ -98,10 +100,17 @@ import { devBypassAuth } from "../lib/dev";
 import { splitFullName } from "../lib/personalInfoOptions";
 import { ob } from "../components/onboarding/onboardingTheme";
 import { trackEvent } from "../lib/analytics";
-import { preloadOnboardingIntroImages, preloadOnboardingShowcaseImages } from "../lib/onboardingImagePreload";
+import {
+  preloadOnboardingIntroImages,
+  preloadOnboardingShowcaseImages,
+} from "../lib/onboardingImagePreload";
 import { translateOnboardingCategoryLabel } from "../lib/onboardingJobLabelsFr";
 import { translateRoleLabel } from "../lib/localizedDisplay";
-import { redeemCreatorInvite, storePendingInviteCode, clearPendingInviteCode } from "../lib/creatorInvite";
+import {
+  redeemCreatorInvite,
+  storePendingInviteCode,
+  clearPendingInviteCode,
+} from "../lib/creatorInvite";
 import { setDemoAccountFromUser } from "../lib/demoAccount";
 import { queueDemoWelcome } from "../lib/demoWelcome";
 import { goToApp } from "../lib/appDomains";
@@ -117,8 +126,7 @@ const ONBOARDING_CHECKOUT_STATE_KEY = "hirly.onboarding.checkoutState";
 const ONBOARDING_STARTED_GOAL_KEY = "hirly.onboarding.startedGoal";
 const isSixDigitAccessCode = (value) => /^\d{6}$/.test(String(value || "").trim());
 
-const defaultCategoryOptions = () =>
-  JOB_CATEGORIES.map(({ id, label }) => ({ id, label }));
+const defaultCategoryOptions = () => JOB_CATEGORIES.map(({ id, label }) => ({ id, label }));
 
 const chipReveal = {
   container: {
@@ -165,7 +173,16 @@ const introSlideMotion = {
 export default function Onboarding() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { user, hasProfile, hasPreferences, setHasProfile, setHasPreferences, checkAuth, setHasTrainingAccess, loading: authLoading } = useAuth();
+  const {
+    user,
+    hasProfile,
+    hasPreferences,
+    setHasProfile,
+    setHasPreferences,
+    checkAuth,
+    setHasTrainingAccess,
+    loading: authLoading,
+  } = useAuth();
   const { lang, setLang } = useAppLocale();
   const introNavDirection = useRef(1);
 
@@ -227,7 +244,9 @@ export default function Onboarding() {
   const [referralCode, setReferralCode] = useState("");
   const [friendReferralRedeemed, setFriendReferralRedeemed] = useState(false);
   const [contactPhonePrefix, setContactPhonePrefix] = useState(() => getDefaultPhonePrefix(lang));
-  const [contactPhoneCountryIso2, setContactPhoneCountryIso2] = useState(() => getDefaultPhoneCountryIso2(lang));
+  const [contactPhoneCountryIso2, setContactPhoneCountryIso2] = useState(() =>
+    getDefaultPhoneCountryIso2(lang),
+  );
   const [contactPhoneLocal, setContactPhoneLocal] = useState("");
   const [savingPhone, setSavingPhone] = useState(false);
   const [referralValidating, setReferralValidating] = useState(false);
@@ -251,11 +270,14 @@ export default function Onboarding() {
     if (!isFriendReferralCode(normalized)) return;
     setReferralCode(normalized);
     storePendingFriendReferralCode(normalized);
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev);
-      next.delete("referral");
-      return next;
-    }, { replace: true });
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete("referral");
+        return next;
+      },
+      { replace: true },
+    );
   }, [searchParams, setSearchParams]);
 
   useEffect(() => {
@@ -305,7 +327,9 @@ export default function Onboarding() {
 
   const step = STEP_ORDER[stepIndex];
   const slides = lang === "fr" ? INTRO_SLIDES_FR : INTRO_SLIDES;
-  const progress = ((stepIndex + (step === "intro" ? (introIndex + 1) / slides.length : 1)) / STEP_ORDER.length) * 100;
+  const progress =
+    ((stepIndex + (step === "intro" ? (introIndex + 1) / slides.length : 1)) / STEP_ORDER.length) *
+    100;
 
   const categoryOptions = useMemo(() => {
     const base = suggestedCategories.length
@@ -338,24 +362,56 @@ export default function Onboarding() {
     if (payload.experience) setExperience(payload.experience);
     if (typeof payload.salaryMin === "number") setSalaryMin(payload.salaryMin);
     if (typeof payload.salaryMax === "number") setSalaryMax(payload.salaryMax);
-    if (typeof payload.interviewsPerWeek === "number") setInterviewsPerWeek(payload.interviewsPerWeek);
+    if (typeof payload.interviewsPerWeek === "number")
+      setInterviewsPerWeek(payload.interviewsPerWeek);
     if (payload.jobTimeline) setJobTimeline(payload.jobTimeline);
     if (payload.jobBlocker) setJobBlocker(payload.jobBlocker);
     if (payload.jobAccomplish) setJobAccomplish(payload.jobAccomplish);
     if (payload.jobGoal) setJobGoal(payload.jobGoal);
     if (payload.jobSearchStatus) setJobSearchStatus(payload.jobSearchStatus);
-    if (typeof payload.onboardingLocation === "string") setOnboardingLocation(payload.onboardingLocation);
+    if (typeof payload.onboardingLocation === "string")
+      setOnboardingLocation(payload.onboardingLocation);
     if (payload.onboardingLocationData) setOnboardingLocationData(payload.onboardingLocationData);
     if (payload.contractType) setContractType(payload.contractType);
     if (payload.triedOtherApps) setTriedOtherApps(payload.triedOtherApps);
     if (payload.attribution) setAttribution(payload.attribution);
-    if (Array.isArray(payload.suggestedCategories)) setSuggestedCategories(payload.suggestedCategories);
+    if (Array.isArray(payload.suggestedCategories))
+      setSuggestedCategories(payload.suggestedCategories);
     if (payload.selectedPlan) setSelectedPlan(payload.selectedPlan);
-    if (isSixDigitAccessCode(payload.creatorAccessCode)) setCreatorAccessCode(payload.creatorAccessCode);
+    if (isSixDigitAccessCode(payload.creatorAccessCode))
+      setCreatorAccessCode(payload.creatorAccessCode);
   };
 
-  const getOnboardingExtrasPayload = useCallback((lastStep, lastStepIndex) => (
-    buildOnboardingExtrasPayload({
+  const getOnboardingExtrasPayload = useCallback(
+    (lastStep, lastStepIndex) =>
+      buildOnboardingExtrasPayload({
+        jobSearchStatus,
+        onboardingLocation,
+        onboardingLocationData,
+        contractType,
+        triedOtherApps,
+        categories,
+        suggestedCategories,
+        selectedRoles,
+        experience,
+        interviewsPerWeek,
+        jobTimeline,
+        jobBlocker,
+        jobAccomplish,
+        jobGoal,
+        attribution,
+        referralCode,
+        salaryMin,
+        salaryMax,
+        selectedPlan,
+        phone:
+          formatContactPhone(contactPhonePrefix, contactPhoneLocal, contactPhoneCountryIso2) ||
+          profile?.contact?.phone ||
+          null,
+        lastStep,
+        lastStepIndex,
+      }),
+    [
       jobSearchStatus,
       onboardingLocation,
       onboardingLocationData,
@@ -375,37 +431,12 @@ export default function Onboarding() {
       salaryMin,
       salaryMax,
       selectedPlan,
-      phone: formatContactPhone(contactPhonePrefix, contactPhoneLocal, contactPhoneCountryIso2)
-        || profile?.contact?.phone
-        || null,
-      lastStep,
-      lastStepIndex,
-    })
-  ), [
-    jobSearchStatus,
-    onboardingLocation,
-    onboardingLocationData,
-    contractType,
-    triedOtherApps,
-    categories,
-    suggestedCategories,
-    selectedRoles,
-    experience,
-    interviewsPerWeek,
-    jobTimeline,
-    jobBlocker,
-    jobAccomplish,
-    jobGoal,
-    attribution,
-    referralCode,
-    salaryMin,
-    salaryMax,
-    selectedPlan,
-    contactPhonePrefix,
-    contactPhoneLocal,
-    contactPhoneCountryIso2,
-    profile?.contact?.phone,
-  ]);
+      contactPhonePrefix,
+      contactPhoneLocal,
+      contactPhoneCountryIso2,
+      profile?.contact?.phone,
+    ],
+  );
 
   const enqueueOnboardingPatch = useCallback(async (payload) => {
     const state = onboardingSaveRef.current;
@@ -432,47 +463,54 @@ export default function Onboarding() {
     }
   }, []);
 
-  const persistOnboardingProgress = useCallback(async (nextStep, nextStepIndex) => {
-    if (!user || ONBOARDING_TRANSIENT_STEPS.has(nextStep)) return;
-    try {
-      const roles = selectedRoles.map((role) => String(role || "").trim()).filter(Boolean);
-      const experienceLevel = EXPERIENCE_LEVELS.find((entry) => entry.id === experience);
-      await enqueueOnboardingPatch({
-        onboarding: getOnboardingExtrasPayload(nextStep, nextStepIndex),
-        preferences: {
-          target_role: roles[0] || undefined,
-          target_roles: roles,
-          target_location: onboardingLocationData?.location_label || onboardingLocation || undefined,
-          target_location_data: onboardingLocationData || undefined,
-          contract_type: contractType || undefined,
-          seniority: experienceLevel?.backend,
-          remote_preference: "any",
-        },
-        contact: {
-          location: onboardingLocationData?.location_label || onboardingLocation || undefined,
-          location_data: onboardingLocationData || undefined,
-        },
-      });
-    } catch (e) {
-      console.warn("onboarding progress save skipped", e);
-    }
-  }, [
-    user,
-    getOnboardingExtrasPayload,
-    selectedRoles,
-    onboardingLocation,
-    onboardingLocationData,
-    contractType,
-    experience,
-    enqueueOnboardingPatch,
-  ]);
+  const persistOnboardingProgress = useCallback(
+    async (nextStep, nextStepIndex) => {
+      if (!user || ONBOARDING_TRANSIENT_STEPS.has(nextStep)) return;
+      try {
+        const roles = selectedRoles.map((role) => String(role || "").trim()).filter(Boolean);
+        const experienceLevel = EXPERIENCE_LEVELS.find((entry) => entry.id === experience);
+        await enqueueOnboardingPatch({
+          onboarding: getOnboardingExtrasPayload(nextStep, nextStepIndex),
+          preferences: {
+            target_role: roles[0] || undefined,
+            target_roles: roles,
+            target_location:
+              onboardingLocationData?.location_label || onboardingLocation || undefined,
+            target_location_data: onboardingLocationData || undefined,
+            contract_type: contractType || undefined,
+            seniority: experienceLevel?.backend,
+            remote_preference: "any",
+          },
+          contact: {
+            location: onboardingLocationData?.location_label || onboardingLocation || undefined,
+            location_data: onboardingLocationData || undefined,
+          },
+        });
+      } catch (e) {
+        console.warn("onboarding progress save skipped", e);
+      }
+    },
+    [
+      user,
+      getOnboardingExtrasPayload,
+      selectedRoles,
+      onboardingLocation,
+      onboardingLocationData,
+      contractType,
+      experience,
+      enqueueOnboardingPatch,
+    ],
+  );
 
-  const goToStepIndex = useCallback((nextIndex) => {
-    if (nextIndex < 0 || nextIndex >= STEP_ORDER.length) return;
-    const nextStep = STEP_ORDER[nextIndex];
-    void persistOnboardingProgress(nextStep, nextIndex);
-    setStepIndex(nextIndex);
-  }, [persistOnboardingProgress]);
+  const goToStepIndex = useCallback(
+    (nextIndex) => {
+      if (nextIndex < 0 || nextIndex >= STEP_ORDER.length) return;
+      const nextStep = STEP_ORDER[nextIndex];
+      void persistOnboardingProgress(nextStep, nextIndex);
+      setStepIndex(nextIndex);
+    },
+    [persistOnboardingProgress],
+  );
 
   // Persist the visible step after bootstrap so reload keeps the same screen.
   useEffect(() => {
@@ -481,12 +519,15 @@ export default function Onboarding() {
     const currentStep = STEP_ORDER[stepIndex];
     if (!currentStep || ONBOARDING_TRANSIENT_STEPS.has(currentStep)) return;
     void persistOnboardingProgress(currentStep, stepIndex);
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev);
-      if (next.get("step") === currentStep) return prev;
-      next.set("step", currentStep);
-      return next;
-    }, { replace: true });
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (next.get("step") === currentStep) return prev;
+        next.set("step", currentStep);
+        return next;
+      },
+      { replace: true },
+    );
   }, [user, stepIndex, authLoading, bootstrapping, persistOnboardingProgress, setSearchParams]);
 
   // Save referral code draft while the user types (reload should not lose it).
@@ -506,7 +547,9 @@ export default function Onboarding() {
     if (checkoutStatus) {
       const checkoutSessionId = searchParams.get("session_id");
       try {
-        restoreCheckoutState(JSON.parse(sessionStorage.getItem(ONBOARDING_CHECKOUT_STATE_KEY) || "null"));
+        restoreCheckoutState(
+          JSON.parse(sessionStorage.getItem(ONBOARDING_CHECKOUT_STATE_KEY) || "null"),
+        );
       } catch (_) {
         /* ignore corrupt checkout state */
       }
@@ -653,14 +696,18 @@ export default function Onboarding() {
 
         setStepIndex(STEP_ORDER.indexOf(resumeStep));
 
-        setSearchParams((prev) => {
-          const next = new URLSearchParams(prev);
-          next.set("step", resumeStep);
-          return next;
-        }, { replace: true });
+        setSearchParams(
+          (prev) => {
+            const next = new URLSearchParams(prev);
+            next.set("step", resumeStep);
+            return next;
+          },
+          { replace: true },
+        );
       } catch {
         if (!cancelled && user) {
-          const fallbackStep = stepParam && STEP_ORDER.includes(stepParam) ? stepParam : "jobSearch";
+          const fallbackStep =
+            stepParam && STEP_ORDER.includes(stepParam) ? stepParam : "jobSearch";
           setStepIndex(STEP_ORDER.indexOf(fallbackStep));
         }
       } finally {
@@ -722,7 +769,7 @@ export default function Onboarding() {
     return () => {
       cancelled = true;
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingCheckoutSuccess, user]);
 
   // Stripe cancel/back or reload after reaching the paywall → enter app.
@@ -744,7 +791,7 @@ export default function Onboarding() {
     return () => {
       cancelled = true;
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingEnterAppFromPaywall, user, hasProfile, hasPreferences]);
 
   useEffect(() => {
@@ -763,7 +810,11 @@ export default function Onboarding() {
       }
     }
     // Auto-create a typed location when the user continues without picking from the list
-    if (step === "location" && onboardingLocation.trim() && !onboardingLocationData?.location_label) {
+    if (
+      step === "location" &&
+      onboardingLocation.trim() &&
+      !onboardingLocationData?.location_label
+    ) {
       const typed = buildTypedLocationResult(onboardingLocation.trim());
       if (typed[0]) {
         setOnboardingLocationData({
@@ -799,15 +850,14 @@ export default function Onboarding() {
       let next;
       if (prev.includes(id)) next = prev.filter((c) => c !== id);
       else if (prev.length >= 3) {
-        toast.message(lang === "fr" ? "Choisissez jusqu'à 3 catégories" : "Pick up to 3 categories");
+        toast.message(
+          lang === "fr" ? "Choisissez jusqu'à 3 catégories" : "Pick up to 3 categories",
+        );
         return prev;
       } else next = [...prev, id];
 
       const options = suggestedCategories.length ? suggestedCategories : defaultCategoryOptions();
-      const available = new Set([
-        ...rolesForCategories(next, 200, options),
-        ...customRoles,
-      ]);
+      const available = new Set([...rolesForCategories(next, 200, options), ...customRoles]);
       setSelectedRoles((roles) => roles.filter((role) => available.has(role)));
       setSuggestedRoles([]);
       return next;
@@ -859,12 +909,18 @@ export default function Onboarding() {
     }
     if (f.size > CV_MAX_BYTES) {
       toast.error(
-        lang === "fr" ? `Le fichier doit faire ${CV_MAX_MB} Mo ou moins.` : `File must be ${CV_MAX_MB}MB or smaller.`,
+        lang === "fr"
+          ? `Le fichier doit faire ${CV_MAX_MB} Mo ou moins.`
+          : `File must be ${CV_MAX_MB}MB or smaller.`,
       );
       return;
     }
     if (!user && !shouldMockCvUpload()) {
-      toast.error(lang === "fr" ? "Connectez-vous avec Google pour importer votre CV" : "Sign in with Google to upload your resume");
+      toast.error(
+        lang === "fr"
+          ? "Connectez-vous avec Google pour importer votre CV"
+          : "Sign in with Google to upload your resume",
+      );
       return;
     }
     setFile(f);
@@ -902,9 +958,15 @@ export default function Onboarding() {
         }
       } catch (e) {
         console.error(e);
-        trackEvent("cv_upload_failed", { source: "onboarding", message: e?.response?.data?.detail || e?.message });
+        trackEvent("cv_upload_failed", {
+          source: "onboarding",
+          message: e?.response?.data?.detail || e?.message,
+        });
         if (!shouldMockCvUpload()) {
-          toast.error(e?.response?.data?.detail || (lang === "fr" ? "Échec de l'analyse du CV" : "Failed to parse CV"));
+          toast.error(
+            e?.response?.data?.detail ||
+              (lang === "fr" ? "Échec de l'analyse du CV" : "Failed to parse CV"),
+          );
         }
         if (!advanced) {
           setParsing(false);
@@ -927,7 +989,11 @@ export default function Onboarding() {
   };
 
   const saveContactPhone = async () => {
-    const formatted = formatContactPhone(contactPhonePrefix, contactPhoneLocal, contactPhoneCountryIso2);
+    const formatted = formatContactPhone(
+      contactPhonePrefix,
+      contactPhoneLocal,
+      contactPhoneCountryIso2,
+    );
     if (!formatted) return true;
     setSavingPhone(true);
     try {
@@ -942,8 +1008,8 @@ export default function Onboarding() {
       return true;
     } catch (e) {
       toast.error(
-        e?.response?.data?.detail
-          || (lang === "fr" ? "Impossible d'enregistrer le numéro" : "Could not save phone number"),
+        e?.response?.data?.detail ||
+          (lang === "fr" ? "Impossible d'enregistrer le numéro" : "Could not save phone number"),
       );
       return false;
     } finally {
@@ -971,14 +1037,20 @@ export default function Onboarding() {
       }
       toast.success(
         redeemed?.master_code
-          ? (lang === "fr" ? "Plan test activé" : "Test plan activated")
-          : (lang === "fr" ? "Accès créateur activé" : "Creator access activated"),
+          ? lang === "fr"
+            ? "Plan test activé"
+            : "Test plan activated"
+          : lang === "fr"
+            ? "Accès créateur activé"
+            : "Creator access activated",
       );
       return true;
     } catch (inviteErr) {
       toast.error(
-        inviteErr?.response?.data?.detail
-          || (lang === "fr" ? "Impossible d'activer le code d'accès" : "Could not activate access code"),
+        inviteErr?.response?.data?.detail ||
+          (lang === "fr"
+            ? "Impossible d'activer le code d'accès"
+            : "Could not activate access code"),
       );
       return false;
     } finally {
@@ -1044,16 +1116,18 @@ export default function Onboarding() {
         return;
       }
       const nameParts = splitFullName(user?.name || profile?.contact?.name || "");
-      const formattedPhone = formatContactPhone(contactPhonePrefix, contactPhoneLocal, contactPhoneCountryIso2)
-        || profile?.contact?.phone
-        || undefined;
+      const formattedPhone =
+        formatContactPhone(contactPhonePrefix, contactPhoneLocal, contactPhoneCountryIso2) ||
+        profile?.contact?.phone ||
+        undefined;
       const experienceLevel = EXPERIENCE_LEVELS.find((entry) => entry.id === experience);
       await enqueueOnboardingPatch({
         onboarding: getOnboardingExtrasPayload(step, stepIndex),
         preferences: {
           target_role: selectedRoles[0] || undefined,
           target_roles: selectedRoles,
-          target_location: onboardingLocationData?.location_label || onboardingLocation || undefined,
+          target_location:
+            onboardingLocationData?.location_label || onboardingLocation || undefined,
           target_location_data: onboardingLocationData || undefined,
           contract_type: contractType || undefined,
           seniority: experienceLevel?.backend,
@@ -1106,32 +1180,38 @@ export default function Onboarding() {
     setCheckoutLoading(true);
     try {
       await persistOnboardingProgress("showcasePricing", STEP_ORDER.indexOf("showcasePricing"));
-      sessionStorage.setItem(ONBOARDING_CHECKOUT_STATE_KEY, JSON.stringify({
-        categories,
-        selectedRoles,
-        experience,
-        salaryMin,
-        salaryMax,
-        interviewsPerWeek,
-        jobTimeline,
-        jobBlocker,
-        jobAccomplish,
-        jobGoal,
-        jobSearchStatus,
-        onboardingLocation,
-        onboardingLocationData,
-        contractType,
-        triedOtherApps,
-        attribution,
-        suggestedCategories,
-        selectedPlan,
-        creatorAccessCode,
-      }));
-      const { data } = await api.post("/billing/create-checkout-session", withDatafastAttribution({
-        plan: selectedPlan,
-        interval: selectedPlan,
-        source: "onboarding",
-      }));
+      sessionStorage.setItem(
+        ONBOARDING_CHECKOUT_STATE_KEY,
+        JSON.stringify({
+          categories,
+          selectedRoles,
+          experience,
+          salaryMin,
+          salaryMax,
+          interviewsPerWeek,
+          jobTimeline,
+          jobBlocker,
+          jobAccomplish,
+          jobGoal,
+          jobSearchStatus,
+          onboardingLocation,
+          onboardingLocationData,
+          contractType,
+          triedOtherApps,
+          attribution,
+          suggestedCategories,
+          selectedPlan,
+          creatorAccessCode,
+        }),
+      );
+      const { data } = await api.post(
+        "/billing/create-checkout-session",
+        withDatafastAttribution({
+          plan: selectedPlan,
+          interval: selectedPlan,
+          source: "onboarding",
+        }),
+      );
       if (!data?.url) throw new Error("Missing checkout URL");
       trackEvent("checkout_started", { source: "onboarding", plan: selectedPlan });
       trackDatafastGoal("onboarding_checkout_started", { plan: selectedPlan });
@@ -1207,7 +1287,11 @@ export default function Onboarding() {
   const submitReferralCode = async () => {
     const code = referralCode.trim();
     if (!code) {
-      toast.error(lang === "fr" ? "Entrez un code de parrainage ou appuyez sur Passer" : "Enter a referral code or tap Skip");
+      toast.error(
+        lang === "fr"
+          ? "Entrez un code de parrainage ou appuyez sur Passer"
+          : "Enter a referral code or tap Skip",
+      );
       return;
     }
     if (!/^\d{6}$/.test(code)) {
@@ -1253,8 +1337,7 @@ export default function Onboarding() {
       goNext();
     } catch (err) {
       toast.error(
-        err?.response?.data?.detail
-          || friendReferralValidationMessage("not_found", lang),
+        err?.response?.data?.detail || friendReferralValidationMessage("not_found", lang),
       );
     } finally {
       setReferralValidating(false);
@@ -1283,9 +1366,10 @@ export default function Onboarding() {
     }
 
     trackEvent("onboarding_step_completed", { step, step_index: stepIndex });
-    const continueParams = step === "intro"
-      ? { intro_slide: String(introIndex), intro_total: String(slides.length) }
-      : { step_index: String(stepIndex) };
+    const continueParams =
+      step === "intro"
+        ? { intro_slide: String(introIndex), intro_total: String(slides.length) }
+        : { step_index: String(stepIndex) };
     if (step === "intro") {
       trackOnboardingIntroContinue(introIndex, slides.length, continueParams);
     } else {
@@ -1303,7 +1387,11 @@ export default function Onboarding() {
   };
 
   const isLastIntroSlide = step === "intro" && introIndex === slides.length - 1;
-  const hideFooter = parsing || step === "profileSetup" || (step === "signup" && !user) || step === "showcasePricing";
+  const hideFooter =
+    parsing ||
+    step === "profileSetup" ||
+    (step === "signup" && !user) ||
+    step === "showcasePricing";
 
   const footer = !hideFooter ? (
     step === "profileWelcome" ? (
@@ -1322,8 +1410,12 @@ export default function Onboarding() {
           testId="contact-phone-continue"
         >
           {savingPhone
-            ? (lang === "fr" ? "Enregistrement..." : "Saving...")
-            : (lang === "fr" ? "Continuer" : "Continue")}
+            ? lang === "fr"
+              ? "Enregistrement..."
+              : "Saving..."
+            : lang === "fr"
+              ? "Continuer"
+              : "Continue"}
         </ContinueButton>
         <button
           type="button"
@@ -1337,13 +1429,19 @@ export default function Onboarding() {
     ) : step === "referralCode" ? (
       <div className="space-y-2.5">
         <ContinueButton
-          onClick={() => { void submitReferralCode(); }}
+          onClick={() => {
+            void submitReferralCode();
+          }}
           disabled={!referralCode.trim() || referralValidating}
           testId="referral-submit"
         >
           {referralValidating
-            ? (lang === "fr" ? "Vérification..." : "Checking...")
-            : (lang === "fr" ? "Valider" : "Submit")}
+            ? lang === "fr"
+              ? "Vérification..."
+              : "Checking..."
+            : lang === "fr"
+              ? "Valider"
+              : "Submit"}
         </ContinueButton>
         <button
           type="button"
@@ -1370,17 +1468,25 @@ export default function Onboarding() {
       </div>
     ) : (
       <ContinueButton onClick={onContinue} disabled={!canContinue() || parsing}>
-        {isLastIntroSlide ? (
-          lang === "fr" ? "Commencer" : "Get Started"
-        ) : step === "intro" ? (
-          lang === "fr" ? "Continuer" : "Continue"
-        ) : step === "signup" ? (
-          lang === "fr" ? "Continuer" : "Continue"
-        ) : step === "upload" && !file ? (
-          lang === "fr" ? "Importer le CV" : "Upload resume"
-        ) : (
-          lang === "fr" ? "Continuer" : "Continue"
-        )}
+        {isLastIntroSlide
+          ? lang === "fr"
+            ? "Commencer"
+            : "Get Started"
+          : step === "intro"
+            ? lang === "fr"
+              ? "Continuer"
+              : "Continue"
+            : step === "signup"
+              ? lang === "fr"
+                ? "Continuer"
+                : "Continue"
+              : step === "upload" && !file
+                ? lang === "fr"
+                  ? "Importer le CV"
+                  : "Upload resume"
+                : lang === "fr"
+                  ? "Continuer"
+                  : "Continue"}
       </ContinueButton>
     )
   ) : null;
@@ -1391,760 +1497,915 @@ export default function Onboarding() {
     // flashing the onboarding intro step behind it while we navigate.
     return (
       <div className="grid min-h-dvh place-items-center bg-white">
-        <Loader2 className="h-6 w-6 animate-spin text-zinc-400" data-testid="onboarding-bootstrap-loading" />
+        <Loader2
+          className="h-6 w-6 animate-spin text-zinc-400"
+          data-testid="onboarding-bootstrap-loading"
+        />
       </div>
     );
   }
 
   return (
     <>
-    {step === "signup" && !user ? (
-      <OnboardingSignup onClose={goBack} lang={lang} />
-    ) : (
-    <OnboardingShell
-      progress={progress}
-      onBack={goBack}
-      ambientClassName={step === "showcaseLanding" ? "showcase-landing-ambient" : undefined}
-      showBack={(stepIndex > 0 || introIndex > 0) && step !== "profileSetup"}
-      showProgress={
-        step !== "intro"
-        && step !== "profileSetup"
-        && step !== "profileWelcome"
-        && step !== "showcaseLanding"
-        && step !== "showcaseAllInOne"
-        && step !== "showcasePricing"
-      }
-      footer={parsing ? null : footer}
-    >
-      {step !== "signup" && (
-        <button
-          onClick={() => setLang(lang === "fr" ? "en" : "fr")}
-          className="fixed top-3 right-3 z-50 text-xs font-semibold px-3 py-1.5 rounded-full border border-zinc-200 bg-white/90 text-zinc-600 hover:border-linkedin hover:text-linkedin transition-colors shadow-sm backdrop-blur-sm"
-          aria-label="Switch language"
+      {step === "signup" && !user ? (
+        <OnboardingSignup onClose={goBack} lang={lang} />
+      ) : (
+        <OnboardingShell
+          progress={progress}
+          onBack={goBack}
+          ambientClassName={step === "showcaseLanding" ? "showcase-landing-ambient" : undefined}
+          showBack={(stepIndex > 0 || introIndex > 0) && step !== "profileSetup"}
+          showProgress={
+            step !== "intro" &&
+            step !== "profileSetup" &&
+            step !== "profileWelcome" &&
+            step !== "showcaseLanding" &&
+            step !== "showcaseAllInOne" &&
+            step !== "showcasePricing"
+          }
+          footer={parsing ? null : footer}
         >
-          {lang === "fr" ? "EN" : "FR"}
-        </button>
-      )}
-      <AnimatePresence mode="wait">
-        {step === "intro" && (
-          <div className={`${ob.step} items-center justify-center text-center`}>
-            <div className={ob.introStage}>
-              {slides.map((slide, i) => {
-                const active = i === introIndex;
-                const exitX = introNavDirection.current > 0 ? -20 : 20;
-                return (
-                  <motion.div
-                    key={slide.id}
-                    className={ob.introSlide}
-                    initial={false}
-                    animate={{
-                      opacity: active ? 1 : 0,
-                      x: active ? 0 : exitX,
-                      scale: active ? 1 : 0.98,
-                    }}
-                    transition={introSlideMotion}
-                    style={{ pointerEvents: active ? "auto" : "none" }}
-                    aria-hidden={!active}
-                  >
-                    <div className={ob.introImageSlot}>
-                      <OnboardingIllustration src={slide.image} alt="" large priority />
-                    </div>
-                    <div className={ob.introTextSlot}>
-                      <h1 className={ob.introTitle}>{slide.title}</h1>
-                      <p className={ob.introBody}>{slide.body}</p>
-                    </div>
-                  </motion.div>
-                );
-              })}
-            </div>
-            <div className={ob.introDots} aria-hidden>
-              {slides.map((_, i) => (
-                <motion.div
-                  key={i}
-                  layout
-                  transition={{ type: "spring", stiffness: 420, damping: 32 }}
-                  className={`h-2 rounded-full ${i === introIndex ? "gradient-linkedin" : "bg-zinc-200"}`}
-                  animate={{ width: i === introIndex ? 24 : 8 }}
-                />
-              ))}
-            </div>
-          </div>
-        )}
-
-        {step === "jobSearch" && (
-          <motion.div key="jobSearch" {...stepMotion}>
-            <h1 className={stepTitleClass}>{lang === "fr" ? "Êtes-vous à la recherche d'un emploi ?" : "Are you looking for a new job?"}</h1>
-            <div className={ob.stepBodyOptions}>
-              <div className={ob.optionList} data-testid="job-search-options">
-                {(lang === "fr" ? JOB_SEARCH_OPTIONS_FR : JOB_SEARCH_OPTIONS).map(({ id, label, hint, Icon }) => (
-                  <SelectionCard
-                    key={id}
-                    selected={jobSearchStatus === id}
-                    onClick={() => setJobSearchStatus(id)}
-                    icon={Icon}
-                    title={label}
-                    hint={hint}
-                    variant="qcm"
-                    testId={`job-search-${id}`}
-                  />
-                ))}
+          {step !== "signup" && (
+            <button
+              onClick={() => setLang(lang === "fr" ? "en" : "fr")}
+              className="fixed top-3 right-3 z-50 text-xs font-semibold px-3 py-1.5 rounded-full border border-zinc-200 bg-white/90 text-zinc-600 hover:border-linkedin hover:text-linkedin transition-colors shadow-sm backdrop-blur-sm"
+              aria-label="Switch language"
+            >
+              {lang === "fr" ? "EN" : "FR"}
+            </button>
+          )}
+          <AnimatePresence mode="wait">
+            {step === "intro" && (
+              <div className={`${ob.step} items-center justify-center text-center`}>
+                <div className={ob.introStage}>
+                  {slides.map((slide, i) => {
+                    const active = i === introIndex;
+                    const exitX = introNavDirection.current > 0 ? -20 : 20;
+                    return (
+                      <motion.div
+                        key={slide.id}
+                        className={ob.introSlide}
+                        initial={false}
+                        animate={{
+                          opacity: active ? 1 : 0,
+                          x: active ? 0 : exitX,
+                          scale: active ? 1 : 0.98,
+                        }}
+                        transition={introSlideMotion}
+                        style={{ pointerEvents: active ? "auto" : "none" }}
+                        aria-hidden={!active}
+                      >
+                        <div className={ob.introImageSlot}>
+                          <OnboardingIllustration src={slide.image} alt="" large priority />
+                        </div>
+                        <div className={ob.introTextSlot}>
+                          <h1 className={ob.introTitle}>{slide.title}</h1>
+                          <p className={ob.introBody}>{slide.body}</p>
+                        </div>
+                      </motion.div>
+                    );
+                  })}
+                </div>
+                <div className={ob.introDots} aria-hidden>
+                  {slides.map((_, i) => (
+                    <motion.div
+                      key={i}
+                      layout
+                      transition={{ type: "spring", stiffness: 420, damping: 32 }}
+                      className={`h-2 rounded-full ${i === introIndex ? "gradient-linkedin" : "bg-zinc-200"}`}
+                      animate={{ width: i === introIndex ? 24 : 8 }}
+                    />
+                  ))}
+                </div>
               </div>
-            </div>
-          </motion.div>
-        )}
+            )}
 
-        {step === "location" && (
-          <motion.div key="location" {...stepMotion}>
-            <h1 className={stepTitleClass}>{lang === "fr" ? "Où cherchez-vous du travail ?" : "Where are you looking for work?"}</h1>
-            <p className={stepSubtitleClass}>
-              {lang === "fr" ? "Nous suggérerons des types de postes populaires dans votre région." : "We\u2019ll suggest job types that are popular in your area."}
-            </p>
-            <div className={`${ob.stepBody} overflow-visible`}>
-              <PlacesAutocomplete
-                label={lang === "fr" ? "Votre localisation" : "Your location"}
-                variant="light"
-                value={onboardingLocation}
-                selectedLocation={onboardingLocationData}
-                onInputChange={setOnboardingLocation}
-                onSelect={(loc) => {
-                  setOnboardingLocationData(loc);
-                  if (loc) setOnboardingLocation(loc.location_label);
-                }}
-                placeholder={lang === "fr" ? "ex. Bordeaux, France ou Paris, France" : "e.g. Bordeaux, France or New York, NY"}
-                suggestions={SUGGESTED_ONBOARDING_LOCATIONS}
-                compactChips
-                maxSuggestions={8}
-                lang={lang}
-                testId="onboarding-location"
-              />
-            </div>
-          </motion.div>
-        )}
-
-        {step === "contractType" && (
-          <motion.div key="contractType" {...stepMotion}>
-            <h1 className={stepTitleClass}>{lang === "fr" ? "Quel type de poste recherchez-vous ?" : "What type of job are you looking for?"}</h1>
-            <p className={stepSubtitleClass}>{lang === "fr" ? "Sélectionnez le contrat ou la durée qui vous convient le mieux." : "Select the contract or duration that fits you best."}</p>
-            <div className={`${ob.stepBody} ${ob.optionGrid}`} data-testid="contract-type-options">
-              {(lang === "fr" ? EMPLOYMENT_TYPE_OPTIONS_FR : EMPLOYMENT_TYPE_OPTIONS).map(({ id, label, hint, Icon }) => (
-                <SelectionCard
-                  key={id}
-                  selected={contractType === id}
-                  onClick={() => setContractType(id)}
-                  icon={Icon}
-                  title={label}
-                  hint={hint}
-                  testId={`contract-type-${id}`}
-                />
-              ))}
-            </div>
-          </motion.div>
-        )}
-
-        {step === "otherApps" && (
-          <motion.div key="otherApps" {...stepMotion}>
-            <h1 className={stepTitleClass}>{lang === "fr" ? "Avez-vous déjà essayé d'autres apps de recherche d'emploi ?" : "Have you tried other job search apps?"}</h1>
-            <p className={stepSubtitleClass}>{lang === "fr" ? "Sélectionnez une option ci-dessous." : "Please select one of the options below."}</p>
-            <div className={ob.stepBodyOptions}>
-              <div className={ob.optionList} data-testid="other-apps-options">
-                {(lang === "fr" ? OTHER_APPS_OPTIONS_FR : OTHER_APPS_OPTIONS).map(({ id, label, Icon }) => (
-                  <SelectionCard
-                    key={id}
-                    selected={triedOtherApps === id}
-                    onClick={() => setTriedOtherApps(id)}
-                    icon={Icon}
-                    title={label}
-                    variant="qcm"
-                    testId={`other-apps-${id}`}
-                  />
-                ))}
-              </div>
-            </div>
-          </motion.div>
-        )}
-
-        {step === "categories" && (
-          <motion.div
-            key="categories"
-            {...stepMotion}
-            className="flex flex-1 flex-col min-h-0 overflow-y-auto overflow-x-hidden"
-          >
-            <h1 className={stepTitleClass}>{lang === "fr" ? "Quels types de postes recherchez-vous ?" : "What kind of job are you looking for?"}</h1>
-            <p className={stepSubtitleClass}>
-              {onboardingLocation
-                ? lang === "fr"
-                  ? `Populaires autour de ${onboardingLocationData?.location_label || onboardingLocation}. Choisissez jusqu'à 3 domaines.`
-                  : `Suggested for ${onboardingLocationData?.location_label || onboardingLocation}. Pick up to 3.`
-                : lang === "fr"
-                  ? "Choisissez jusqu'à 3 domaines, puis précisez les métiers qui vous intéressent."
-                  : "Select up to 3 job categories that interest you most."}
-            </p>
-            <div className="mt-2 sm:mt-3 flex flex-col gap-4 pb-2">
-              <motion.div
-                key={`categories-${onboardingLocation}-${contractType}`}
-                className="flex flex-wrap gap-2 content-start"
-                data-testid="job-categories"
-                variants={chipReveal.container}
-                initial="hidden"
-                animate="visible"
-              >
-                {categoryOptions.map(({ id, label }) => {
-                  const Icon = iconForCategoryLabel(label);
-                  const on = categories.includes(id);
-                  return (
-                    <motion.button
-                      key={id}
-                      type="button"
-                      layout={false}
-                      variants={chipReveal.item}
-                      onClick={() => toggleCategory(id)}
-                      className={`${ob.chip} ${on ? ob.chipOn : ob.chipOff}`}
-                    >
-                      <Icon className="h-3.5 w-3.5 shrink-0" />
-                      <span>{label}</span>
-                    </motion.button>
-                  );
-                })}
+            {step === "jobSearch" && (
+              <motion.div key="jobSearch" {...stepMotion}>
+                <h1 className={stepTitleClass}>
+                  {lang === "fr"
+                    ? "Êtes-vous à la recherche d'un emploi ?"
+                    : "Are you looking for a new job?"}
+                </h1>
+                <div className={ob.stepBodyOptions}>
+                  <div className={ob.optionList} data-testid="job-search-options">
+                    {(lang === "fr" ? JOB_SEARCH_OPTIONS_FR : JOB_SEARCH_OPTIONS).map(
+                      ({ id, label, hint, Icon }) => (
+                        <SelectionCard
+                          key={id}
+                          selected={jobSearchStatus === id}
+                          onClick={() => setJobSearchStatus(id)}
+                          icon={Icon}
+                          title={label}
+                          hint={hint}
+                          variant="qcm"
+                          testId={`job-search-${id}`}
+                        />
+                      ),
+                    )}
+                  </div>
+                </div>
               </motion.div>
+            )}
 
-              {categories.length > 0 && (
-                <div className="space-y-3">
-                  <p className="text-sm sm:text-[15px] font-medium text-zinc-900 leading-snug">
-                    {lang === "fr" ? "Précisez les métiers qui vous correspondent le mieux" : "Select the most relevant roles for your job search"}
-                  </p>
+            {step === "location" && (
+              <motion.div key="location" {...stepMotion}>
+                <h1 className={stepTitleClass}>
+                  {lang === "fr"
+                    ? "Où cherchez-vous du travail ?"
+                    : "Where are you looking for work?"}
+                </h1>
+                <p className={stepSubtitleClass}>
+                  {lang === "fr"
+                    ? "Nous suggérerons des types de postes populaires dans votre région."
+                    : "We\u2019ll suggest job types that are popular in your area."}
+                </p>
+                <div className={`${ob.stepBody} overflow-visible`}>
+                  <PlacesAutocomplete
+                    label={lang === "fr" ? "Votre localisation" : "Your location"}
+                    variant="light"
+                    value={onboardingLocation}
+                    selectedLocation={onboardingLocationData}
+                    onInputChange={setOnboardingLocation}
+                    onSelect={(loc) => {
+                      setOnboardingLocationData(loc);
+                      if (loc) setOnboardingLocation(loc.location_label);
+                    }}
+                    placeholder={
+                      lang === "fr"
+                        ? "ex. Bordeaux, France ou Paris, France"
+                        : "e.g. Bordeaux, France or New York, NY"
+                    }
+                    suggestions={SUGGESTED_ONBOARDING_LOCATIONS}
+                    compactChips
+                    maxSuggestions={8}
+                    lang={lang}
+                    testId="onboarding-location"
+                  />
+                </div>
+              </motion.div>
+            )}
+
+            {step === "contractType" && (
+              <motion.div key="contractType" {...stepMotion}>
+                <h1 className={stepTitleClass}>
+                  {lang === "fr"
+                    ? "Quel type de poste recherchez-vous ?"
+                    : "What type of job are you looking for?"}
+                </h1>
+                <p className={stepSubtitleClass}>
+                  {lang === "fr"
+                    ? "Sélectionnez le contrat ou la durée qui vous convient le mieux."
+                    : "Select the contract or duration that fits you best."}
+                </p>
+                <div
+                  className={`${ob.stepBody} ${ob.optionGrid}`}
+                  data-testid="contract-type-options"
+                >
+                  {(lang === "fr" ? EMPLOYMENT_TYPE_OPTIONS_FR : EMPLOYMENT_TYPE_OPTIONS).map(
+                    ({ id, label, hint, Icon }) => (
+                      <SelectionCard
+                        key={id}
+                        selected={contractType === id}
+                        onClick={() => setContractType(id)}
+                        icon={Icon}
+                        title={label}
+                        hint={hint}
+                        testId={`contract-type-${id}`}
+                      />
+                    ),
+                  )}
+                </div>
+              </motion.div>
+            )}
+
+            {step === "otherApps" && (
+              <motion.div key="otherApps" {...stepMotion}>
+                <h1 className={stepTitleClass}>
+                  {lang === "fr"
+                    ? "Avez-vous déjà essayé d'autres apps de recherche d'emploi ?"
+                    : "Have you tried other job search apps?"}
+                </h1>
+                <p className={stepSubtitleClass}>
+                  {lang === "fr"
+                    ? "Sélectionnez une option ci-dessous."
+                    : "Please select one of the options below."}
+                </p>
+                <div className={ob.stepBodyOptions}>
+                  <div className={ob.optionList} data-testid="other-apps-options">
+                    {(lang === "fr" ? OTHER_APPS_OPTIONS_FR : OTHER_APPS_OPTIONS).map(
+                      ({ id, label, Icon }) => (
+                        <SelectionCard
+                          key={id}
+                          selected={triedOtherApps === id}
+                          onClick={() => setTriedOtherApps(id)}
+                          icon={Icon}
+                          title={label}
+                          variant="qcm"
+                          testId={`other-apps-${id}`}
+                        />
+                      ),
+                    )}
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {step === "categories" && (
+              <motion.div
+                key="categories"
+                {...stepMotion}
+                className="flex flex-1 flex-col min-h-0 overflow-y-auto overflow-x-hidden"
+              >
+                <h1 className={stepTitleClass}>
+                  {lang === "fr"
+                    ? "Quels types de postes recherchez-vous ?"
+                    : "What kind of job are you looking for?"}
+                </h1>
+                <p className={stepSubtitleClass}>
+                  {onboardingLocation
+                    ? lang === "fr"
+                      ? `Populaires autour de ${onboardingLocationData?.location_label || onboardingLocation}. Choisissez jusqu'à 3 domaines.`
+                      : `Suggested for ${onboardingLocationData?.location_label || onboardingLocation}. Pick up to 3.`
+                    : lang === "fr"
+                      ? "Choisissez jusqu'à 3 domaines, puis précisez les métiers qui vous intéressent."
+                      : "Select up to 3 job categories that interest you most."}
+                </p>
+                <div className="mt-2 sm:mt-3 flex flex-col gap-4 pb-2">
                   <motion.div
-                    key={`roles-${categories.join(",")}`}
+                    key={`categories-${onboardingLocation}-${contractType}`}
                     className="flex flex-wrap gap-2 content-start"
-                    data-testid="role-chips"
+                    data-testid="job-categories"
                     variants={chipReveal.container}
                     initial="hidden"
                     animate="visible"
                   >
-                    {roleSuggestions.map((role) => {
-                      const on = selectedRoles.includes(role);
+                    {categoryOptions.map(({ id, label }) => {
+                      const Icon = iconForCategoryLabel(label);
+                      const on = categories.includes(id);
                       return (
                         <motion.button
-                          key={role}
+                          key={id}
                           type="button"
                           layout={false}
                           variants={chipReveal.item}
-                          onClick={() => toggleRole(role)}
+                          onClick={() => toggleCategory(id)}
                           className={`${ob.chip} ${on ? ob.chipOn : ob.chipOff}`}
                         >
-                          <span>{translateRoleLabel(role, lang)}</span>
+                          <Icon className="h-3.5 w-3.5 shrink-0" />
+                          <span>{label}</span>
                         </motion.button>
                       );
                     })}
                   </motion.div>
-                  <div className="flex gap-2 pt-1">
+
+                  {categories.length > 0 && (
+                    <div className="space-y-3">
+                      <p className="text-sm sm:text-[15px] font-medium text-zinc-900 leading-snug">
+                        {lang === "fr"
+                          ? "Précisez les métiers qui vous correspondent le mieux"
+                          : "Select the most relevant roles for your job search"}
+                      </p>
+                      <motion.div
+                        key={`roles-${categories.join(",")}`}
+                        className="flex flex-wrap gap-2 content-start"
+                        data-testid="role-chips"
+                        variants={chipReveal.container}
+                        initial="hidden"
+                        animate="visible"
+                      >
+                        {roleSuggestions.map((role) => {
+                          const on = selectedRoles.includes(role);
+                          return (
+                            <motion.button
+                              key={role}
+                              type="button"
+                              layout={false}
+                              variants={chipReveal.item}
+                              onClick={() => toggleRole(role)}
+                              className={`${ob.chip} ${on ? ob.chipOn : ob.chipOff}`}
+                            >
+                              <span>{translateRoleLabel(role, lang)}</span>
+                            </motion.button>
+                          );
+                        })}
+                      </motion.div>
+                      <div className="flex gap-2 pt-1">
+                        <input
+                          type="text"
+                          value={customRoleDraft}
+                          onChange={(e) => setCustomRoleDraft(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              addCustomRole();
+                            }
+                          }}
+                          placeholder={
+                            lang === "fr"
+                              ? "Votre poste n'est pas listé ? Ajoutez-le"
+                              : "Can't find your role? Add it here"
+                          }
+                          className="min-w-0 flex-1 rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2.5 text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-linkedin/30"
+                          data-testid="custom-role-input"
+                        />
+                        <button
+                          type="button"
+                          onClick={addCustomRole}
+                          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-linkedin text-white transition-colors duration-200 ease-out hover:bg-linkedin/90 active:scale-[0.97]"
+                          aria-label="Add role"
+                          data-testid="custom-role-add"
+                        >
+                          <Plus className="h-5 w-5" strokeWidth={2.5} />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            )}
+
+            {step === "experience" && (
+              <motion.div key="experience" {...stepMotion}>
+                <h1 className={stepTitleClass}>
+                  {lang === "fr"
+                    ? "Quelle est votre expérience ?"
+                    : "How much experience do you have?"}
+                </h1>
+                <p className={stepSubtitleClass}>
+                  {lang === "fr"
+                    ? "Sélectionnez votre niveau ci-dessous."
+                    : "Select your experience level below."}
+                </p>
+                <div className={`${ob.stepBody} ${ob.optionGrid}`}>
+                  {(lang === "fr" ? EXPERIENCE_LEVELS_FR : EXPERIENCE_LEVELS).map(
+                    ({ id, label, Icon }) => (
+                      <button
+                        key={id}
+                        type="button"
+                        onClick={() => setExperience(id)}
+                        className={`w-full flex items-center gap-2.5 px-3 py-2.5 sm:px-4 sm:py-3 rounded-xl border text-left transition-all duration-200 ease-out active:scale-[0.99] ${
+                          experience === id ? ob.optionOn : ob.optionOff
+                        }`}
+                        data-testid={`experience-${id}`}
+                      >
+                        <Icon className={`w-4 h-4 sm:w-5 sm:h-5 ${ob.accent} shrink-0`} />
+                        <span className="font-medium text-sm sm:text-[15px] text-zinc-900 leading-tight">
+                          {label}
+                        </span>
+                      </button>
+                    ),
+                  )}
+                </div>
+              </motion.div>
+            )}
+
+            {step === "salary" && (
+              <motion.div key="salary" {...stepMotion}>
+                <h1 className={stepTitleClass}>
+                  {lang === "fr" ? "Fourchette salariale souhaitée ?" : "Expected salary range?"}
+                </h1>
+                <p className={stepSubtitleClass}>
+                  {lang === "fr"
+                    ? "Indiquez votre fourchette pour cibler les offres adaptées."
+                    : "Set your range to help match you with the right jobs."}
+                </p>
+                <div className={`${ob.stepBody} space-y-5 sm:space-y-6`}>
+                  <div>
+                    <div className={`flex justify-between text-sm ${ob.muted} mb-2`}>
+                      <span>{lang === "fr" ? "Salaire minimum" : "Minimum salary"}</span>
+                      <span className={`${ob.accent} font-bold text-lg`}>
+                        {formatSalary(salaryMin, lang)}
+                      </span>
+                    </div>
+                    <Slider
+                      value={[salaryMin]}
+                      min={0}
+                      max={500000}
+                      step={5000}
+                      onValueChange={([v]) => setSalaryMin(Math.min(v, salaryMax))}
+                      className={ob.slider}
+                    />
+                    <div className={`flex justify-between text-xs ${ob.dim} mt-1`}>
+                      <span>{formatSalary(0, lang)}</span>
+                      <span>{formatSalary(500_000, lang)}</span>
+                    </div>
+                  </div>
+                  <div>
+                    <div className={`flex justify-between text-sm ${ob.muted} mb-2`}>
+                      <span>{lang === "fr" ? "Salaire maximum" : "Maximum salary"}</span>
+                      <span className={`${ob.accent} font-bold text-lg`}>
+                        {formatSalary(salaryMax, lang)}
+                      </span>
+                    </div>
+                    <Slider
+                      value={[salaryMax]}
+                      min={0}
+                      max={500000}
+                      step={5000}
+                      onValueChange={([v]) => setSalaryMax(Math.max(v, salaryMin))}
+                      className={ob.slider}
+                    />
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {step === "interviews" && (
+              <motion.div
+                key="interviews"
+                {...stepMotion}
+                className={`${ob.step} text-center justify-center`}
+              >
+                <h1 className={stepTitleClass}>
+                  {lang === "fr" ? "Entretiens par semaine" : "Interviews per week"}
+                </h1>
+                <p className={stepSubtitleClass}>
+                  {lang === "fr"
+                    ? "Ceci calibrera votre plan personnalisé."
+                    : "This will be used to calibrate your custom plan."}
+                </p>
+                <div className={`${ob.stepBody} items-center text-center`}>
+                  <p className="font-display text-3xl sm:text-4xl font-black text-zinc-900">
+                    {interviewsPerWeek}{" "}
+                    <span className={`text-xl font-semibold ${ob.dim}`}>
+                      {lang === "fr" ? "entretiens" : "interviews"}
+                    </span>
+                  </p>
+                  <div className="mt-4 w-full px-2 sm:mt-6">
+                    <Slider
+                      value={[interviewsPerWeek]}
+                      min={1}
+                      max={7}
+                      step={1}
+                      onValueChange={([v]) => setInterviewsPerWeek(v)}
+                      className={ob.slider}
+                    />
+                  </div>
+                  <div
+                    className={`mt-3 sm:mt-4 inline-flex items-center gap-2 text-xs sm:text-sm font-semibold ${interviewHint.tone === "good" ? ob.accent : ob.muted}`}
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    {interviewHint.label}
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {step === "jobTimeline" && (
+              <motion.div key="jobTimeline" {...stepMotion}>
+                <h1 className={stepTitleClass}>
+                  {lang === "fr"
+                    ? "Quand avez-vous besoin d'un nouvel emploi ?"
+                    : "When do you need a new job?"}
+                </h1>
+                <p className={stepSubtitleClass}>
+                  {lang === "fr"
+                    ? "Ceci servira à calibrer votre plan personnalisé."
+                    : "This will be used to calibrate your custom plan."}
+                </p>
+                <div className={ob.stepBodyOptions}>
+                  <div className={ob.optionList} data-testid="job-timeline-options">
+                    {(lang === "fr" ? JOB_TIMELINE_OPTIONS_FR : JOB_TIMELINE_OPTIONS).map(
+                      ({ id, label, hint, Icon }) => (
+                        <SelectionCard
+                          key={id}
+                          selected={jobTimeline === id}
+                          onClick={() => setJobTimeline(id)}
+                          icon={Icon}
+                          title={label}
+                          hint={hint}
+                          variant="qcm-timeline"
+                          testId={`job-timeline-${id}`}
+                        />
+                      ),
+                    )}
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {step === "interviewsConfirm" && (
+              <motion.div key="interviewsConfirm" {...stepMotion}>
+                <h1 className={stepTitleClass}>
+                  {lang === "fr"
+                    ? `Obtenir ${interviewsPerWeek} entretiens/semaine est totalement réalisable !`
+                    : `Getting ${interviewsPerWeek} interviews/week is totally achievable!`}
+                </h1>
+                <div className={ob.stepBody}>
+                  <InterviewTargetDashes count={Math.min(interviewsPerWeek, 8)} />
+                  <div className={`mt-3 sm:mt-4 ${ob.cardInner} p-4 sm:p-5 text-center`}>
+                    <p className="font-bold text-base sm:text-lg text-zinc-900">
+                      {lang === "fr"
+                        ? "Vous êtes sur la bonne voie !"
+                        : "You\u2019re right on track!"}
+                    </p>
+                    <p className={`text-xs sm:text-sm ${ob.muted} mt-2 leading-snug`}>
+                      {lang === "fr"
+                        ? `${interviewsPerWeek} entretiens par semaine, c'est l'objectif de 75 % de nos utilisateurs qui réussissent.`
+                        : `${interviewsPerWeek} interviews per week is what 75% of our successful users aim for.`}
+                    </p>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {step === "jobBlocker" && (
+              <motion.div key="jobBlocker" {...stepMotion}>
+                <h1 className={stepTitleClass}>
+                  {lang === "fr"
+                    ? "Qu'est-ce qui vous empêche d'atteindre vos objectifs ?"
+                    : "What's stopping you from reaching your goals?"}
+                </h1>
+                <p className={stepSubtitleClass}>
+                  {lang === "fr"
+                    ? "Sélectionnez le principal obstacle dans votre recherche d'emploi."
+                    : "Select the main blocker in your job search."}
+                </p>
+                <div className={ob.stepBodyOptions}>
+                  <div className={ob.optionList} data-testid="job-blocker-options">
+                    {(lang === "fr" ? JOB_BLOCKER_OPTIONS_FR : JOB_BLOCKER_OPTIONS).map(
+                      ({ id, label, Icon }) => (
+                        <SelectionCard
+                          key={id}
+                          selected={jobBlocker === id}
+                          onClick={() => setJobBlocker(id)}
+                          icon={Icon}
+                          title={label}
+                          variant="qcm"
+                          testId={`job-blocker-${id}`}
+                        />
+                      ),
+                    )}
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {step === "jobAccomplish" && (
+              <motion.div key="jobAccomplish" {...stepMotion}>
+                <h1 className={stepTitleClass}>
+                  {lang === "fr"
+                    ? "Que souhaitez-vous accomplir ?"
+                    : "What do you want to accomplish?"}
+                </h1>
+                <p className={stepSubtitleClass}>
+                  {lang === "fr"
+                    ? "Sélectionnez votre objectif principal dans votre recherche d'emploi."
+                    : "Select your primary goal in your job search journey."}
+                </p>
+                <div className={ob.stepBodyOptions}>
+                  <div className={ob.optionList} data-testid="job-accomplish-options">
+                    {(lang === "fr" ? JOB_ACCOMPLISH_OPTIONS_FR : JOB_ACCOMPLISH_OPTIONS).map(
+                      ({ id, label, Icon }) => (
+                        <SelectionCard
+                          key={id}
+                          selected={jobAccomplish === id}
+                          onClick={() => setJobAccomplish(id)}
+                          icon={Icon}
+                          title={label}
+                          variant="qcm"
+                          testId={`job-accomplish-${id}`}
+                        />
+                      ),
+                    )}
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {step === "jobGoal" && (
+              <motion.div key="jobGoal" {...stepMotion}>
+                <h1 className={stepTitleClass}>
+                  {lang === "fr" ? "Quel est votre objectif ?" : "What's your goal?"}
+                </h1>
+                <p className={stepSubtitleClass}>
+                  {lang === "fr"
+                    ? "Ceci servira à personnaliser vos offres d'emploi."
+                    : "This will be used to personalize your job matches."}
+                </p>
+                <div className={ob.stepBodyOptions}>
+                  <div className={ob.optionList} data-testid="job-goal-options">
+                    {(lang === "fr" ? JOB_GOAL_OPTIONS_FR : JOB_GOAL_OPTIONS).map(
+                      ({ id, label, Icon }) => (
+                        <SelectionCard
+                          key={id}
+                          selected={jobGoal === id}
+                          onClick={() => setJobGoal(id)}
+                          icon={Icon}
+                          title={label}
+                          variant="qcm"
+                          testId={`job-goal-${id}`}
+                        />
+                      ),
+                    )}
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {step === "potentialChart" && (
+              <motion.div key="potentialChart" {...stepMotion}>
+                <h1 className={stepTitleClass}>
+                  {lang === "fr"
+                    ? "Vous avez le potentiel pour dépasser votre objectif"
+                    : "You have great potential to crush your goal"}
+                </h1>
+                <div className={ob.stepBody}>
+                  <InterviewRateChart lang={lang} />
+                </div>
+              </motion.div>
+            )}
+
+            {step === "compare2x" && (
+              <motion.div key="compare2x" {...stepMotion}>
+                <h1 className={stepTitleClass}>
+                  {lang === "fr"
+                    ? `Décrochez deux fois plus d'entretiens avec ${BRAND.NAME} qu'en solo.`
+                    : `Land twice as many interviews with ${BRAND.NAME} vs on your own.`}
+                </h1>
+                <div className={`${ob.stepBody} items-center justify-center`}>
+                  <Compare2xChart lang={lang} />
+                </div>
+              </motion.div>
+            )}
+
+            {step === "longTerm" && (
+              <motion.div key="longTerm" {...stepMotion}>
+                <h1 className={stepTitleClass}>
+                  {lang === "fr"
+                    ? `${BRAND.NAME} crée des résultats durables`
+                    : `${BRAND.NAME} creates long-term results`}
+                </h1>
+                <div className={ob.stepBody}>
+                  <LongTermResultsChart lang={lang} />
+                </div>
+              </motion.div>
+            )}
+
+            {step === "attribution" && (
+              <motion.div key="attribution" {...stepMotion}>
+                <h1 className={`${stepTitleClass} text-center sm:text-left`}>
+                  {lang === "fr"
+                    ? "Comment avez-vous entendu parler de nous ?"
+                    : "How did you hear about us?"}
+                </h1>
+                <div className={`${ob.stepBody} ${ob.optionGrid}`}>
+                  {(lang === "fr" ? ATTRIBUTION_OPTIONS_FR : ATTRIBUTION_OPTIONS).map(
+                    ({ id, label, hint, Icon }) => (
+                      <SelectionCard
+                        key={id}
+                        selected={attribution === id}
+                        onClick={() => setAttribution(id)}
+                        icon={Icon}
+                        title={label}
+                        hint={hint}
+                        testId={`attribution-${id}`}
+                      />
+                    ),
+                  )}
+                </div>
+              </motion.div>
+            )}
+
+            {step === "referralCode" && (
+              <motion.div key="referralCode" {...stepMotion}>
+                <h1 className={stepTitleClass}>
+                  {lang === "fr" ? "Code de parrainage" : "Referral code"}
+                </h1>
+                <p className={stepSubtitleClass}>
+                  {lang === "fr"
+                    ? "Collez un code de parrainage si vous en avez un."
+                    : "Paste a referral code below if you have one."}
+                </p>
+
+                <div className={`${ob.stepBody} items-center`}>
+                  <OnboardingIllustration src="/onboarding/referral-gift.png" alt="" />
+
+                  <div className="w-full mt-2">
+                    <label
+                      htmlFor="referral-code-input"
+                      className="mb-2 block text-sm font-semibold text-zinc-800"
+                    >
+                      {lang === "fr" ? "Code de parrainage" : "Referral Code"}
+                    </label>
                     <input
-                      type="text"
-                      value={customRoleDraft}
-                      onChange={(e) => setCustomRoleDraft(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault();
-                          addCustomRole();
+                      id="referral-code-input"
+                      data-testid="referral-code-input"
+                      type="tel"
+                      value={referralCode}
+                      onChange={(e) => setReferralCode(normalizeReferralCodeInput(e.target.value))}
+                      onPaste={(e) => {
+                        e.preventDefault();
+                        const pasted = e.clipboardData.getData("text");
+                        setReferralCode(normalizeReferralCodeInput(pasted));
+                      }}
+                      placeholder="123456"
+                      inputMode="numeric"
+                      maxLength={6}
+                      autoComplete="one-time-code"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      className="w-full h-12 sm:h-14 rounded-2xl border border-zinc-200 bg-white px-4 text-center font-mono text-lg tracking-[0.2em] text-zinc-900 placeholder:text-zinc-300 focus:border-linkedin focus:outline-none focus:ring-2 focus:ring-linkedin/20"
+                    />
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {step === "upload" && !parsing && (
+              <motion.div key="upload" {...stepMotion}>
+                <h1 className={stepTitleClass}>
+                  {lang === "fr" ? "Importez votre CV" : "Upload your resume"}
+                </h1>
+                <p className={stepSubtitleClass}>
+                  {lang === "fr"
+                    ? "Importez votre CV pour que nous construisions votre profil et commencions à postuler immédiatement."
+                    : "Upload your resume so we can build your profile and start applying to jobs right away."}
+                </p>
+
+                <div className={ob.stepBody}>
+                  <label
+                    htmlFor="cv-input"
+                    data-testid="cv-dropzone"
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      setDragOver(true);
+                    }}
+                    onDragLeave={() => setDragOver(false)}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      setDragOver(false);
+                      const f = e.dataTransfer.files?.[0];
+                      if (f) handleUpload(f);
+                    }}
+                    className={`block border-2 border-dashed rounded-2xl p-6 sm:p-8 text-center transition-all bg-white cursor-pointer ${
+                      dragOver
+                        ? "border-linkedin bg-linkedin-light scale-[1.01]"
+                        : "border-zinc-200 hover:border-linkedin/40"
+                    }`}
+                  >
+                    {!file ? (
+                      <>
+                        <div
+                          className={`w-12 h-12 mx-auto rounded-xl ${ob.accentSoft} flex items-center justify-center mb-3`}
+                        >
+                          <FileText className={`w-6 h-6 ${ob.accent}`} />
+                        </div>
+                        <p className="font-semibold text-sm sm:text-base text-zinc-900">
+                          {lang === "fr" ? "Aucun CV sélectionné" : "No resume selected"}
+                        </p>
+                        <p className={`text-xs sm:text-sm ${ob.muted} mt-1`}>
+                          {lang === "fr"
+                            ? `PDF, DOCX, RTF, TXT ou image • ${CV_MAX_MB} Mo max`
+                            : `PDF, DOCX, RTF, TXT, or image • Max ${CV_MAX_MB}MB`}
+                        </p>
+                      </>
+                    ) : (
+                      <div className="flex items-center justify-center gap-2 text-zinc-700">
+                        <FileText className="w-5 h-5" />
+                        <span className="font-medium text-sm">{file.name}</span>
+                      </div>
+                    )}
+                    <input
+                      ref={inputRef}
+                      id="cv-input"
+                      data-testid="cv-file-input"
+                      type="file"
+                      accept={CV_ACCEPT_ATTR}
+                      className="hidden"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) {
+                          setFile(f);
+                          handleUpload(f);
                         }
                       }}
-                      placeholder={lang === "fr" ? "Votre poste n'est pas listé ? Ajoutez-le" : "Can't find your role? Add it here"}
-                      className="min-w-0 flex-1 rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2.5 text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-linkedin/30"
-                      data-testid="custom-role-input"
                     />
-                    <button
-                      type="button"
-                      onClick={addCustomRole}
-                      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-linkedin text-white transition-colors duration-200 ease-out hover:bg-linkedin/90 active:scale-[0.97]"
-                      aria-label="Add role"
-                      data-testid="custom-role-add"
-                    >
-                      <Plus className="h-5 w-5" strokeWidth={2.5} />
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          </motion.div>
-        )}
+                  </label>
 
-        {step === "experience" && (
-          <motion.div key="experience" {...stepMotion}>
-            <h1 className={stepTitleClass}>{lang === "fr" ? "Quelle est votre expérience ?" : "How much experience do you have?"}</h1>
-            <p className={stepSubtitleClass}>{lang === "fr" ? "Sélectionnez votre niveau ci-dessous." : "Select your experience level below."}</p>
-            <div className={`${ob.stepBody} ${ob.optionGrid}`}>
-              {(lang === "fr" ? EXPERIENCE_LEVELS_FR : EXPERIENCE_LEVELS).map(({ id, label, Icon }) => (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => setExperience(id)}
-                  className={`w-full flex items-center gap-2.5 px-3 py-2.5 sm:px-4 sm:py-3 rounded-xl border text-left transition-all duration-200 ease-out active:scale-[0.99] ${
-                    experience === id ? ob.optionOn : ob.optionOff
-                  }`}
-                  data-testid={`experience-${id}`}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      trackOnboardingSkip("upload");
+                      setStepIndex(STEP_ORDER.indexOf("profileSetup"));
+                      toast.message(
+                        lang === "fr"
+                          ? "Vous pouvez importer votre CV plus tard depuis le Profil"
+                          : "You can upload your resume later from Profile",
+                      );
+                    }}
+                    className={`mt-3 w-full text-center text-sm ${ob.muted} hover:text-zinc-900 underline-offset-2 hover:underline`}
+                  >
+                    {lang === "fr" ? "Passer pour l'instant" : "Skip for now"}
+                  </button>
+                </div>
+              </motion.div>
+            )}
+
+            {parsing && (
+              <motion.div
+                key="parsing"
+                className={`${ob.step} items-center justify-center text-center`}
+                initial={{ opacity: 0, y: 14 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+              >
+                <h1 className={ob.title}>
+                  {lang === "fr" ? "Lecture de votre CV" : "Reading your CV"}
+                  <span className="text-linkedin">…</span>
+                </h1>
+                <p className={ob.subtitle}>
+                  {lang === "fr" ? "Construction de votre profil." : "Building your profile."}
+                </p>
+                <motion.div
+                  className={`${ob.stepBody} flex flex-col items-center justify-center gap-3`}
+                  initial={{ opacity: 0, scale: 0.96 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: 0.08, duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
                 >
-                  <Icon className={`w-4 h-4 sm:w-5 sm:h-5 ${ob.accent} shrink-0`} />
-                  <span className="font-medium text-sm sm:text-[15px] text-zinc-900 leading-tight">{label}</span>
-                </button>
-              ))}
-            </div>
-          </motion.div>
-        )}
-
-        {step === "salary" && (
-          <motion.div key="salary" {...stepMotion}>
-            <h1 className={stepTitleClass}>{lang === "fr" ? "Fourchette salariale souhaitée ?" : "Expected salary range?"}</h1>
-            <p className={stepSubtitleClass}>{lang === "fr" ? "Indiquez votre fourchette pour cibler les offres adaptées." : "Set your range to help match you with the right jobs."}</p>
-            <div className={`${ob.stepBody} space-y-5 sm:space-y-6`}>
-              <div>
-                <div className={`flex justify-between text-sm ${ob.muted} mb-2`}>
-                  <span>{lang === "fr" ? "Salaire minimum" : "Minimum salary"}</span>
-                  <span className={`${ob.accent} font-bold text-lg`}>{formatSalary(salaryMin, lang)}</span>
-                </div>
-                <Slider
-                  value={[salaryMin]}
-                  min={0}
-                  max={500000}
-                  step={5000}
-                  onValueChange={([v]) => setSalaryMin(Math.min(v, salaryMax))}
-                  className={ob.slider}
-                />
-                <div className={`flex justify-between text-xs ${ob.dim} mt-1`}>
-                  <span>{formatSalary(0, lang)}</span>
-                  <span>{formatSalary(500_000, lang)}</span>
-                </div>
-              </div>
-              <div>
-                <div className={`flex justify-between text-sm ${ob.muted} mb-2`}>
-                  <span>{lang === "fr" ? "Salaire maximum" : "Maximum salary"}</span>
-                  <span className={`${ob.accent} font-bold text-lg`}>{formatSalary(salaryMax, lang)}</span>
-                </div>
-                <Slider
-                  value={[salaryMax]}
-                  min={0}
-                  max={500000}
-                  step={5000}
-                  onValueChange={([v]) => setSalaryMax(Math.max(v, salaryMin))}
-                  className={ob.slider}
-                />
-              </div>
-            </div>
-          </motion.div>
-        )}
-
-        {step === "interviews" && (
-          <motion.div key="interviews" {...stepMotion} className={`${ob.step} text-center justify-center`}>
-            <h1 className={stepTitleClass}>{lang === "fr" ? "Entretiens par semaine" : "Interviews per week"}</h1>
-            <p className={stepSubtitleClass}>{lang === "fr" ? "Ceci calibrera votre plan personnalisé." : "This will be used to calibrate your custom plan."}</p>
-            <div className={`${ob.stepBody} items-center text-center`}>
-            <p className="font-display text-3xl sm:text-4xl font-black text-zinc-900">
-              {interviewsPerWeek} <span className={`text-xl font-semibold ${ob.dim}`}>{lang === "fr" ? "entretiens" : "interviews"}</span>
-            </p>
-            <div className="mt-4 w-full px-2 sm:mt-6">
-              <Slider
-                value={[interviewsPerWeek]}
-                min={1}
-                max={7}
-                step={1}
-                onValueChange={([v]) => setInterviewsPerWeek(v)}
-                className={ob.slider}
-              />
-            </div>
-            <div className={`mt-3 sm:mt-4 inline-flex items-center gap-2 text-xs sm:text-sm font-semibold ${interviewHint.tone === "good" ? ob.accent : ob.muted}`}>
-              <CheckCircle2 className="w-4 h-4" />
-              {interviewHint.label}
-            </div>
-            </div>
-          </motion.div>
-        )}
-
-        {step === "jobTimeline" && (
-          <motion.div key="jobTimeline" {...stepMotion}>
-            <h1 className={stepTitleClass}>
-              {lang === "fr" ? "Quand avez-vous besoin d'un nouvel emploi ?" : "When do you need a new job?"}
-            </h1>
-            <p className={stepSubtitleClass}>
-              {lang === "fr"
-                ? "Ceci servira à calibrer votre plan personnalisé."
-                : "This will be used to calibrate your custom plan."}
-            </p>
-            <div className={ob.stepBodyOptions}>
-              <div className={ob.optionList} data-testid="job-timeline-options">
-                {(lang === "fr" ? JOB_TIMELINE_OPTIONS_FR : JOB_TIMELINE_OPTIONS).map(({ id, label, hint, Icon }) => (
-                  <SelectionCard
-                    key={id}
-                    selected={jobTimeline === id}
-                    onClick={() => setJobTimeline(id)}
-                    icon={Icon}
-                    title={label}
-                    hint={hint}
-                    variant="qcm-timeline"
-                    testId={`job-timeline-${id}`}
+                  <Loader2
+                    className="h-9 w-9 animate-spin text-linkedin"
+                    data-testid="parse-loading"
                   />
-                ))}
-              </div>
-            </div>
-          </motion.div>
-        )}
+                  <p className={`text-sm ${ob.muted}`}>
+                    {lang === "fr" ? "Cela ne prend qu'un moment." : "This only takes a moment."}
+                  </p>
+                </motion.div>
+              </motion.div>
+            )}
 
-        {step === "interviewsConfirm" && (
-          <motion.div key="interviewsConfirm" {...stepMotion}>
-            <h1 className={stepTitleClass}>
-              {lang === "fr"
-                ? `Obtenir ${interviewsPerWeek} entretiens/semaine est totalement réalisable !`
-                : `Getting ${interviewsPerWeek} interviews/week is totally achievable!`}
-            </h1>
-            <div className={ob.stepBody}>
-            <InterviewTargetDashes count={Math.min(interviewsPerWeek, 8)} />
-            <div className={`mt-3 sm:mt-4 ${ob.cardInner} p-4 sm:p-5 text-center`}>
-              <p className="font-bold text-base sm:text-lg text-zinc-900">{lang === "fr" ? "Vous êtes sur la bonne voie !" : "You\u2019re right on track!"}</p>
-              <p className={`text-xs sm:text-sm ${ob.muted} mt-2 leading-snug`}>
-                {lang === "fr"
-                  ? `${interviewsPerWeek} entretiens par semaine, c'est l'objectif de 75 % de nos utilisateurs qui réussissent.`
-                  : `${interviewsPerWeek} interviews per week is what 75% of our successful users aim for.`}
-              </p>
-            </div>
-            </div>
-          </motion.div>
-        )}
-
-        {step === "jobBlocker" && (
-          <motion.div key="jobBlocker" {...stepMotion}>
-            <h1 className={stepTitleClass}>
-              {lang === "fr"
-                ? "Qu'est-ce qui vous empêche d'atteindre vos objectifs ?"
-                : "What's stopping you from reaching your goals?"}
-            </h1>
-            <p className={stepSubtitleClass}>
-              {lang === "fr"
-                ? "Sélectionnez le principal obstacle dans votre recherche d'emploi."
-                : "Select the main blocker in your job search."}
-            </p>
-            <div className={ob.stepBodyOptions}>
-              <div className={ob.optionList} data-testid="job-blocker-options">
-                {(lang === "fr" ? JOB_BLOCKER_OPTIONS_FR : JOB_BLOCKER_OPTIONS).map(({ id, label, Icon }) => (
-                  <SelectionCard
-                    key={id}
-                    selected={jobBlocker === id}
-                    onClick={() => setJobBlocker(id)}
-                    icon={Icon}
-                    title={label}
-                    variant="qcm"
-                    testId={`job-blocker-${id}`}
-                  />
-                ))}
-              </div>
-            </div>
-          </motion.div>
-        )}
-
-        {step === "jobAccomplish" && (
-          <motion.div key="jobAccomplish" {...stepMotion}>
-            <h1 className={stepTitleClass}>
-              {lang === "fr" ? "Que souhaitez-vous accomplir ?" : "What do you want to accomplish?"}
-            </h1>
-            <p className={stepSubtitleClass}>
-              {lang === "fr"
-                ? "Sélectionnez votre objectif principal dans votre recherche d'emploi."
-                : "Select your primary goal in your job search journey."}
-            </p>
-            <div className={ob.stepBodyOptions}>
-              <div className={ob.optionList} data-testid="job-accomplish-options">
-                {(lang === "fr" ? JOB_ACCOMPLISH_OPTIONS_FR : JOB_ACCOMPLISH_OPTIONS).map(({ id, label, Icon }) => (
-                  <SelectionCard
-                    key={id}
-                    selected={jobAccomplish === id}
-                    onClick={() => setJobAccomplish(id)}
-                    icon={Icon}
-                    title={label}
-                    variant="qcm"
-                    testId={`job-accomplish-${id}`}
-                  />
-                ))}
-              </div>
-            </div>
-          </motion.div>
-        )}
-
-        {step === "jobGoal" && (
-          <motion.div key="jobGoal" {...stepMotion}>
-            <h1 className={stepTitleClass}>
-              {lang === "fr" ? "Quel est votre objectif ?" : "What's your goal?"}
-            </h1>
-            <p className={stepSubtitleClass}>
-              {lang === "fr"
-                ? "Ceci servira à personnaliser vos offres d'emploi."
-                : "This will be used to personalize your job matches."}
-            </p>
-            <div className={ob.stepBodyOptions}>
-              <div className={ob.optionList} data-testid="job-goal-options">
-                {(lang === "fr" ? JOB_GOAL_OPTIONS_FR : JOB_GOAL_OPTIONS).map(({ id, label, Icon }) => (
-                  <SelectionCard
-                    key={id}
-                    selected={jobGoal === id}
-                    onClick={() => setJobGoal(id)}
-                    icon={Icon}
-                    title={label}
-                    variant="qcm"
-                    testId={`job-goal-${id}`}
-                  />
-                ))}
-              </div>
-            </div>
-          </motion.div>
-        )}
-
-        {step === "potentialChart" && (
-          <motion.div key="potentialChart" {...stepMotion}>
-            <h1 className={stepTitleClass}>{lang === "fr" ? "Vous avez le potentiel pour dépasser votre objectif" : "You have great potential to crush your goal"}</h1>
-            <div className={ob.stepBody}>
-              <InterviewRateChart lang={lang} />
-            </div>
-          </motion.div>
-        )}
-
-        {step === "compare2x" && (
-          <motion.div key="compare2x" {...stepMotion}>
-            <h1 className={stepTitleClass}>
-              {lang === "fr"
-                ? `Décrochez deux fois plus d'entretiens avec ${BRAND.NAME} qu'en solo.`
-                : `Land twice as many interviews with ${BRAND.NAME} vs on your own.`}
-            </h1>
-            <div className={`${ob.stepBody} items-center justify-center`}>
-              <Compare2xChart lang={lang} />
-            </div>
-          </motion.div>
-        )}
-
-        {step === "longTerm" && (
-          <motion.div key="longTerm" {...stepMotion}>
-            <h1 className={stepTitleClass}>{lang === "fr" ? `${BRAND.NAME} crée des résultats durables` : `${BRAND.NAME} creates long-term results`}</h1>
-            <div className={ob.stepBody}>
-              <LongTermResultsChart lang={lang} />
-            </div>
-          </motion.div>
-        )}
-
-        {step === "attribution" && (
-          <motion.div key="attribution" {...stepMotion}>
-            <h1 className={`${stepTitleClass} text-center sm:text-left`}>{lang === "fr" ? "Comment avez-vous entendu parler de nous ?" : "How did you hear about us?"}</h1>
-            <div className={`${ob.stepBody} ${ob.optionGrid}`}>
-              {(lang === "fr" ? ATTRIBUTION_OPTIONS_FR : ATTRIBUTION_OPTIONS).map(({ id, label, hint, Icon }) => (
-                <SelectionCard
-                  key={id}
-                  selected={attribution === id}
-                  onClick={() => setAttribution(id)}
-                  icon={Icon}
-                  title={label}
-                  hint={hint}
-                  testId={`attribution-${id}`}
-                />
-              ))}
-            </div>
-          </motion.div>
-        )}
-
-        {step === "referralCode" && (
-          <motion.div key="referralCode" {...stepMotion}>
-            <h1 className={stepTitleClass}>{lang === "fr" ? "Code de parrainage" : "Referral code"}</h1>
-            <p className={stepSubtitleClass}>{lang === "fr" ? "Collez un code de parrainage si vous en avez un." : "Paste a referral code below if you have one."}</p>
-
-            <div className={`${ob.stepBody} items-center`}>
-              <OnboardingIllustration src="/onboarding/referral-gift.png" alt="" />
-
-              <div className="w-full mt-2">
-                <label htmlFor="referral-code-input" className="mb-2 block text-sm font-semibold text-zinc-800">
-                  {lang === "fr" ? "Code de parrainage" : "Referral Code"}
-                </label>
-                <input
-                  id="referral-code-input"
-                  data-testid="referral-code-input"
-                  type="tel"
-                  value={referralCode}
-                  onChange={(e) => setReferralCode(normalizeReferralCodeInput(e.target.value))}
-                  onPaste={(e) => {
-                    e.preventDefault();
-                    const pasted = e.clipboardData.getData("text");
-                    setReferralCode(normalizeReferralCodeInput(pasted));
-                  }}
-                  placeholder="123456"
-                  inputMode="numeric"
-                  maxLength={6}
-                  autoComplete="one-time-code"
-                  autoCorrect="off"
-                  spellCheck={false}
-                  className="w-full h-12 sm:h-14 rounded-2xl border border-zinc-200 bg-white px-4 text-center font-mono text-lg tracking-[0.2em] text-zinc-900 placeholder:text-zinc-300 focus:border-linkedin focus:outline-none focus:ring-2 focus:ring-linkedin/20"
-                />
-              </div>
-            </div>
-          </motion.div>
-        )}
-
-        {step === "upload" && !parsing && (
-          <motion.div key="upload" {...stepMotion}>
-            <h1 className={stepTitleClass}>{lang === "fr" ? "Importez votre CV" : "Upload your resume"}</h1>
-            <p className={stepSubtitleClass}>{lang === "fr" ? "Importez votre CV pour que nous construisions votre profil et commencions à postuler immédiatement." : "Upload your resume so we can build your profile and start applying to jobs right away."}</p>
-
-            <div className={ob.stepBody}>
-            <label
-              htmlFor="cv-input"
-              data-testid="cv-dropzone"
-              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-              onDragLeave={() => setDragOver(false)}
-              onDrop={(e) => {
-                e.preventDefault();
-                setDragOver(false);
-                const f = e.dataTransfer.files?.[0];
-                if (f) handleUpload(f);
-              }}
-              className={`block border-2 border-dashed rounded-2xl p-6 sm:p-8 text-center transition-all bg-white cursor-pointer ${
-                dragOver ? "border-linkedin bg-linkedin-light scale-[1.01]" : "border-zinc-200 hover:border-linkedin/40"
-              }`}
-            >
-              {!file ? (
-                <>
-                  <div className={`w-12 h-12 mx-auto rounded-xl ${ob.accentSoft} flex items-center justify-center mb-3`}>
-                    <FileText className={`w-6 h-6 ${ob.accent}`} />
-                  </div>
-                  <p className="font-semibold text-sm sm:text-base text-zinc-900">{lang === "fr" ? "Aucun CV sélectionné" : "No resume selected"}</p>
-                  <p className={`text-xs sm:text-sm ${ob.muted} mt-1`}>{lang === "fr" ? `PDF, DOCX, RTF, TXT ou image • ${CV_MAX_MB} Mo max` : `PDF, DOCX, RTF, TXT, or image • Max ${CV_MAX_MB}MB`}</p>
-                </>
-              ) : (
-                <div className="flex items-center justify-center gap-2 text-zinc-700">
-                  <FileText className="w-5 h-5" />
-                  <span className="font-medium text-sm">{file.name}</span>
-                </div>
-              )}
-              <input
-                ref={inputRef}
-                id="cv-input"
-                data-testid="cv-file-input"
-                type="file"
-                accept={CV_ACCEPT_ATTR}
-                className="hidden"
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) {
-                    setFile(f);
-                    handleUpload(f);
-                  }
+            {step === "profileSetup" && !parsing && (
+              <ProfileSetupStep
+                onComplete={() => {
+                  trackOnboardingContinue("profileSetup");
+                  goToStepIndex(STEP_ORDER.indexOf("profileWelcome"));
                 }}
               />
-            </label>
+            )}
 
-            <button
-              type="button"
-              onClick={() => {
-                trackOnboardingSkip("upload");
-                setStepIndex(STEP_ORDER.indexOf("profileSetup"));
-                toast.message(lang === "fr" ? "Vous pouvez importer votre CV plus tard depuis le Profil" : "You can upload your resume later from Profile");
-              }}
-              className={`mt-3 w-full text-center text-sm ${ob.muted} hover:text-zinc-900 underline-offset-2 hover:underline`}
-            >
-              {lang === "fr" ? "Passer pour l'instant" : "Skip for now"}
-            </button>
-            </div>
-          </motion.div>
-        )}
+            {step === "profileWelcome" && !parsing && (
+              <motion.div key="profileWelcome" {...stepMotion}>
+                <ProfileWelcomeStep
+                  salaryMin={salaryMin}
+                  selectedRoles={selectedRoles}
+                  categories={categories}
+                  categoryOptions={categoryOptions}
+                  interviewsPerWeek={interviewsPerWeek}
+                />
+              </motion.div>
+            )}
 
-        {parsing && (
-          <motion.div
-            key="parsing"
-            className={`${ob.step} items-center justify-center text-center`}
-            initial={{ opacity: 0, y: 14 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
-          >
-            <h1 className={ob.title}>
-              {lang === "fr" ? "Lecture de votre CV" : "Reading your CV"}<span className="text-linkedin">…</span>
-            </h1>
-            <p className={ob.subtitle}>{lang === "fr" ? "Construction de votre profil." : "Building your profile."}</p>
-            <motion.div
-              className={`${ob.stepBody} flex flex-col items-center justify-center gap-3`}
-              initial={{ opacity: 0, scale: 0.96 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.08, duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-            >
-              <Loader2 className="h-9 w-9 animate-spin text-linkedin" data-testid="parse-loading" />
-              <p className={`text-sm ${ob.muted}`}>{lang === "fr" ? "Cela ne prend qu'un moment." : "This only takes a moment."}</p>
-            </motion.div>
-          </motion.div>
-        )}
+            {step === "contactPhone" &&
+              !parsing &&
+              (() => {
+                const phoneCopy = getContactPhoneCopy(lang);
+                return (
+                  <motion.div key="contactPhone" {...stepMotion}>
+                    <h1 className={stepTitleClass}>{phoneCopy.title}</h1>
+                    <p className={stepSubtitleClass}>{phoneCopy.subtitle}</p>
+                    <div className={ob.stepBody}>
+                      <OnboardingContactPhoneStep
+                        lang={lang}
+                        phonePrefix={contactPhonePrefix}
+                        phoneCountryIso2={contactPhoneCountryIso2}
+                        phoneLocal={contactPhoneLocal}
+                        onCountryChange={handleContactPhoneCountryChange}
+                        onPhoneChange={setContactPhoneLocal}
+                      />
+                    </div>
+                  </motion.div>
+                );
+              })()}
 
-        {step === "profileSetup" && !parsing && (
-          <ProfileSetupStep
-            onComplete={() => {
-              trackOnboardingContinue("profileSetup");
-              goToStepIndex(STEP_ORDER.indexOf("profileWelcome"));
-            }}
-          />
-        )}
+            {step === "showcaseLanding" && !parsing && (
+              <motion.div key="showcaseLanding" {...stepMotion}>
+                <ShowcaseLandingStep />
+              </motion.div>
+            )}
 
-        {step === "profileWelcome" && !parsing && (
-          <motion.div key="profileWelcome" {...stepMotion}>
-            <ProfileWelcomeStep
-              salaryMin={salaryMin}
-              selectedRoles={selectedRoles}
-              categories={categories}
-              categoryOptions={categoryOptions}
-              interviewsPerWeek={interviewsPerWeek}
-            />
-          </motion.div>
-        )}
+            {step === "showcaseAllInOne" && !parsing && (
+              <motion.div key="showcaseAllInOne" {...stepMotion}>
+                <ShowcaseAllInOneStep />
+              </motion.div>
+            )}
 
-        {step === "contactPhone" && !parsing && (() => {
-          const phoneCopy = getContactPhoneCopy(lang);
-          return (
-          <motion.div key="contactPhone" {...stepMotion}>
-            <h1 className={stepTitleClass}>
-              {phoneCopy.title}
-            </h1>
-            <p className={stepSubtitleClass}>
-              {phoneCopy.subtitle}
-            </p>
-            <div className={ob.stepBody}>
-              <OnboardingContactPhoneStep
-                lang={lang}
-                phonePrefix={contactPhonePrefix}
-                phoneCountryIso2={contactPhoneCountryIso2}
-                phoneLocal={contactPhoneLocal}
-                onCountryChange={handleContactPhoneCountryChange}
-                onPhoneChange={setContactPhoneLocal}
-              />
-            </div>
-          </motion.div>
-          );
-        })()}
-
-        {step === "showcaseLanding" && !parsing && (
-          <motion.div key="showcaseLanding" {...stepMotion}>
-            <ShowcaseLandingStep />
-          </motion.div>
-        )}
-
-        {step === "showcaseAllInOne" && !parsing && (
-          <motion.div key="showcaseAllInOne" {...stepMotion}>
-            <ShowcaseAllInOneStep />
-          </motion.div>
-        )}
-
-        {step === "showcasePricing" && !parsing && (
-          <motion.div key="showcasePricing" {...stepMotion}>
-            <ShowcasePricingStep
-              selectedPlan={selectedPlan}
-              onSelectPlan={setSelectedPlan}
-              onContinueCheckout={startOnboardingCheckout}
-              checkoutLoading={checkoutLoading}
-              redeemingAccessCode={redeemingAccessCode}
-              saving={saving}
-            />
-          </motion.div>
-        )}
-
-
-      </AnimatePresence>
-    </OnboardingShell>
-    )}
+            {step === "showcasePricing" && !parsing && (
+              <motion.div key="showcasePricing" {...stepMotion}>
+                <ShowcasePricingStep
+                  selectedPlan={selectedPlan}
+                  onSelectPlan={setSelectedPlan}
+                  onContinueCheckout={startOnboardingCheckout}
+                  checkoutLoading={checkoutLoading}
+                  redeemingAccessCode={redeemingAccessCode}
+                  saving={saving}
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </OnboardingShell>
+      )}
     </>
   );
 }

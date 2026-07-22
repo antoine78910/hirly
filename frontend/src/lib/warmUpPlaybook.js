@@ -11,7 +11,11 @@ export const WARM_UP_PLAYBOOK_EN = [
   { type: "paragraph", text: "For job search, career advice & interview content accounts" },
   { type: "heading", level: 2, text: "Why Warmup Matters" },
   { type: "paragraph", text: "Fresh accounts have:" },
-  { type: "list", style: "bullet", items: ["no trust", "no audience profile", "no behavioral history"] },
+  {
+    type: "list",
+    style: "bullet",
+    items: ["no trust", "no audience profile", "no behavioral history"],
+  },
   { type: "paragraph", text: "If you post too early:" },
   {
     type: "list",
@@ -202,7 +206,10 @@ export const WARM_UP_PLAYBOOK_FR = [
     variant: "warning",
     text: "Avant de publier — si tu viens de créer ton compte, suis ces règles attentivement.",
   },
-  { type: "paragraph", text: "Pour les comptes de contenu emploi, carrière et entretiens (marché francophone — France)" },
+  {
+    type: "paragraph",
+    text: "Pour les comptes de contenu emploi, carrière et entretiens (marché francophone — France)",
+  },
   { type: "heading", level: 2, text: "Pourquoi le warmup compte" },
   { type: "paragraph", text: "Les nouveaux comptes n'ont pas :" },
   {
@@ -246,7 +253,10 @@ export const WARM_UP_PLAYBOOK_FR = [
     type: "paragraph",
     text: "Toujours pas de publication. Cherche chaque jour (en français) : conseils recherche emploi, conseils CV, profil LinkedIn, préparation entretien, négociation salaire, CV ATS…",
   },
-  { type: "paragraph", text: "30–60 min/jour. 1–3 commentaires max par session, naturels et pertinents." },
+  {
+    type: "paragraph",
+    text: "30–60 min/jour. 1–3 commentaires max par session, naturels et pertinents.",
+  },
   {
     type: "paragraph",
     text: "Hashtags recommandés : #emploi #job #entretien #alternance #stage #travail #carriere #cv #rechercheemploi #conseilscarriere #jobsearch #emploifrance #tipsemploi (+ #aihirlyai pour le suivi).",

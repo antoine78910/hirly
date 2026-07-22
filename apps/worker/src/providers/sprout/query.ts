@@ -12,7 +12,10 @@ export type SproutFranceQueryOptions = SproutCountryQueryOptions;
 
 function boundedInteger(value: number, name: string, minimum: number, maximum: number): number {
   if (!Number.isInteger(value) || value < minimum || value > maximum) {
-    throw new IngestionError("invalid_input", `Sprout ${name} must be an integer from ${minimum} to ${maximum}`);
+    throw new IngestionError(
+      "invalid_input",
+      `Sprout ${name} must be an integer from ${minimum} to ${maximum}`,
+    );
   }
   return value;
 }
@@ -58,14 +61,28 @@ function extractOffset(candidate: string): number | null {
   return Number(values[0]);
 }
 
-export function parseSproutNextOffset(input: { next: string | null; currentOffset: number; returnedItemCount: number; seenOffsets?: ReadonlySet<number> }): number | null {
+export function parseSproutNextOffset(input: {
+  next: string | null;
+  currentOffset: number;
+  returnedItemCount: number;
+  seenOffsets?: ReadonlySet<number>;
+}): number | null {
   const currentOffset = boundedInteger(input.currentOffset, "current offset", 0, 10_000_000);
   const returnedItemCount = boundedInteger(input.returnedItemCount, "returned item count", 0, 500);
   if (input.next === null) return null;
   const offset = extractOffset(input.next.trim());
   const expectedOffset = currentOffset + returnedItemCount;
-  if (offset === null || !Number.isSafeInteger(offset) || offset <= currentOffset || offset !== expectedOffset || input.seenOffsets?.has(offset)) {
-    throw new IngestionError("integrity_error", "Sprout next offset is invalid, repeated, or non-monotonic");
+  if (
+    offset === null ||
+    !Number.isSafeInteger(offset) ||
+    offset <= currentOffset ||
+    offset !== expectedOffset ||
+    input.seenOffsets?.has(offset)
+  ) {
+    throw new IngestionError(
+      "integrity_error",
+      "Sprout next offset is invalid, repeated, or non-monotonic",
+    );
   }
   return offset;
 }

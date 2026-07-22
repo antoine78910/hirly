@@ -30,7 +30,8 @@ const ATS_LABELS = {
 };
 
 const fmt = (value) => Number(value || 0).toLocaleString();
-const pct = (value) => `${Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 1 })}%`;
+const pct = (value) =>
+  `${Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 1 })}%`;
 
 const mergeTrendSeries = (series = {}) => {
   const dates = new Set();
@@ -113,95 +114,208 @@ export default function AdminAnalytics() {
     [applicationFunnel],
   );
 
-  const adminOpsRows = useMemo(() => [
-    { key: "open_action_required", label: "Open action required", value: fmt(adminOps.open_action_required) },
-    { key: "open_blocked", label: "Open blocked", value: fmt(adminOps.open_blocked) },
-    { key: "assigned_applications", label: "Assigned applications", value: fmt(adminOps.assigned_applications) },
-    { key: "unassigned_applications", label: "Unassigned applications", value: fmt(adminOps.unassigned_applications) },
-    {
-      key: "average_unresolved_age",
-      label: "Average unresolved age",
-      value: adminOps.average_unresolved_age_hours == null ? "-" : `${fmt(adminOps.average_unresolved_age_hours)}h`,
-    },
-  ], [adminOps]);
+  const adminOpsRows = useMemo(
+    () => [
+      {
+        key: "open_action_required",
+        label: "Open action required",
+        value: fmt(adminOps.open_action_required),
+      },
+      { key: "open_blocked", label: "Open blocked", value: fmt(adminOps.open_blocked) },
+      {
+        key: "assigned_applications",
+        label: "Assigned applications",
+        value: fmt(adminOps.assigned_applications),
+      },
+      {
+        key: "unassigned_applications",
+        label: "Unassigned applications",
+        value: fmt(adminOps.unassigned_applications),
+      },
+      {
+        key: "average_unresolved_age",
+        label: "Average unresolved age",
+        value:
+          adminOps.average_unresolved_age_hours == null
+            ? "-"
+            : `${fmt(adminOps.average_unresolved_age_hours)}h`,
+      },
+    ],
+    [adminOps],
+  );
 
   const atsPerformanceRows = useMemo(
-    () => Object.keys(ATS_LABELS).map((key) => ({ key, label: ATS_LABELS[key], ...(atsPerformance[key] || {}) })),
+    () =>
+      Object.keys(ATS_LABELS).map((key) => ({
+        key,
+        label: ATS_LABELS[key],
+        ...(atsPerformance[key] || {}),
+      })),
     [atsPerformance],
   );
 
-  const funnelColumns = useMemo(() => [
-    columnHelper.accessor("label", { header: "Step", cell: (info) => <span className="font-semibold">{info.getValue()}</span> }),
-    columnHelper.accessor("count", { header: "Count", cell: (info) => fmt(info.getValue()) }),
-    columnHelper.accessor("previous_rate", {
-      header: "Previous step conversion",
-      cell: (info) => (info.getValue() == null ? "-" : pct(info.getValue())),
-    }),
-  ], []);
+  const funnelColumns = useMemo(
+    () => [
+      columnHelper.accessor("label", {
+        header: "Step",
+        cell: (info) => <span className="font-semibold">{info.getValue()}</span>,
+      }),
+      columnHelper.accessor("count", { header: "Count", cell: (info) => fmt(info.getValue()) }),
+      columnHelper.accessor("previous_rate", {
+        header: "Previous step conversion",
+        cell: (info) => (info.getValue() == null ? "-" : pct(info.getValue())),
+      }),
+    ],
+    [],
+  );
 
-  const ctaColumns = useMemo(() => [
-    columnHelper.accessor("label", { header: "CTA", cell: (info) => <span className="font-semibold">{info.getValue()}</span> }),
-    columnHelper.accessor("clicks", { header: "Clicks", cell: (info) => fmt(info.getValue()) }),
-    columnHelper.accessor("conversion_to_signup", { header: "To signup", cell: (info) => pct(info.getValue()) }),
-    columnHelper.accessor("conversion_to_onboarding", { header: "To onboarding", cell: (info) => pct(info.getValue()) }),
-    columnHelper.accessor("conversion_to_first_swipe", { header: "To first swipe", cell: (info) => pct(info.getValue()) }),
-  ], []);
+  const ctaColumns = useMemo(
+    () => [
+      columnHelper.accessor("label", {
+        header: "CTA",
+        cell: (info) => <span className="font-semibold">{info.getValue()}</span>,
+      }),
+      columnHelper.accessor("clicks", { header: "Clicks", cell: (info) => fmt(info.getValue()) }),
+      columnHelper.accessor("conversion_to_signup", {
+        header: "To signup",
+        cell: (info) => pct(info.getValue()),
+      }),
+      columnHelper.accessor("conversion_to_onboarding", {
+        header: "To onboarding",
+        cell: (info) => pct(info.getValue()),
+      }),
+      columnHelper.accessor("conversion_to_first_swipe", {
+        header: "To first swipe",
+        cell: (info) => pct(info.getValue()),
+      }),
+    ],
+    [],
+  );
 
-  const applicationFunnelColumns = useMemo(() => [
-    columnHelper.accessor("key", {
-      header: "Status",
-      cell: (info) => <span className="font-semibold capitalize">{info.getValue().replaceAll("_", " ")}</span>,
-    }),
-    columnHelper.accessor("value", { header: "Count", cell: (info) => fmt(info.getValue()) }),
-  ], []);
+  const applicationFunnelColumns = useMemo(
+    () => [
+      columnHelper.accessor("key", {
+        header: "Status",
+        cell: (info) => (
+          <span className="font-semibold capitalize">{info.getValue().replaceAll("_", " ")}</span>
+        ),
+      }),
+      columnHelper.accessor("value", { header: "Count", cell: (info) => fmt(info.getValue()) }),
+    ],
+    [],
+  );
 
-  const adminOpsColumns = useMemo(() => [
-    columnHelper.accessor("label", { header: "Metric", cell: (info) => <span className="font-semibold">{info.getValue()}</span> }),
-    columnHelper.accessor("value", { header: "Value", cell: (info) => info.getValue() }),
-  ], []);
+  const adminOpsColumns = useMemo(
+    () => [
+      columnHelper.accessor("label", {
+        header: "Metric",
+        cell: (info) => <span className="font-semibold">{info.getValue()}</span>,
+      }),
+      columnHelper.accessor("value", { header: "Value", cell: (info) => info.getValue() }),
+    ],
+    [],
+  );
 
-  const atsPerformanceColumns = useMemo(() => [
-    columnHelper.accessor("label", { header: "ATS", cell: (info) => <span className="font-semibold">{info.getValue()}</span> }),
-    columnHelper.accessor((row) => row.generated || row.applications_generated, { id: "generated", header: "Generated", cell: (info) => fmt(info.getValue()) }),
-    columnHelper.accessor("prepared", { header: "Prepared", cell: (info) => fmt(info.getValue()) }),
-    columnHelper.accessor("action_required", { header: "Action Required", cell: (info) => fmt(info.getValue()) }),
-    columnHelper.accessor("submitted", { header: "Submitted", cell: (info) => fmt(info.getValue()) }),
-    columnHelper.accessor("failed_blocked", { header: "Failed / Blocked", cell: (info) => fmt(info.getValue()) }),
-    columnHelper.accessor("prepare_rate", { header: "Prepare rate", cell: (info) => pct(info.getValue()) }),
-    columnHelper.accessor("failure_rate", { header: "Failure rate", cell: (info) => pct(info.getValue()) }),
-  ], []);
+  const atsPerformanceColumns = useMemo(
+    () => [
+      columnHelper.accessor("label", {
+        header: "ATS",
+        cell: (info) => <span className="font-semibold">{info.getValue()}</span>,
+      }),
+      columnHelper.accessor((row) => row.generated || row.applications_generated, {
+        id: "generated",
+        header: "Generated",
+        cell: (info) => fmt(info.getValue()),
+      }),
+      columnHelper.accessor("prepared", {
+        header: "Prepared",
+        cell: (info) => fmt(info.getValue()),
+      }),
+      columnHelper.accessor("action_required", {
+        header: "Action Required",
+        cell: (info) => fmt(info.getValue()),
+      }),
+      columnHelper.accessor("submitted", {
+        header: "Submitted",
+        cell: (info) => fmt(info.getValue()),
+      }),
+      columnHelper.accessor("failed_blocked", {
+        header: "Failed / Blocked",
+        cell: (info) => fmt(info.getValue()),
+      }),
+      columnHelper.accessor("prepare_rate", {
+        header: "Prepare rate",
+        cell: (info) => pct(info.getValue()),
+      }),
+      columnHelper.accessor("failure_rate", {
+        header: "Failure rate",
+        cell: (info) => pct(info.getValue()),
+      }),
+    ],
+    [],
+  );
 
-  const trendColumns = useMemo(() => [
-    columnHelper.accessor("date", { header: "Date", cell: (info) => <span className="font-semibold">{info.getValue()}</span> }),
-    columnHelper.accessor("signups", { header: "Signups", cell: (info) => fmt(info.getValue()) }),
-    columnHelper.accessor("swipes", { header: "Swipes", cell: (info) => fmt(info.getValue()) }),
-    columnHelper.accessor("applications", { header: "Applications", cell: (info) => fmt(info.getValue()) }),
-    columnHelper.accessor("prepared", { header: "Prepared", cell: (info) => fmt(info.getValue()) }),
-    columnHelper.accessor("submitted", { header: "Submitted", cell: (info) => fmt(info.getValue()) }),
-  ], []);
+  const trendColumns = useMemo(
+    () => [
+      columnHelper.accessor("date", {
+        header: "Date",
+        cell: (info) => <span className="font-semibold">{info.getValue()}</span>,
+      }),
+      columnHelper.accessor("signups", { header: "Signups", cell: (info) => fmt(info.getValue()) }),
+      columnHelper.accessor("swipes", { header: "Swipes", cell: (info) => fmt(info.getValue()) }),
+      columnHelper.accessor("applications", {
+        header: "Applications",
+        cell: (info) => fmt(info.getValue()),
+      }),
+      columnHelper.accessor("prepared", {
+        header: "Prepared",
+        cell: (info) => fmt(info.getValue()),
+      }),
+      columnHelper.accessor("submitted", {
+        header: "Submitted",
+        cell: (info) => fmt(info.getValue()),
+      }),
+    ],
+    [],
+  );
 
   return (
     <AdminShell
       title="Analytics"
       subtitle="Product KPIs, funnels, applications, ATS quality, and admin operations."
-      actions={(
+      actions={
         <Button variant="outline" onClick={load} disabled={loading}>
-          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+          {loading ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <RefreshCw className="h-4 w-4" />
+          )}
           Refresh
         </Button>
-      )}
+      }
     >
       {loading ? (
-        <div className="grid min-h-64 place-items-center"><Loader2 className="h-6 w-6 animate-spin text-zinc-500" /></div>
-      ) : accessDenied ? <AdminAccessDenied /> : error ? (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">{error}</div>
+        <div className="grid min-h-64 place-items-center">
+          <Loader2 className="h-6 w-6 animate-spin text-zinc-500" />
+        </div>
+      ) : accessDenied ? (
+        <AdminAccessDenied />
+      ) : error ? (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+          {error}
+        </div>
       ) : (
         <div className="space-y-6">
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {KPI_CARDS.map(([key, label]) => <Card key={key} label={label} value={metrics[key]} />)}
+            {KPI_CARDS.map(([key, label]) => (
+              <Card key={key} label={label} value={metrics[key]} />
+            ))}
           </div>
 
-          <Section title="Conversion Funnel" subtitle="Unique actors where available; application stages also include application records.">
+          <Section
+            title="Conversion Funnel"
+            subtitle="Unique actors where available; application stages also include application records."
+          >
             <AdminDataTable
               columns={funnelColumns}
               data={funnel}
@@ -211,7 +325,10 @@ export default function AdminAnalytics() {
             />
           </Section>
 
-          <Section title="CTA Performance" subtitle="Click counts and downstream conversion from clicked CTA users.">
+          <Section
+            title="CTA Performance"
+            subtitle="Click counts and downstream conversion from clicked CTA users."
+          >
             <AdminDataTable
               columns={ctaColumns}
               data={ctas}
@@ -253,7 +370,10 @@ export default function AdminAnalytics() {
             />
           </Section>
 
-          <Section title="Daily Trend" subtitle="Last 7 days. Full 30-day data is returned by the API.">
+          <Section
+            title="Daily Trend"
+            subtitle="Last 7 days. Full 30-day data is returned by the API."
+          >
             <AdminDataTable
               columns={trendColumns}
               data={trend7}

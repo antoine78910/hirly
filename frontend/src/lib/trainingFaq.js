@@ -57,7 +57,8 @@ const TRAINING_FAQ_FR = [
   },
   {
     id: "auto-tracking",
-    question: "Est-ce que Topr suit automatiquement mes vidéos dès que je les poste sur TikTok par exemple ?",
+    question:
+      "Est-ce que Topr suit automatiquement mes vidéos dès que je les poste sur TikTok par exemple ?",
     answer: [
       {
         type: "p",
@@ -164,7 +165,9 @@ const TRAINING_FAQ_FR = [
         parts: [
           { text: "Pour ta photo de profil, choisis une " },
           { bold: "photo normale" },
-          { text: ", un visage ou un avatar propre. Le but est que ton compte ne paraisse pas trop promotionnel au premier coup d'œil." },
+          {
+            text: ", un visage ou un avatar propre. Le but est que ton compte ne paraisse pas trop promotionnel au premier coup d'œil.",
+          },
         ],
       },
     ],

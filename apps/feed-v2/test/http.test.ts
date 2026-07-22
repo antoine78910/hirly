@@ -53,9 +53,7 @@ describe("private Feed v2 HTTP foundation", () => {
       },
     });
 
-    const result = await handler(
-      new Request("http://feed.test/internal/feed/v2?limit=12"),
-    );
+    const result = await handler(new Request("http://feed.test/internal/feed/v2?limit=12"));
     expect(result.status).toBe(404);
     expect(await result.json()).toEqual({ error: "feed_v2_disabled" });
     expect([authCalls, reads]).toEqual([0, 0]);
@@ -80,9 +78,7 @@ describe("private Feed v2 HTTP foundation", () => {
     expect(result.status).toBe(200);
     expect(result.headers.get("cache-control")).toBe("private, no-store");
     expect(await result.json()).toEqual(response);
-    expect(observed).toEqual([
-      { assertion, cursor: "opaque", limit: 24 },
-    ]);
+    expect(observed).toEqual([{ assertion, cursor: "opaque", limit: 24 }]);
   });
 
   test("exposes typed stale-cursor and validation failures", async () => {
@@ -95,15 +91,11 @@ describe("private Feed v2 HTTP foundation", () => {
         },
       },
     });
-    const stale = await staleHandler(
-      new Request("http://feed.test/internal/feed/v2?cursor=old"),
-    );
+    const stale = await staleHandler(new Request("http://feed.test/internal/feed/v2?cursor=old"));
     expect(stale.status).toBe(409);
     expect(await stale.json()).toEqual({ error: "FEED_CURSOR_STALE" });
 
-    const invalid = await staleHandler(
-      new Request("http://feed.test/internal/feed/v2?limit=101"),
-    );
+    const invalid = await staleHandler(new Request("http://feed.test/internal/feed/v2?limit=101"));
     expect(invalid.status).toBe(400);
     expect(await invalid.json()).toEqual({ error: "invalid_limit" });
   });
@@ -127,9 +119,7 @@ describe("private Feed v2 HTTP foundation", () => {
     });
 
     for (const method of ["POST", "PUT", "PATCH", "DELETE"]) {
-      const result = await handler(
-        new Request("http://feed.test/internal/feed/v2", { method }),
-      );
+      const result = await handler(new Request("http://feed.test/internal/feed/v2", { method }));
       expect(result.status).toBe(404);
     }
     expect(calls).toBe(0);

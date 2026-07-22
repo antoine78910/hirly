@@ -7,7 +7,9 @@ function loadPlayerJs() {
   return new Promise((resolve) => {
     const existing = document.querySelector('script[data-bunny-playerjs="true"]');
     if (existing) {
-      existing.addEventListener("load", () => resolve(window.playerjs?.Player || null), { once: true });
+      existing.addEventListener("load", () => resolve(window.playerjs?.Player || null), {
+        once: true,
+      });
       existing.addEventListener("error", () => resolve(null), { once: true });
       return;
     }

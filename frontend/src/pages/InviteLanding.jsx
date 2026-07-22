@@ -30,7 +30,15 @@ function isDemoInvite(meta) {
 
 export default function InviteLanding() {
   const { code } = useParams();
-  const { user, loading: authLoading, setUser, setHasProfile, setHasPreferences, setHasTrainingAccess, checkAuth } = useAuth();
+  const {
+    user,
+    loading: authLoading,
+    setUser,
+    setHasProfile,
+    setHasPreferences,
+    setHasTrainingAccess,
+    checkAuth,
+  } = useAuth();
   const [checking, setChecking] = useState(true);
   const [inviteMeta, setInviteMeta] = useState(null);
   const [redeeming, setRedeeming] = useState(false);
@@ -67,7 +75,8 @@ export default function InviteLanding() {
         const { data } = await api.get(`/invites/${normalized}/validate`);
         setInviteMeta(data);
       } catch {
-        const local = process.env.NODE_ENV === "development" ? getLocalDevInviteMeta(normalized) : null;
+        const local =
+          process.env.NODE_ENV === "development" ? getLocalDevInviteMeta(normalized) : null;
         setInviteMeta(local || { valid: false, reason: "not_found" });
       } finally {
         setChecking(false);
@@ -102,7 +111,8 @@ export default function InviteLanding() {
   }, [authLoading, checking, invalid, isValid, demoInvite, user, inviteMeta]);
 
   useEffect(() => {
-    if (authLoading || checking || !user || redeeming || autoRedeemStarted.current || redeemFailed) return;
+    if (authLoading || checking || !user || redeeming || autoRedeemStarted.current || redeemFailed)
+      return;
     if (!isValid) return;
     autoRedeemStarted.current = true;
     (async () => {
@@ -126,7 +136,17 @@ export default function InviteLanding() {
         setAutoRedeemSettled(true);
       }
     })();
-  }, [authLoading, checking, user, normalized, invalid, isValid, redeeming, redeemFailed, inviteMeta]);
+  }, [
+    authLoading,
+    checking,
+    user,
+    normalized,
+    invalid,
+    isValid,
+    redeeming,
+    redeemFailed,
+    inviteMeta,
+  ]);
 
   const onEmailSubmit = async (event) => {
     event.preventDefault();
@@ -162,7 +182,10 @@ export default function InviteLanding() {
     } catch (err) {
       const detail = err?.response?.data?.detail;
       const message = typeof detail === "string" ? detail : err?.message;
-      if (authMode === "signup" && /already been registered|already registered/i.test(message || "")) {
+      if (
+        authMode === "signup" &&
+        /already been registered|already registered/i.test(message || "")
+      ) {
         setAuthNotice("Un compte existe déjà avec cet e-mail. Passez en mode connexion.");
         setAuthMode("login");
       } else {
@@ -175,7 +198,10 @@ export default function InviteLanding() {
 
   const onGoogleClick = () => {
     storePendingInviteCode(normalized);
-    startGoogleLogin(`/invite/${normalized}`, email.trim() ? { login_hint: email.trim() } : undefined);
+    startGoogleLogin(
+      `/invite/${normalized}`,
+      email.trim() ? { login_hint: email.trim() } : undefined,
+    );
   };
 
   const onToggleMode = (nextMode) => {
@@ -212,7 +238,9 @@ export default function InviteLanding() {
             <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-violet-100">
               <Sparkles className="h-6 w-6 text-violet-500" />
             </div>
-            <h1 className="font-display text-2xl font-bold tracking-tight">Invalid invitation link</h1>
+            <h1 className="font-display text-2xl font-bold tracking-tight">
+              Invalid invitation link
+            </h1>
             <p className="mt-3 text-sm leading-relaxed text-zinc-500">
               This link is not recognized. Contact the Hirly team to get a new invitation.
             </p>
@@ -229,45 +257,47 @@ export default function InviteLanding() {
   }
 
   return (
-    <TrainingAuthPopup testId="welcome-creator-page" aside={(
-      <>
-        <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-white/15 px-3 py-1.5 text-xs font-semibold">
-          <Sparkles className="h-3.5 w-3.5" />
-          Invitation créateur
-        </div>
-        <h1 className="font-display text-2xl font-black tracking-tight sm:text-3xl">
-          {influencerName ? `Bonjour ${influencerName}` : "Bienvenue"}
-        </h1>
-        <p className="mt-3 text-sm leading-relaxed text-violet-100/95 sm:text-base">
-          {demoInvite
-            ? `Créez votre compte pour accéder à l'environnement démo ${BRAND.NAME} et enregistrer vos vidéos.`
-            : `Créez votre compte pour rejoindre le programme de formation créateur ${BRAND.NAME}.`}
-        </p>
-
-        <ul className="mt-6 space-y-3 text-sm text-violet-50">
-          {trainingInvite ? (
-            <li className="flex items-start gap-3">
-              <GraduationCap className="mt-0.5 h-5 w-5 shrink-0" />
-              <span>Accès complet au cours Job Search Mastery</span>
-            </li>
-          ) : null}
-          {demoInvite ? (
-            <li className="flex items-start gap-3">
-              <MonitorPlay className="mt-0.5 h-5 w-5 shrink-0" />
-              <span>Compte démo pour vos enregistrements d&apos;écran</span>
-            </li>
-          ) : null}
-        </ul>
-
-        {inviteMeta?.invite_type !== "demo" ? (
-          <p className="mt-6 rounded-2xl border border-white/20 bg-white/10 px-4 py-3 text-xs leading-relaxed text-violet-50">
-            <span className="font-semibold text-white">Accès confidentiel.</span>
-            {" "}
-            Ne partagez pas votre accès ni le contenu de la formation. Tout partage détecté entraîne une exclusion immédiate du programme.
+    <TrainingAuthPopup
+      testId="welcome-creator-page"
+      aside={
+        <>
+          <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-white/15 px-3 py-1.5 text-xs font-semibold">
+            <Sparkles className="h-3.5 w-3.5" />
+            Invitation créateur
+          </div>
+          <h1 className="font-display text-2xl font-black tracking-tight sm:text-3xl">
+            {influencerName ? `Bonjour ${influencerName}` : "Bienvenue"}
+          </h1>
+          <p className="mt-3 text-sm leading-relaxed text-violet-100/95 sm:text-base">
+            {demoInvite
+              ? `Créez votre compte pour accéder à l'environnement démo ${BRAND.NAME} et enregistrer vos vidéos.`
+              : `Créez votre compte pour rejoindre le programme de formation créateur ${BRAND.NAME}.`}
           </p>
-        ) : null}
-      </>
-    )}
+
+          <ul className="mt-6 space-y-3 text-sm text-violet-50">
+            {trainingInvite ? (
+              <li className="flex items-start gap-3">
+                <GraduationCap className="mt-0.5 h-5 w-5 shrink-0" />
+                <span>Accès complet au cours Job Search Mastery</span>
+              </li>
+            ) : null}
+            {demoInvite ? (
+              <li className="flex items-start gap-3">
+                <MonitorPlay className="mt-0.5 h-5 w-5 shrink-0" />
+                <span>Compte démo pour vos enregistrements d&apos;écran</span>
+              </li>
+            ) : null}
+          </ul>
+
+          {inviteMeta?.invite_type !== "demo" ? (
+            <p className="mt-6 rounded-2xl border border-white/20 bg-white/10 px-4 py-3 text-xs leading-relaxed text-violet-50">
+              <span className="font-semibold text-white">Accès confidentiel.</span> Ne partagez pas
+              votre accès ni le contenu de la formation. Tout partage détecté entraîne une exclusion
+              immédiate du programme.
+            </p>
+          ) : null}
+        </>
+      }
     >
       <TrainingAuthForm
         title={authMode === "login" ? "Connexion" : "Créer un compte"}

@@ -13,9 +13,7 @@ interface CandidateRow {
   source_digest: string;
 }
 
-export class PostgresProjectionBackfillRepository
-  implements ProjectionBackfillRepository
-{
+export class PostgresProjectionBackfillRepository implements ProjectionBackfillRepository {
   constructor(private readonly sql: Database) {}
 
   async listCandidates(input: {

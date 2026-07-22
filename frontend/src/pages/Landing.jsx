@@ -1,6 +1,16 @@
 ﻿// REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
 import { Button } from "../components/ui/button";
-import { ArrowRight, Check, Sparkles, Zap, FileCheck2, Inbox, ChevronDown, ExternalLink, LogOut } from "lucide-react";
+import {
+  ArrowRight,
+  Check,
+  Sparkles,
+  Zap,
+  FileCheck2,
+  Inbox,
+  ChevronDown,
+  ExternalLink,
+  LogOut,
+} from "lucide-react";
 import { motion } from "framer-motion";
 import { useEffect } from "react";
 import Logo from "../components/Logo";
@@ -17,10 +27,7 @@ import LandingHeroRotatingWord from "../components/landing/LandingHeroRotatingWo
 import LandingHeroSwipeDemo from "../components/landing/LandingHeroSwipeDemo";
 import LandingTrustLogos from "../components/landing/LandingTrustLogos";
 import LandingLanguageSelector from "../components/landing/LandingLanguageSelector";
-import {
-  openJobSeekerDestination,
-  resolveJobSeekerEntryDestination,
-} from "../lib/jobSeekerEntry";
+import { openJobSeekerDestination, resolveJobSeekerEntryDestination } from "../lib/jobSeekerEntry";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -60,7 +67,7 @@ export default function Landing() {
           return "/swipe";
         }
       })()
-    : (redirectParam || "/swipe");
+    : redirectParam || "/swipe";
 
   useEffect(() => {
     trackEvent("landing_view");
@@ -109,7 +116,10 @@ export default function Landing() {
   };
 
   const onStartSwiping = async (ctaLocation = "hero") => {
-    trackEvent("cta_start_swiping_clicked", { authenticated: Boolean(user), location: ctaLocation });
+    trackEvent("cta_start_swiping_clicked", {
+      authenticated: Boolean(user),
+      location: ctaLocation,
+    });
     trackDatafastGoal("lp_cta", {
       location: ctaLocation,
       action: "start_swiping",
@@ -141,7 +151,11 @@ export default function Landing() {
       {/* Top bar */}
       <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-xl border-b border-zinc-100">
         <div className="max-w-6xl mx-auto px-6 py-3.5 flex items-center justify-between">
-          <a href="#" className="flex items-center gap-2 font-display font-black tracking-tight text-lg" data-testid="brand">
+          <a
+            href="#"
+            className="flex items-center gap-2 font-display font-black tracking-tight text-lg"
+            data-testid="brand"
+          >
             <Logo size={28} />
             <span>{BRAND.NAME}</span>
           </a>
@@ -158,7 +172,12 @@ export default function Landing() {
                     className="flex h-10 max-w-[210px] items-center gap-2 rounded-full border border-zinc-200 bg-white py-1 pl-1 pr-3 text-left shadow-sm transition hover:border-linkedin/40 hover:bg-zinc-50"
                   >
                     {user.picture ? (
-                      <img src={user.picture} alt="" className="size-8 shrink-0 rounded-full object-cover" referrerPolicy="no-referrer" />
+                      <img
+                        src={user.picture}
+                        alt=""
+                        className="size-8 shrink-0 rounded-full object-cover"
+                        referrerPolicy="no-referrer"
+                      />
                     ) : (
                       <span className="grid size-8 shrink-0 place-items-center rounded-full bg-linkedin/10 text-sm font-bold text-linkedin">
                         {(user.name || user.email || "H").charAt(0).toUpperCase()}
@@ -179,7 +198,9 @@ export default function Landing() {
                     <p className="text-xs font-medium uppercase text-zinc-400">
                       {lang === "fr" ? "Connecté en tant que" : "Signed in as"}
                     </p>
-                    <p className="mt-1 truncate text-sm font-semibold text-zinc-900">{user.email}</p>
+                    <p className="mt-1 truncate text-sm font-semibold text-zinc-900">
+                      {user.email}
+                    </p>
                   </div>
                   <DropdownMenuSeparator className="my-0 bg-zinc-200" />
                   <div className="p-1">
@@ -352,23 +373,66 @@ export default function Landing() {
       <section className="border-y border-zinc-100">
         <div className="max-w-5xl mx-auto grid gap-6 px-6 py-12 md:grid-cols-2 md:py-16">
           <div className="bg-white border border-zinc-200 rounded-2xl p-8">
-            <p className="text-xs font-semibold text-zinc-400 uppercase tracking-widest mb-3">{lang === "fr" ? "L'ancienne façon" : "The old way"}</p>
-            <h3 className="font-display font-bold text-3xl mb-4">{lang === "fr" ? "20 min / candidature" : "20 min / application"}</h3>
+            <p className="text-xs font-semibold text-zinc-400 uppercase tracking-widest mb-3">
+              {lang === "fr" ? "L'ancienne façon" : "The old way"}
+            </p>
+            <h3 className="font-display font-bold text-3xl mb-4">
+              {lang === "fr" ? "20 min / candidature" : "20 min / application"}
+            </h3>
             <ul className="text-zinc-600 space-y-2 text-sm">
-              <li>— {lang === "fr" ? "Copier-coller le même CV partout" : "Copy-paste the same CV everywhere"}</li>
-              <li>— {lang === "fr" ? "Rédiger une lettre de motivation générique" : "Write a generic cover letter"}</li>
-              <li>— {lang === "fr" ? "Remplir des formulaires sans fin" : "Fill out endless form fields"}</li>
-              <li>— {lang === "fr" ? "Perdre le fil de ses candidatures" : "Lose track of who you applied to"}</li>
+              <li>
+                —{" "}
+                {lang === "fr"
+                  ? "Copier-coller le même CV partout"
+                  : "Copy-paste the same CV everywhere"}
+              </li>
+              <li>
+                —{" "}
+                {lang === "fr"
+                  ? "Rédiger une lettre de motivation générique"
+                  : "Write a generic cover letter"}
+              </li>
+              <li>
+                —{" "}
+                {lang === "fr"
+                  ? "Remplir des formulaires sans fin"
+                  : "Fill out endless form fields"}
+              </li>
+              <li>
+                —{" "}
+                {lang === "fr"
+                  ? "Perdre le fil de ses candidatures"
+                  : "Lose track of who you applied to"}
+              </li>
             </ul>
           </div>
           <div className="gradient-linkedin text-white rounded-2xl p-8">
-            <p className="text-xs font-semibold text-white/70 uppercase tracking-widest mb-3">{BRAND.NAME}</p>
-            <h3 className="font-display font-bold text-3xl mb-4">{lang === "fr" ? "1 sec / candidature" : "1 sec / application"}</h3>
+            <p className="text-xs font-semibold text-white/70 uppercase tracking-widest mb-3">
+              {BRAND.NAME}
+            </p>
+            <h3 className="font-display font-bold text-3xl mb-4">
+              {lang === "fr" ? "1 sec / candidature" : "1 sec / application"}
+            </h3>
             <ul className="text-white/90 space-y-2 text-sm">
               <li>— {lang === "fr" ? "Importer le CV une seule fois" : "Upload CV once"}</li>
-              <li>— {lang === "fr" ? "Swiper à droite sur les offres qui vous intéressent" : "Swipe right on jobs you like"}</li>
-              <li>— {lang === "fr" ? "L'IA adapte le CV + la lettre pour chaque offre" : "AI tailors CV + cover letter for each"}</li>
-              <li>— {lang === "fr" ? "Suivre toutes les candidatures au même endroit" : "Track every application in one place"}</li>
+              <li>
+                —{" "}
+                {lang === "fr"
+                  ? "Swiper à droite sur les offres qui vous intéressent"
+                  : "Swipe right on jobs you like"}
+              </li>
+              <li>
+                —{" "}
+                {lang === "fr"
+                  ? "L'IA adapte le CV + la lettre pour chaque offre"
+                  : "AI tailors CV + cover letter for each"}
+              </li>
+              <li>
+                —{" "}
+                {lang === "fr"
+                  ? "Suivre toutes les candidatures au même endroit"
+                  : "Track every application in one place"}
+              </li>
             </ul>
           </div>
         </div>
@@ -377,18 +441,47 @@ export default function Landing() {
       {/* How it works */}
       <section className="max-w-6xl mx-auto px-6 py-24">
         <h2 className="font-display font-bold text-4xl sm:text-5xl tracking-tight text-center mb-16">
-          {lang === "fr" ? "Trois actions pour votre prochain emploi." : "Three taps to your next job."}
+          {lang === "fr"
+            ? "Trois actions pour votre prochain emploi."
+            : "Three taps to your next job."}
         </h2>
         <div className="grid md:grid-cols-3 gap-8">
-          {(lang === "fr" ? [
-            { icon: FileCheck2, title: "Importez votre CV", body: "Nous extrayons vos compétences, expérience et postes cibles en quelques secondes." },
-            { icon: Zap, title: "Swipez les offres", body: "Chaque carte affiche un score de correspondance et explique pourquoi ce poste vous convient." },
-            { icon: Inbox, title: "Suivez tout", body: "De la candidature → à l'entretien → à l'offre. Tout au même endroit." },
-          ] : [
-            { icon: FileCheck2, title: "Upload your CV", body: "We extract your skills, experience, and target roles in seconds." },
-            { icon: Zap, title: "Swipe through jobs", body: "Every card shows a match score and why this job fits you." },
-            { icon: Inbox, title: "Track everything", body: "From applied → interview → offer. Your applications, one place." },
-          ]).map((s, i) => (
+          {(lang === "fr"
+            ? [
+                {
+                  icon: FileCheck2,
+                  title: "Importez votre CV",
+                  body: "Nous extrayons vos compétences, expérience et postes cibles en quelques secondes.",
+                },
+                {
+                  icon: Zap,
+                  title: "Swipez les offres",
+                  body: "Chaque carte affiche un score de correspondance et explique pourquoi ce poste vous convient.",
+                },
+                {
+                  icon: Inbox,
+                  title: "Suivez tout",
+                  body: "De la candidature → à l'entretien → à l'offre. Tout au même endroit.",
+                },
+              ]
+            : [
+                {
+                  icon: FileCheck2,
+                  title: "Upload your CV",
+                  body: "We extract your skills, experience, and target roles in seconds.",
+                },
+                {
+                  icon: Zap,
+                  title: "Swipe through jobs",
+                  body: "Every card shows a match score and why this job fits you.",
+                },
+                {
+                  icon: Inbox,
+                  title: "Track everything",
+                  body: "From applied → interview → offer. Your applications, one place.",
+                },
+              ]
+          ).map((s, i) => (
             <div key={i} className="border-t border-zinc-200 pt-6">
               <div className="w-10 h-10 rounded-xl gradient-linkedin text-white grid place-items-center mb-4">
                 <s.icon className="w-5 h-5" />
@@ -408,16 +501,25 @@ export default function Landing() {
       <section className="mx-auto max-w-6xl px-6 pt-20 pb-20 sm:pt-28 sm:pb-28">
         <div className="overflow-hidden rounded-[48px] border border-zinc-200/80 bg-white shadow-[0_24px_80px_-32px_rgba(124,58,237,0.18)]">
           <div className="gradient-linkedin-soft relative px-8 py-12 text-center sm:px-16 sm:py-16">
-            <div className="pointer-events-none absolute inset-0 bg-grid mask-radial opacity-60" aria-hidden />
+            <div
+              className="pointer-events-none absolute inset-0 bg-grid mask-radial opacity-60"
+              aria-hidden
+            />
             <h2 className="relative font-display text-4xl font-black tracking-tighter text-zinc-900 sm:text-5xl">
               {lang === "fr" ? (
-                <>Commencez à <span className="italic text-swiipr-gradient">swiper.</span></>
+                <>
+                  Commencez à <span className="italic text-swiipr-gradient">swiper.</span>
+                </>
               ) : (
-                <>Start <span className="italic text-swiipr-gradient">swiping.</span></>
+                <>
+                  Start <span className="italic text-swiipr-gradient">swiping.</span>
+                </>
               )}
             </h2>
             <p className="relative mt-3 text-lg text-zinc-600">
-              {lang === "fr" ? "Votre prochain emploi est à un swipe." : "Your next job is one swipe away."}
+              {lang === "fr"
+                ? "Votre prochain emploi est à un swipe."
+                : "Your next job is one swipe away."}
             </p>
             <Button
               data-testid="footer-cta-btn"
@@ -473,7 +575,9 @@ export default function Landing() {
 
               <div className="flex max-w-xl flex-col items-center text-center md:items-start md:text-left">
                 <h2 className="font-display text-2xl font-black uppercase tracking-tight text-zinc-900 sm:text-3xl lg:text-[2.5rem] lg:leading-tight">
-                  {lang === "fr" ? "L'application arrive bientôt" : "The application is coming soon"}
+                  {lang === "fr"
+                    ? "L'application arrive bientôt"
+                    : "The application is coming soon"}
                 </h2>
                 <p className="mt-4 text-base leading-relaxed text-zinc-500 sm:text-lg">
                   {lang === "fr"
@@ -484,12 +588,26 @@ export default function Landing() {
                   <button
                     type="button"
                     className="group inline-flex items-center gap-2.5 rounded-lg border border-zinc-300 bg-white px-5 py-2.5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-linkedin/35 hover:shadow-md"
-                    aria-label={lang === "fr" ? "Google Play — bientôt disponible" : "Google Play — available soon"}
+                    aria-label={
+                      lang === "fr"
+                        ? "Google Play — bientôt disponible"
+                        : "Google Play — available soon"
+                    }
                   >
-                    <svg className="h-5 w-5 shrink-0 transition-transform duration-200 group-hover:scale-110" viewBox="0 0 21 24" aria-hidden>
-                      <path fill="#4285F4" d="M3 20.5V3.5C3 2.91 3.34 2.39 3.84 2.15L13.69 12 3.84 21.85c-.5-.24-.84-.76-.84-1.35z" />
+                    <svg
+                      className="h-5 w-5 shrink-0 transition-transform duration-200 group-hover:scale-110"
+                      viewBox="0 0 21 24"
+                      aria-hidden
+                    >
+                      <path
+                        fill="#4285F4"
+                        d="M3 20.5V3.5C3 2.91 3.34 2.39 3.84 2.15L13.69 12 3.84 21.85c-.5-.24-.84-.76-.84-1.35z"
+                      />
                       <path fill="#34A853" d="M16.81 15.12 6.05 21.34l8.64-8.64z" />
-                      <path fill="#FBBC05" d="M20.16 10.81c.18.63.18 1.31 0 1.94l-2.35 2.35-3.89-3.89v-2.3z" />
+                      <path
+                        fill="#FBBC05"
+                        d="M20.16 10.81c.18.63.18 1.31 0 1.94l-2.35 2.35-3.89-3.89v-2.3z"
+                      />
                       <path fill="#EA4335" d="M6.05 2.66l10.76 6.22-3.03 3.03z" />
                     </svg>
                     <div className="text-left leading-tight">
@@ -504,9 +622,18 @@ export default function Landing() {
                   <button
                     type="button"
                     className="group inline-flex items-center gap-2.5 rounded-lg bg-black px-5 py-2.5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-zinc-900 hover:shadow-md"
-                    aria-label={lang === "fr" ? "App Store — bientôt disponible" : "App Store — available soon"}
+                    aria-label={
+                      lang === "fr"
+                        ? "App Store — bientôt disponible"
+                        : "App Store — available soon"
+                    }
                   >
-                    <svg className="h-5 w-5 shrink-0 text-white transition-transform duration-200 group-hover:scale-110" viewBox="0 0 20 22" fill="currentColor" aria-hidden>
+                    <svg
+                      className="h-5 w-5 shrink-0 text-white transition-transform duration-200 group-hover:scale-110"
+                      viewBox="0 0 20 22"
+                      fill="currentColor"
+                      aria-hidden
+                    >
                       <path d="M15.71 19.17c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C1.25 16.67-.06 12.12 1.7 9.06c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M10 3c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z" />
                     </svg>
                     <div className="text-left leading-tight">
@@ -526,22 +653,39 @@ export default function Landing() {
       <footer className="border-t border-zinc-100">
         <div className="max-w-6xl mx-auto px-6 py-12">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-8 mb-10">
-
             <div>
               <p className="text-xs font-semibold text-zinc-400 uppercase tracking-widest mb-3">
                 {lang === "fr" ? "Produit" : "Product"}
               </p>
               <ul className="space-y-2">
                 {[
-                  { label: lang === "fr" ? "Comment ça marche" : "How it works", href: "/how-it-works" },
+                  {
+                    label: lang === "fr" ? "Comment ça marche" : "How it works",
+                    href: "/how-it-works",
+                  },
                   { label: lang === "fr" ? "Cas d'usage" : "Use cases", href: "/use-cases" },
-                  { label: lang === "fr" ? "Pour les juniors" : "For juniors", href: "/for/juniors" },
-                  { label: lang === "fr" ? "Reconversion pro" : "Career changers", href: "/for/reconversion" },
-                  { label: lang === "fr" ? "Pour les devs" : "For developers", href: "/for/developpeurs" },
-                  { label: lang === "fr" ? "Programme créateurs" : "Creators program", href: "/creators" },
+                  {
+                    label: lang === "fr" ? "Pour les juniors" : "For juniors",
+                    href: "/for/juniors",
+                  },
+                  {
+                    label: lang === "fr" ? "Reconversion pro" : "Career changers",
+                    href: "/for/reconversion",
+                  },
+                  {
+                    label: lang === "fr" ? "Pour les devs" : "For developers",
+                    href: "/for/developpeurs",
+                  },
+                  {
+                    label: lang === "fr" ? "Programme créateurs" : "Creators program",
+                    href: "/creators",
+                  },
                 ].map((l) => (
                   <li key={l.href}>
-                    <a href={l.href} className="text-sm text-zinc-500 hover:text-zinc-900 transition-colors">
+                    <a
+                      href={l.href}
+                      className="text-sm text-zinc-500 hover:text-zinc-900 transition-colors"
+                    >
                       {l.label}
                     </a>
                   </li>
@@ -559,7 +703,10 @@ export default function Landing() {
                   { label: "Hirly vs Indeed", href: "/compare/hirly-vs-indeed" },
                 ].map((l) => (
                   <li key={l.href}>
-                    <a href={l.href} className="text-sm text-zinc-500 hover:text-zinc-900 transition-colors">
+                    <a
+                      href={l.href}
+                      className="text-sm text-zinc-500 hover:text-zinc-900 transition-colors"
+                    >
                       {l.label}
                     </a>
                   </li>
@@ -568,17 +715,34 @@ export default function Landing() {
             </div>
 
             <div>
-              <p className="text-xs font-semibold text-zinc-400 uppercase tracking-widest mb-3">Blog</p>
+              <p className="text-xs font-semibold text-zinc-400 uppercase tracking-widest mb-3">
+                Blog
+              </p>
               <ul className="space-y-2">
                 {[
-                  { label: lang === "fr" ? "Trouver un emploi vite" : "Find a job fast", href: "/blog/trouver-emploi-rapidement" },
-                  { label: lang === "fr" ? "Meilleures apps emploi 2026" : "Best job apps 2026", href: "/blog/meilleures-apps-emploi-2026" },
-                  { label: lang === "fr" ? "Automatiser sa recherche" : "Automate job search", href: "/blog/automatiser-recherche-emploi" },
-                  { label: lang === "fr" ? "Passer les filtres ATS" : "Beat ATS filters", href: "/blog/passer-filtres-ats-recrutement" },
+                  {
+                    label: lang === "fr" ? "Trouver un emploi vite" : "Find a job fast",
+                    href: "/blog/trouver-emploi-rapidement",
+                  },
+                  {
+                    label: lang === "fr" ? "Meilleures apps emploi 2026" : "Best job apps 2026",
+                    href: "/blog/meilleures-apps-emploi-2026",
+                  },
+                  {
+                    label: lang === "fr" ? "Automatiser sa recherche" : "Automate job search",
+                    href: "/blog/automatiser-recherche-emploi",
+                  },
+                  {
+                    label: lang === "fr" ? "Passer les filtres ATS" : "Beat ATS filters",
+                    href: "/blog/passer-filtres-ats-recrutement",
+                  },
                   { label: lang === "fr" ? "Tous les articles" : "All articles", href: "/blog" },
                 ].map((l) => (
                   <li key={l.href}>
-                    <a href={l.href} className="text-sm text-zinc-500 hover:text-zinc-900 transition-colors">
+                    <a
+                      href={l.href}
+                      className="text-sm text-zinc-500 hover:text-zinc-900 transition-colors"
+                    >
                       {l.label}
                     </a>
                   </li>
@@ -593,23 +757,36 @@ export default function Landing() {
               <ul className="space-y-2">
                 {[
                   { label: "Try Hirly", href: "/try-hirly/" },
-                  { label: lang === "fr" ? "Hirly emploi" : "Hirly jobs", href: lang === "fr" ? "/emploi/" : "/jobs/" },
+                  {
+                    label: lang === "fr" ? "Hirly emploi" : "Hirly jobs",
+                    href: lang === "fr" ? "/emploi/" : "/jobs/",
+                  },
                   { label: lang === "fr" ? "Hirly travail" : "Hirly work", href: "/travail/" },
-                  { label: lang === "fr" ? "Job matching, c'est quoi ?" : "What is job matching?", href: "/blog/job-matching-app" },
-                  { label: lang === "fr" ? "Tinder pour l'emploi" : "Tinder for jobs", href: "/blog/tinder-emploi-app" },
+                  {
+                    label: lang === "fr" ? "Job matching, c'est quoi ?" : "What is job matching?",
+                    href: "/blog/job-matching-app",
+                  },
+                  {
+                    label: lang === "fr" ? "Tinder pour l'emploi" : "Tinder for jobs",
+                    href: "/blog/tinder-emploi-app",
+                  },
                 ].map((l) => (
                   <li key={l.href}>
-                    <a href={l.href} className="text-sm text-zinc-500 hover:text-zinc-900 transition-colors">
+                    <a
+                      href={l.href}
+                      className="text-sm text-zinc-500 hover:text-zinc-900 transition-colors"
+                    >
                       {l.label}
                     </a>
                   </li>
                 ))}
               </ul>
             </div>
-
           </div>
           <div className="border-t border-zinc-100 pt-6 text-sm text-zinc-400">
-            <p>© {new Date().getFullYear()} {BRAND.NAME}</p>
+            <p>
+              © {new Date().getFullYear()} {BRAND.NAME}
+            </p>
             <p className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
               <Link to={TERMS_PATH} className="hover:text-zinc-600 transition-colors">
                 {lang === "fr" ? "Conditions d'utilisation" : "Terms of Use"}

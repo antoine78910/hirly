@@ -147,7 +147,9 @@ describe("posthog client", () => {
     expect(sanitizePostHogEvent(snapshot)).toBeNull();
     process.env.REACT_APP_POSTHOG_REPLAY_HOSTILE_QA_APPROVED = "true";
     expect(sanitizePostHogEvent(snapshot)).toBe(snapshot);
-    expect(sanitizePostHogEvent({ event: "$feature_flag_called", properties: {} } as never)).toBeNull();
+    expect(
+      sanitizePostHogEvent({ event: "$feature_flag_called", properties: {} } as never),
+    ).toBeNull();
   });
 
   it("preserves SDK transport properties while rejecting caller secrets", () => {
@@ -239,11 +241,11 @@ describe("posthog client", () => {
     });
     identifyPostHogUser("123e4567-e89b-12d3-a456-426614174001");
     expect(mockIdentify).toHaveBeenCalledTimes(2);
-    expect(mockIdentify).toHaveBeenNthCalledWith(
-      1,
-      "123e4567-e89b-12d3-a456-426614174000",
-      { email: "ada@example.com", first_name: "Ada", last_name: "Lovelace" },
-    );
+    expect(mockIdentify).toHaveBeenNthCalledWith(1, "123e4567-e89b-12d3-a456-426614174000", {
+      email: "ada@example.com",
+      first_name: "Ada",
+      last_name: "Lovelace",
+    });
     expect(mockReset).toHaveBeenCalledTimes(1);
     expect(mockIdentify.mock.invocationCallOrder[0]).toBeLessThan(
       mockReset.mock.invocationCallOrder[0],
@@ -270,9 +272,7 @@ describe("posthog client", () => {
   });
 
   it("accepts only canonical lowercase UUID identities", () => {
-    expect(
-      isCanonicalAnalyticsUserId("123e4567-e89b-12d3-a456-426614174000"),
-    ).toBe(true);
+    expect(isCanonicalAnalyticsUserId("123e4567-e89b-12d3-a456-426614174000")).toBe(true);
     for (const invalid of [
       "",
       "anonymous",
@@ -299,11 +299,7 @@ describe("posthog client", () => {
     process.env.REACT_APP_POSTHOG_HOST = "https://us.i.posthog.com";
     initializePostHog();
 
-    capturePostHogEvent(
-      "checkout_intent_started",
-      { plan: "pro" },
-      "2026-07-20T18:00:00.000Z",
-    );
+    capturePostHogEvent("checkout_intent_started", { plan: "pro" }, "2026-07-20T18:00:00.000Z");
 
     expect(mockCapture).toHaveBeenCalledWith(
       "checkout_intent_started",

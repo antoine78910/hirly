@@ -1,9 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
-import {
-  buildNetNewMeasurement,
-  type NetNewMeasurementInput,
-} from "../src/net-new-measurement";
+import { buildNetNewMeasurement, type NetNewMeasurementInput } from "../src/net-new-measurement";
 
 const input: NetNewMeasurementInput = {
   status: "COMPLETE",
@@ -11,10 +8,7 @@ const input: NetNewMeasurementInput = {
   generatedAt: "2026-07-20T14:00:00.000Z",
   freshnessCutoff: "2026-06-20T14:00:00.000Z",
   coverageRunId: "00000000-0000-4000-8000-000000000001",
-  trialRunIds: [
-    "00000000-0000-4000-8000-000000000002",
-    "00000000-0000-4000-8000-000000000003",
-  ],
+  trialRunIds: ["00000000-0000-4000-8000-000000000002", "00000000-0000-4000-8000-000000000003"],
   baseline: {
     layeredUniqueJobs: 100,
     fresh30dUniqueJobs: 90,
@@ -73,11 +67,13 @@ describe("G016 aggregate net-new inventory measurement", () => {
     });
     expect(report.trialRunDigest).toMatch(/^[a-f0-9]{64}$/);
     expect(report.digest).toMatch(/^[a-f0-9]{64}$/);
-    expect(buildNetNewMeasurement({
-      ...input,
-      trialRunIds: [...input.trialRunIds].reverse(),
-      sources: [...input.sources].reverse(),
-    }).digest).toBe(report.digest);
+    expect(
+      buildNetNewMeasurement({
+        ...input,
+        trialRunIds: [...input.trialRunIds].reverse(),
+        sources: [...input.sources].reverse(),
+      }).digest,
+    ).toBe(report.digest);
     const equalInstantReport = buildNetNewMeasurement({
       ...input,
       generatedAt: "2026-07-20T16:00:00+02:00",
@@ -89,33 +85,46 @@ describe("G016 aggregate net-new inventory measurement", () => {
   });
 
   test("refuses sample, blocked and unreconciled evidence", () => {
-    expect(() => buildNetNewMeasurement({ ...input, sample: true }))
-      .toThrow("sample evidence is not scoreable");
-    expect(() => buildNetNewMeasurement({
-      ...input,
-      status: "BLOCKED_EXTERNAL",
-      blockerReason: "coverage database unavailable",
-    })).toThrow("not scoreable");
-    expect(() => buildNetNewMeasurement({
-      ...input,
-      sources: [{ ...input.sources[0]!, incrementalNetNew: 9 }],
-    })).toThrow("layered dedup accounting does not reconcile");
-    expect(() => buildNetNewMeasurement({
-      ...input,
-      trialRunIds: ["not-a-trial-run"],
-    })).toThrow("must be a UUID");
-    expect(() => buildNetNewMeasurement({
-      ...input,
-      generatedAt: "2026-05-20T14:00:00.000Z",
-    })).toThrow("must not precede freshnessCutoff");
-    expect(() => buildNetNewMeasurement({
-      ...input,
-      generatedAt: "2026-07-20",
-    })).toThrow("explicit timezone");
-    expect(() => buildNetNewMeasurement({
-      ...input,
-      sources: [input.sources[0]!, input.sources[0]!],
-    })).toThrow("duplicate provider/tenant aggregates");
+    expect(() => buildNetNewMeasurement({ ...input, sample: true })).toThrow(
+      "sample evidence is not scoreable",
+    );
+    expect(() =>
+      buildNetNewMeasurement({
+        ...input,
+        status: "BLOCKED_EXTERNAL",
+        blockerReason: "coverage database unavailable",
+      }),
+    ).toThrow("not scoreable");
+    expect(() =>
+      buildNetNewMeasurement({
+        ...input,
+        sources: [{ ...input.sources[0]!, incrementalNetNew: 9 }],
+      }),
+    ).toThrow("layered dedup accounting does not reconcile");
+    expect(() =>
+      buildNetNewMeasurement({
+        ...input,
+        trialRunIds: ["not-a-trial-run"],
+      }),
+    ).toThrow("must be a UUID");
+    expect(() =>
+      buildNetNewMeasurement({
+        ...input,
+        generatedAt: "2026-05-20T14:00:00.000Z",
+      }),
+    ).toThrow("must not precede freshnessCutoff");
+    expect(() =>
+      buildNetNewMeasurement({
+        ...input,
+        generatedAt: "2026-07-20",
+      }),
+    ).toThrow("explicit timezone");
+    expect(() =>
+      buildNetNewMeasurement({
+        ...input,
+        sources: [input.sources[0]!, input.sources[0]!],
+      }),
+    ).toThrow("duplicate provider/tenant aggregates");
   });
 
   test("pins the operator SQL to aggregate-only read-only output", () => {
@@ -125,7 +134,9 @@ describe("G016 aggregate net-new inventory measurement", () => {
     );
     const normalized = sql.replace(/--.*$/gm, " ").toLowerCase();
     expect(normalized.trimStart().startsWith("\\set")).toBe(true);
-    expect(normalized).not.toMatch(/\b(insert|update|delete|merge|truncate|alter|drop|create|grant|revoke)\b/);
+    expect(normalized).not.toMatch(
+      /\b(insert|update|delete|merge|truncate|alter|drop|create|grant|revoke)\b/,
+    );
     expect(sql).toContain("'exact_occurrence'");
     expect(sql).toContain("'canonical_url'");
     expect(sql).toContain("'ats_identity'");

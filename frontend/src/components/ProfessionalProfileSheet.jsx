@@ -1,8 +1,22 @@
 import { useState, useMemo, useEffect } from "react";
 import {
-  ChevronRight, Plus, Palette, Briefcase, Heart, Folder,
-  GraduationCap, Code2, Award, Trophy, Newspaper, Star, Languages as LangIcon,
-  Users2, Lightbulb, Settings as Cog, Loader2,
+  ChevronRight,
+  Plus,
+  Palette,
+  Briefcase,
+  Heart,
+  Folder,
+  GraduationCap,
+  Code2,
+  Award,
+  Trophy,
+  Newspaper,
+  Star,
+  Languages as LangIcon,
+  Users2,
+  Lightbulb,
+  Settings as Cog,
+  Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../lib/api";
@@ -77,14 +91,21 @@ function EntryEditor({ open, sectionKey, entry, onClose, onSave, t }) {
     >
       <div className="-mt-2">
         <h2 className="font-display font-black text-3xl tracking-tight">
-          {isNew ? t("professionalProfile.addSingular", { singular: schema.singular }) : `${t("professionalProfile.editEntry")} — ${schema.singular}`}
+          {isNew
+            ? t("professionalProfile.addSingular", { singular: schema.singular })
+            : `${t("professionalProfile.editEntry")} — ${schema.singular}`}
         </h2>
         <p className="text-sprout-muted text-sm mt-1">
-          {isReferences ? t("professionalProfile.professionalReferences") : t("professionalProfile.fillDetailsBelow")}
+          {isReferences
+            ? t("professionalProfile.professionalReferences")
+            : t("professionalProfile.fillDetailsBelow")}
         </p>
 
         {!schema.simple && (
-          <div className="mt-5 p-1 rounded-full bg-sprout-surface border border-sprout-border flex" data-testid="entry-tabs">
+          <div
+            className="mt-5 p-1 rounded-full bg-sprout-surface border border-sprout-border flex"
+            data-testid="entry-tabs"
+          >
             {[
               { id: "basic", label: t("professionalProfile.tabBasic") },
               { id: "details", label: t("professionalProfile.tabDetails") },
@@ -164,7 +185,10 @@ function SectionDetail({ open, sectionKey, items, label, onClose, onChange, t })
       else onChange((items || []).map((x) => (x === editing ? entry : x)));
     } else {
       if (editing === "new") onChange([...(items || []), { ...entry, _id: crypto.randomUUID() }]);
-      else onChange((items || []).map((x) => (x._id === editing?._id ? { ...entry, _id: editing._id } : x)));
+      else
+        onChange(
+          (items || []).map((x) => (x._id === editing?._id ? { ...entry, _id: editing._id } : x)),
+        );
     }
     setEditing(null);
   };
@@ -177,14 +201,33 @@ function SectionDetail({ open, sectionKey, items, label, onClose, onChange, t })
   const renderItem = (item, i) => {
     if (schema.simple) {
       return (
-        <div key={i} className="flex items-center justify-between p-4 rounded-2xl border border-sprout-border bg-sprout-surface" data-testid={`section-item-${i}`}>
+        <div
+          key={i}
+          className="flex items-center justify-between p-4 rounded-2xl border border-sprout-border bg-sprout-surface"
+          data-testid={`section-item-${i}`}
+        >
           <span className="text-white font-medium">{item}</span>
-          <button onClick={() => handleDelete(item)} className="text-rose-400 text-sm" data-testid={`section-delete-${i}`}>{t("professionalProfile.remove")}</button>
+          <button
+            onClick={() => handleDelete(item)}
+            className="text-rose-400 text-sm"
+            data-testid={`section-delete-${i}`}
+          >
+            {t("professionalProfile.remove")}
+          </button>
         </div>
       );
     }
-    const title = item.role || item.name || item.title || item.label || item.degree || Object.values(item)[0];
-    const sub = item.company || item.school || item.organization || item.issuer || item.venue || item.proficiency || item.year || item.duration;
+    const title =
+      item.role || item.name || item.title || item.label || item.degree || Object.values(item)[0];
+    const sub =
+      item.company ||
+      item.school ||
+      item.organization ||
+      item.issuer ||
+      item.venue ||
+      item.proficiency ||
+      item.year ||
+      item.duration;
     return (
       <button
         key={item._id || i}
@@ -194,11 +237,17 @@ function SectionDetail({ open, sectionKey, items, label, onClose, onChange, t })
       >
         <p className="font-semibold text-white">{String(title || "")}</p>
         {sub && <p className="text-sm text-sprout-muted mt-0.5">{String(sub)}</p>}
-        {item.details && <p className="text-sm text-sprout-muted mt-1 line-clamp-2">{item.details}</p>}
-        {item.description && <p className="text-sm text-sprout-muted mt-1 line-clamp-2">{item.description}</p>}
+        {item.details && (
+          <p className="text-sm text-sprout-muted mt-1 line-clamp-2">{item.details}</p>
+        )}
+        {item.description && (
+          <p className="text-sm text-sprout-muted mt-1 line-clamp-2">{item.description}</p>
+        )}
         {Array.isArray(item.highlights) && (
           <ul className="mt-1 text-sm text-zinc-300 space-y-0.5">
-            {item.highlights.slice(0, 2).map((h, j) => <li key={j}>— {h}</li>)}
+            {item.highlights.slice(0, 2).map((h, j) => (
+              <li key={j}>— {h}</li>
+            ))}
           </ul>
         )}
       </button>
@@ -232,9 +281,13 @@ function SectionDetail({ open, sectionKey, items, label, onClose, onChange, t })
             <div className="mx-auto w-14 h-14 rounded-2xl bg-sprout-mint-soft-2 grid place-items-center mb-3">
               <Plus className="w-6 h-6 text-sprout-mint" />
             </div>
-            <h3 className="font-display font-bold text-lg">{t("professionalProfile.noItemsYet", { label })}</h3>
+            <h3 className="font-display font-bold text-lg">
+              {t("professionalProfile.noItemsYet", { label })}
+            </h3>
             <p className="mt-1 text-sprout-muted text-sm max-w-xs mx-auto">
-              {isAiBacked ? t("professionalProfile.uploadCvHint") : t("professionalProfile.tapAddToStart", { singular: schema.singular })}
+              {isAiBacked
+                ? t("professionalProfile.uploadCvHint")
+                : t("professionalProfile.tapAddToStart", { singular: schema.singular })}
             </p>
             {!isAiBacked && (
               <button
@@ -242,7 +295,8 @@ function SectionDetail({ open, sectionKey, items, label, onClose, onChange, t })
                 className="mt-6 inline-flex items-center gap-1.5 h-12 px-6 rounded-full bg-sprout-mint text-white font-semibold"
                 data-testid={`section-empty-add-${sectionKey}`}
               >
-                <Plus className="w-4 h-4" /> {t("professionalProfile.addSingular", { singular: schema.singular })}
+                <Plus className="w-4 h-4" />{" "}
+                {t("professionalProfile.addSingular", { singular: schema.singular })}
               </button>
             )}
           </div>
@@ -287,20 +341,20 @@ export default function ProfessionalProfileSheet({ open, profile, onClose, onCha
   const sectionItems = useMemo(() => {
     const extras = profile?.extras || {};
     return {
-      experience:     profile?.experience || [],
-      volunteer:      extras.volunteer || [],
-      projects:       extras.projects || [],
-      education:      profile?.education || [],
-      skills:         profile?.skills || [],
+      experience: profile?.experience || [],
+      volunteer: extras.volunteer || [],
+      projects: extras.projects || [],
+      education: profile?.education || [],
+      skills: profile?.skills || [],
       certifications: extras.certifications || [],
-      awards:         extras.awards || [],
-      publications:   extras.publications || [],
-      recognition:    extras.recognition || [],
-      languages:      extras.languages || [],
-      interests:      extras.interests || [],
-      references:     extras.references || [],
+      awards: extras.awards || [],
+      publications: extras.publications || [],
+      recognition: extras.recognition || [],
+      languages: extras.languages || [],
+      interests: extras.interests || [],
+      references: extras.references || [],
       key_highlights: extras.key_highlights || [],
-      custom:         extras.custom || [],
+      custom: extras.custom || [],
     };
   }, [profile]);
 
@@ -331,7 +385,12 @@ export default function ProfessionalProfileSheet({ open, profile, onClose, onCha
   };
 
   return (
-    <Sheet open={open} title={t("professionalProfile.title")} onClose={onClose} testId="prof-profile-sheet">
+    <Sheet
+      open={open}
+      title={t("professionalProfile.title")}
+      onClose={onClose}
+      testId="prof-profile-sheet"
+    >
       <div className="space-y-7">
         {/* Professional Overview top card */}
         <button
@@ -343,17 +402,27 @@ export default function ProfessionalProfileSheet({ open, profile, onClose, onCha
             <Palette className="w-6 h-6 text-sprout-mint" strokeWidth={1.9} />
           </div>
           <div className="flex-1 min-w-0">
-            <h3 className="font-display font-bold text-white text-xl leading-tight">{t("professionalProfile.yourStory")}</h3>
+            <h3 className="font-display font-bold text-white text-xl leading-tight">
+              {t("professionalProfile.yourStory")}
+            </h3>
             {overview.role && <p className="mt-1 text-sm text-sprout-muted">{overview.role}</p>}
-            {overview.summary && <p className="mt-1.5 text-sm text-sprout-muted line-clamp-2">{overview.summary}</p>}
-            {!overview.role && !overview.summary && <p className="mt-1.5 text-sm text-sprout-muted">{t("professionalProfile.yourStoryEmpty")}</p>}
+            {overview.summary && (
+              <p className="mt-1.5 text-sm text-sprout-muted line-clamp-2">{overview.summary}</p>
+            )}
+            {!overview.role && !overview.summary && (
+              <p className="mt-1.5 text-sm text-sprout-muted">
+                {t("professionalProfile.yourStoryEmpty")}
+              </p>
+            )}
           </div>
           <ChevronRight className="w-5 h-5 text-sprout-muted mt-2 shrink-0" />
         </button>
 
         {sections.map((sec) => (
           <section key={sec.groupKey} data-testid={`prof-group-${sec.groupKey}`}>
-            <h3 className="text-xs uppercase tracking-[0.18em] text-sprout-muted px-1 mb-3">{sec.group}</h3>
+            <h3 className="text-xs uppercase tracking-[0.18em] text-sprout-muted px-1 mb-3">
+              {sec.group}
+            </h3>
             <div className="space-y-3">
               {sec.rows.map(({ key, icon: Icon, label }) => {
                 const items = sectionItems[key] || [];
@@ -365,14 +434,26 @@ export default function ProfessionalProfileSheet({ open, profile, onClose, onCha
                     className="w-full flex items-center gap-4 p-4 rounded-2xl border border-sprout-border bg-sprout-surface hover:bg-sprout-surface-2 transition-colors text-left"
                     data-testid={`prof-row-${key}`}
                   >
-                    <div className={`w-12 h-12 rounded-full grid place-items-center shrink-0 ${count > 0 ? "bg-sprout-mint-soft-2" : "bg-sprout-surface-2"}`}>
-                      <Icon className={`w-5 h-5 ${count > 0 ? "text-sprout-mint" : "text-sprout-muted"}`} strokeWidth={1.9} />
+                    <div
+                      className={`w-12 h-12 rounded-full grid place-items-center shrink-0 ${count > 0 ? "bg-sprout-mint-soft-2" : "bg-sprout-surface-2"}`}
+                    >
+                      <Icon
+                        className={`w-5 h-5 ${count > 0 ? "text-sprout-mint" : "text-sprout-muted"}`}
+                        strokeWidth={1.9}
+                      />
                     </div>
                     <span className="flex-1 font-semibold text-white">{label}</span>
                     {count > 0 ? (
-                      <span className="inline-flex items-center justify-center min-w-8 h-7 px-2 rounded-full bg-sprout-mint-soft text-sprout-mint text-sm font-bold" data-testid={`prof-count-${key}`}>{count}</span>
+                      <span
+                        className="inline-flex items-center justify-center min-w-8 h-7 px-2 rounded-full bg-sprout-mint-soft text-sprout-mint text-sm font-bold"
+                        data-testid={`prof-count-${key}`}
+                      >
+                        {count}
+                      </span>
                     ) : (
-                      <span className="text-sprout-muted text-sm font-medium">{t("professionalProfile.add")}</span>
+                      <span className="text-sprout-muted text-sm font-medium">
+                        {t("professionalProfile.add")}
+                      </span>
                     )}
                     <ChevronRight className="w-4 h-4 text-sprout-muted" />
                   </button>
@@ -390,18 +471,20 @@ export default function ProfessionalProfileSheet({ open, profile, onClose, onCha
       </div>
 
       {/* Per-section detail sheets */}
-      {sections.flatMap((s) => s.rows).map(({ key, label }) => (
-        <SectionDetail
-          key={key}
-          open={active === key}
-          sectionKey={key}
-          items={sectionItems[key]}
-          label={label}
-          onClose={() => setActive(null)}
-          onChange={(next) => updateSection(key, next)}
-          t={t}
-        />
-      ))}
+      {sections
+        .flatMap((s) => s.rows)
+        .map(({ key, label }) => (
+          <SectionDetail
+            key={key}
+            open={active === key}
+            sectionKey={key}
+            items={sectionItems[key]}
+            label={label}
+            onClose={() => setActive(null)}
+            onChange={(next) => updateSection(key, next)}
+            t={t}
+          />
+        ))}
 
       <EntryEditor
         open={overviewOpen}

@@ -1,9 +1,6 @@
 import { api } from "./api";
 import { trackEvent } from "./analytics";
-import {
-  capturePostHogEvent,
-  hasIdentifiedPostHogUser,
-} from "./posthogClient";
+import { capturePostHogEvent, hasIdentifiedPostHogUser } from "./posthogClient";
 
 jest.mock("./api", () => ({
   api: {

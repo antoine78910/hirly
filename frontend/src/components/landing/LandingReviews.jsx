@@ -1,8 +1,5 @@
 import { Sparkles } from "lucide-react";
-import {
-  getLandingReviewColumns,
-  getLandingReviewsCopy,
-} from "../../lib/landingReviews";
+import { getLandingReviewColumns, getLandingReviewsCopy } from "../../lib/landingReviews";
 
 const MARQUEE_COPIES = 4;
 
@@ -22,7 +19,9 @@ function ReviewCard({ name, subline, quote, className = "", compact = false }) {
       >
         {name}
       </p>
-      <p className={`mt-1 text-linkedin ${compact ? "text-[11px] leading-snug" : "text-sm"}`}>{subline}</p>
+      <p className={`mt-1 text-linkedin ${compact ? "text-[11px] leading-snug" : "text-sm"}`}>
+        {subline}
+      </p>
       <p
         className={`mt-2 leading-relaxed text-zinc-700 ${
           compact ? "line-clamp-4 text-[11px]" : "mt-3 text-sm"
@@ -52,12 +51,7 @@ function VerticalReviewMarquee({ reviews, reverse = false, duration = 52 }) {
         style={{ animationDuration: `${duration}s` }}
       >
         {Array.from({ length: MARQUEE_COPIES }, (_, copy) => (
-          <ReviewTrack
-            key={copy}
-            reviews={reviews}
-            suffix={`c${copy}`}
-            hidden={copy > 0}
-          />
+          <ReviewTrack key={copy} reviews={reviews} suffix={`c${copy}`} hidden={copy > 0} />
         ))}
       </div>
     </div>
@@ -68,7 +62,12 @@ function HorizontalReviewTrack({ reviews, suffix, hidden = false }) {
   return (
     <div className="flex shrink-0 items-stretch gap-3 pr-3" aria-hidden={hidden || undefined}>
       {reviews.map((review) => (
-        <ReviewCard key={`${review.id}-${suffix}`} {...review} className={MOBILE_CARD_CLASS} compact />
+        <ReviewCard
+          key={`${review.id}-${suffix}`}
+          {...review}
+          className={MOBILE_CARD_CLASS}
+          compact
+        />
       ))}
     </div>
   );
@@ -109,7 +108,10 @@ export default function LandingReviews({ lang }) {
 
   return (
     <section className="relative overflow-hidden border-y border-zinc-100 gradient-linkedin-soft">
-      <div className="pointer-events-none absolute inset-0 bg-grid mask-radial opacity-40" aria-hidden />
+      <div
+        className="pointer-events-none absolute inset-0 bg-grid mask-radial opacity-40"
+        aria-hidden
+      />
       <div className="relative mx-auto max-w-6xl px-6 py-20 sm:py-24">
         <div className="mx-auto max-w-3xl text-center">
           <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-linkedin/20 bg-white px-3 py-1.5 text-xs font-semibold text-linkedin shadow-sm">

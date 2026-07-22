@@ -1,4 +1,12 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { appT, isAppLanguage, readStoredAppLang } from "../lib/appUi";
 import { api } from "../lib/api";
 import { useAuth } from "./AuthContext";
@@ -12,18 +20,22 @@ export function AppLocaleProvider({ children }) {
   const { user, setUser } = useAuth() || {};
   const hydratedUserIdRef = useRef(null);
 
-  const setLang = useCallback((next) => {
-    const value = isAppLanguage(next) ? next : "en";
-    try {
-      localStorage.setItem(STORAGE_KEY, value);
-    } catch (_) {}
-    setLangState(value);
-    if (user?.user_id) {
-      api.put("/account/settings", { language: value })
-        .then(() => setUser?.((prev) => (prev ? { ...prev, language: value } : prev)))
-        .catch(() => {});
-    }
-  }, [user?.user_id, setUser]);
+  const setLang = useCallback(
+    (next) => {
+      const value = isAppLanguage(next) ? next : "en";
+      try {
+        localStorage.setItem(STORAGE_KEY, value);
+      } catch (_) {}
+      setLangState(value);
+      if (user?.user_id) {
+        api
+          .put("/account/settings", { language: value })
+          .then(() => setUser?.((prev) => (prev ? { ...prev, language: value } : prev)))
+          .catch(() => {});
+      }
+    },
+    [user?.user_id, setUser],
+  );
 
   // Backend notifications (credits granted, offer expired, ...) are worded
   // server-side, so the backend needs to know which language the user has
@@ -54,11 +66,7 @@ export function AppLocaleProvider({ children }) {
 
   const value = useMemo(() => ({ lang, setLang, t }), [lang, setLang, t]);
 
-  return (
-    <AppLocaleContext.Provider value={value}>
-      {children}
-    </AppLocaleContext.Provider>
-  );
+  return <AppLocaleContext.Provider value={value}>{children}</AppLocaleContext.Provider>;
 }
 
 export function useAppLocale() {

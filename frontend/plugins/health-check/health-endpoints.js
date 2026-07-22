@@ -1,7 +1,7 @@
 // health-endpoints.js
 // API endpoints for health checks and monitoring
 
-const os = require('os');
+const os = require("os");
 
 const SERVER_START_TIME = Date.now();
 
@@ -12,16 +12,16 @@ const SERVER_START_TIME = Date.now();
  */
 function setupHealthEndpoints(devServer, healthPlugin) {
   if (!devServer || !devServer.app) {
-    console.warn('[Health Check] Dev server not available, skipping health endpoints');
+    console.warn("[Health Check] Dev server not available, skipping health endpoints");
     return;
   }
 
   if (!healthPlugin) {
-    console.warn('[Health Check] Health plugin not provided, skipping health endpoints');
+    console.warn("[Health Check] Health plugin not provided, skipping health endpoints");
     return;
   }
 
-  console.log('[Health Check] Setting up health endpoints...');
+  console.log("[Health Check] Setting up health endpoints...");
 
   // ====================================================================
   // GET /health - Detailed health status (JSON)
@@ -32,7 +32,7 @@ function setupHealthEndpoints(devServer, healthPlugin) {
     const memUsage = process.memoryUsage();
 
     res.json({
-      status: webpackStatus.isHealthy ? 'healthy' : 'unhealthy',
+      status: webpackStatus.isHealthy ? "healthy" : "unhealthy",
       timestamp: new Date().toISOString(),
       uptime: {
         seconds: Math.floor(uptime / 1000),
@@ -75,7 +75,7 @@ function setupHealthEndpoints(devServer, healthPlugin) {
           used: formatBytes(os.totalmem() - os.freemem()),
         },
       },
-      environment: process.env.NODE_ENV || 'development',
+      environment: process.env.NODE_ENV || "development",
     });
   });
 
@@ -85,14 +85,14 @@ function setupHealthEndpoints(devServer, healthPlugin) {
   devServer.app.get("/health/simple", (req, res) => {
     const webpackStatus = healthPlugin.getSimpleStatus();
 
-    if (webpackStatus.state === 'success') {
-      res.status(200).send('OK');
-    } else if (webpackStatus.state === 'compiling') {
-      res.status(200).send('COMPILING');
-    } else if (webpackStatus.state === 'idle') {
-      res.status(200).send('IDLE');
+    if (webpackStatus.state === "success") {
+      res.status(200).send("OK");
+    } else if (webpackStatus.state === "compiling") {
+      res.status(200).send("COMPILING");
+    } else if (webpackStatus.state === "idle") {
+      res.status(200).send("IDLE");
     } else {
-      res.status(503).send('ERROR');
+      res.status(503).send("ERROR");
     }
   });
 
@@ -102,7 +102,7 @@ function setupHealthEndpoints(devServer, healthPlugin) {
   devServer.app.get("/health/ready", (req, res) => {
     const webpackStatus = healthPlugin.getSimpleStatus();
 
-    if (webpackStatus.state === 'success') {
+    if (webpackStatus.state === "success") {
       res.status(200).json({
         ready: true,
         state: webpackStatus.state,
@@ -111,9 +111,8 @@ function setupHealthEndpoints(devServer, healthPlugin) {
       res.status(503).json({
         ready: false,
         state: webpackStatus.state,
-        reason: webpackStatus.state === 'compiling'
-          ? 'Compilation in progress'
-          : 'Compilation failed',
+        reason:
+          webpackStatus.state === "compiling" ? "Compilation in progress" : "Compilation failed",
       });
     }
   });
@@ -152,9 +151,10 @@ function setupHealthEndpoints(devServer, healthPlugin) {
 
     res.json({
       totalCompiles: webpackStatus.totalCompiles,
-      averageCompileTime: webpackStatus.totalCompiles > 0
-        ? `${Math.round(uptime / webpackStatus.totalCompiles)}ms`
-        : null,
+      averageCompileTime:
+        webpackStatus.totalCompiles > 0
+          ? `${Math.round(uptime / webpackStatus.totalCompiles)}ms`
+          : null,
       lastCompileDuration: webpackStatus.compileDuration
         ? `${webpackStatus.compileDuration}ms`
         : null,
@@ -165,13 +165,13 @@ function setupHealthEndpoints(devServer, healthPlugin) {
     });
   });
 
-  console.log('[Health Check] ✓ Health endpoints ready:');
-  console.log('  • GET /health         - Detailed status');
-  console.log('  • GET /health/simple  - Simple OK/ERROR');
-  console.log('  • GET /health/ready   - Readiness check');
-  console.log('  • GET /health/live    - Liveness check');
-  console.log('  • GET /health/errors  - Error details');
-  console.log('  • GET /health/stats   - Statistics');
+  console.log("[Health Check] ✓ Health endpoints ready:");
+  console.log("  • GET /health         - Detailed status");
+  console.log("  • GET /health/simple  - Simple OK/ERROR");
+  console.log("  • GET /health/ready   - Readiness check");
+  console.log("  • GET /health/live    - Liveness check");
+  console.log("  • GET /health/errors  - Error details");
+  console.log("  • GET /health/stats   - Statistics");
 }
 
 // ====================================================================
@@ -184,11 +184,11 @@ function setupHealthEndpoints(devServer, healthPlugin) {
  * @returns {string}
  */
 function formatBytes(bytes) {
-  if (bytes === 0) return '0 B';
+  if (bytes === 0) return "0 B";
   const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const sizes = ["B", "KB", "MB", "GB"];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+  return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + " " + sizes[i];
 }
 
 /**

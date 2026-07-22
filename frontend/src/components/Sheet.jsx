@@ -17,7 +17,9 @@ export default function Sheet({ open, title, onClose, children, footer, testId }
     if (!open) return;
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    return () => { document.body.style.overflow = prev; };
+    return () => {
+      document.body.style.overflow = prev;
+    };
   }, [open]);
 
   return (
@@ -46,7 +48,10 @@ export default function Sheet({ open, title, onClose, children, footer, testId }
           {footer && (
             <div
               className="fixed bottom-0 inset-x-0 z-[71] bg-sprout-bg/95 backdrop-blur-xl border-t border-sprout-border"
-              style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 64px)", paddingTop: 12 }}
+              style={{
+                paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 64px)",
+                paddingTop: 12,
+              }}
             >
               <div className="max-w-md mx-auto px-5">{footer}</div>
             </div>

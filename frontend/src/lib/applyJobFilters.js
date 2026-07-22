@@ -13,15 +13,18 @@ const EXPERIENCE_ALIASES = {
 function jobWorkLocation(job) {
   const raw = job.remote;
   if (typeof raw === "boolean") return raw ? "remote" : "onsite";
-  const text = [
-    raw,
-    job.location,
-    job.workplace_type,
-    job.work_location,
-  ].filter(Boolean).join(" ").toLowerCase();
+  const text = [raw, job.location, job.workplace_type, job.work_location]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
   if (text.includes("hybrid")) return "hybrid";
   if (text.includes("remote") || text.includes("work from home")) return "remote";
-  if (text.includes("onsite") || text.includes("on-site") || text.includes("in person") || text.includes("office")) {
+  if (
+    text.includes("onsite") ||
+    text.includes("on-site") ||
+    text.includes("in person") ||
+    text.includes("office")
+  ) {
     return "onsite";
   }
   return "unknown";
@@ -34,7 +37,8 @@ function matchesWorkLocation(job, filters) {
   if (actual === "unknown") return filters.includeUnknownLocation !== false;
   return wanted.some((item) => {
     const key = String(item).toLowerCase();
-    const normalized = key === "in-person" || key === "in_person" || key === "on-site" ? "onsite" : key;
+    const normalized =
+      key === "in-person" || key === "in_person" || key === "on-site" ? "onsite" : key;
     return normalized === actual;
   });
 }
@@ -67,13 +71,10 @@ function matchesJobType(job, filters) {
   if (!wanted.length) return true;
   const kind = String(job.employment_kind || "").toLowerCase();
   if (kind && wanted.includes(kind)) return true;
-  const text = [
-    job.job_type,
-    job.employment_type,
-    job.contract_type,
-    job.title,
-    job.description,
-  ].filter(Boolean).join(" ").toLowerCase();
+  const text = [job.job_type, job.employment_type, job.contract_type, job.title, job.description]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
   return wanted.some((kind) => {
     const aliases = JOB_TYPE_ALIASES[kind] || [kind];
     return aliases.some((alias) => text.includes(alias));
@@ -93,7 +94,10 @@ function matchesCompany(job, filters) {
   const company = String(job.company || "").toLowerCase();
   const onlyCompanies = filters.onlyCompanies || [];
   const hideCompanies = filters.hideCompanies || [];
-  if (onlyCompanies.length && !onlyCompanies.some((item) => company === String(item).toLowerCase())) {
+  if (
+    onlyCompanies.length &&
+    !onlyCompanies.some((item) => company === String(item).toLowerCase())
+  ) {
     return false;
   }
   if (hideCompanies.some((item) => company.includes(String(item).toLowerCase()))) {
@@ -112,8 +116,14 @@ function matchesIndustry(job, filters) {
     job.company,
     job.description,
     job.clean_description,
-  ].filter(Boolean).join(" ").toLowerCase();
-  if (onlyIndustries.length && !onlyIndustries.some((item) => text.includes(String(item).toLowerCase()))) {
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  if (
+    onlyIndustries.length &&
+    !onlyIndustries.some((item) => text.includes(String(item).toLowerCase()))
+  ) {
     return false;
   }
   if (hideIndustries.some((item) => text.includes(String(item).toLowerCase()))) {
@@ -136,7 +146,9 @@ function matchesLocation(job, filters, profileLocationData) {
   if (!locationsData.length && !locationLabels.length && !onlyMyCountry) return true;
 
   const jobLocation = String(job.location || "").toLowerCase();
-  const jobCountryCode = String(job.country_code || "").toLowerCase().trim();
+  const jobCountryCode = String(job.country_code || "")
+    .toLowerCase()
+    .trim();
   if (!jobLocation && !jobCountryCode) {
     return filters.includeUnknownLocation !== false;
   }
@@ -164,8 +176,12 @@ function matchesLocation(job, filters, profileLocationData) {
   }
 
   if (onlyMyCountry && profileLocationData) {
-    const profileCode = String(profileLocationData.country_code || "").toLowerCase().trim();
-    const profileCountry = String(profileLocationData.country || "").toLowerCase().trim();
+    const profileCode = String(profileLocationData.country_code || "")
+      .toLowerCase()
+      .trim();
+    const profileCountry = String(profileLocationData.country || "")
+      .toLowerCase()
+      .trim();
     if (profileCode && jobCountryCode === profileCode) return true;
     if (profileCountry && jobLocation.includes(profileCountry)) return true;
     return false;
@@ -175,38 +191,40 @@ function matchesLocation(job, filters, profileLocationData) {
 }
 
 function matchesSearchRole(job, searchRole) {
-  const query = String(searchRole || "").trim().toLowerCase();
+  const query = String(searchRole || "")
+    .trim()
+    .toLowerCase();
   if (!query) return true;
-  const haystack = [
-    job.title,
-    job.company,
-    job.description,
-    job.clean_description,
-  ].filter(Boolean).join(" ").toLowerCase();
+  const haystack = [job.title, job.company, job.description, job.clean_description]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
   return haystack.includes(query);
 }
 
 /** Client-side feed filtering (finance demo + local mocks). Mirrors backend /jobs/feed filters. */
 export function applyJobFilters(jobs, rawFilters, { searchRole, profileLocationData } = {}) {
   const filters = mergeFilters(rawFilters);
-  return (jobs || []).filter((job) =>
-    matchesSearchRole(job, searchRole)
-    && matchesWorkLocation(job, filters)
-    && matchesSalary(job, filters)
-    && matchesPostedDate(job, filters)
-    && matchesJobType(job, filters)
-    && matchesExperience(job, filters)
-    && matchesCompany(job, filters)
-    && matchesIndustry(job, filters)
-    && matchesLocation(job, filters, profileLocationData),
+  return (jobs || []).filter(
+    (job) =>
+      matchesSearchRole(job, searchRole) &&
+      matchesWorkLocation(job, filters) &&
+      matchesSalary(job, filters) &&
+      matchesPostedDate(job, filters) &&
+      matchesJobType(job, filters) &&
+      matchesExperience(job, filters) &&
+      matchesCompany(job, filters) &&
+      matchesIndustry(job, filters) &&
+      matchesLocation(job, filters, profileLocationData),
   );
 }
 
 /** Build a filters object from /jobs/feed query params (supports repeated keys). */
 export function feedQueryToFilters(params) {
-  const search = params instanceof URLSearchParams
-    ? params
-    : new URLSearchParams(typeof params === "string" ? params : "");
+  const search =
+    params instanceof URLSearchParams
+      ? params
+      : new URLSearchParams(typeof params === "string" ? params : "");
 
   const num = (key) => {
     const value = Number(search.get(key));

@@ -12,9 +12,9 @@ const temporaryDirectories: string[] = [];
 
 afterEach(async () => {
   await Promise.all(
-    temporaryDirectories.splice(0).map((directory) =>
-      rm(directory, { force: true, recursive: true }),
-    ),
+    temporaryDirectories
+      .splice(0)
+      .map((directory) => rm(directory, { force: true, recursive: true })),
   );
 });
 
@@ -37,12 +37,7 @@ function reviewedEvidence(overrides: Record<string, unknown> = {}) {
         reference: "approval:G016:acme",
         artifactPath: "artifacts/job-ingestion/source-policy/greenhouse-acme.txt",
         artifactSha256: "a".repeat(64),
-        supports: [
-          "commercial_use",
-          "redisplay",
-          "retention",
-          "access_method",
-        ],
+        supports: ["commercial_use", "redisplay", "retention", "access_method"],
       },
     ],
     ...overrides,
@@ -137,13 +132,15 @@ describe("G016 source-trial provisioning", () => {
       missingEvidence: ["written approval"],
       unblockProcedure: "Record reviewed written permission.",
     });
-    expect(() => provisionSourceTrial(input(), blocked)).toThrow("policy evidence is BLOCKED_EXTERNAL");
+    expect(() => provisionSourceTrial(input(), blocked)).toThrow(
+      "policy evidence is BLOCKED_EXTERNAL",
+    );
     expect(() =>
       provisionSourceTrial(input(), { ...reviewedEvidence(), recordDigest: "c".repeat(64) }),
     ).toThrow("source_policy_record_digest_mismatch");
-    expect(() =>
-      provisionSourceTrial(input(), reviewedEvidence({ tenantKey: "other" })),
-    ).toThrow("source_policy_scope_mismatch");
+    expect(() => provisionSourceTrial(input(), reviewedEvidence({ tenantKey: "other" }))).toThrow(
+      "source_policy_scope_mismatch",
+    );
     expect(() =>
       provisionSourceTrial(
         input(),
@@ -154,12 +151,7 @@ describe("G016 source-trial provisioning", () => {
               reference: "terms",
               artifactPath: "artifacts/job-ingestion/source-policy/terms.txt",
               artifactSha256: "a".repeat(64),
-              supports: [
-                "commercial_use",
-                "redisplay",
-                "retention",
-                "access_method",
-              ],
+              supports: ["commercial_use", "redisplay", "retention", "access_method"],
             },
           ],
         }),
@@ -239,12 +231,7 @@ describe("G016 source-trial provisioning", () => {
           reference: "Open Licence 2.0",
           artifactPath: "artifacts/job-ingestion/source-policy/open-licence.txt",
           artifactSha256: "d".repeat(64),
-          supports: [
-            "commercial_use",
-            "redisplay",
-            "retention",
-            "access_method",
-          ],
+          supports: ["commercial_use", "redisplay", "retention", "access_method"],
         },
       ],
     });

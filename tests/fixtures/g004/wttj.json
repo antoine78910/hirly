@@ -14,9 +14,7 @@
   "description": "Piloter un produit B2C.",
   "contractType": "CDI",
   "status": "open",
-  "applyUrls": [
-    "https://www.welcometothejungle.com/fr/companies/example/jobs/product-manager"
-  ],
+  "applyUrls": ["https://www.welcometothejungle.com/fr/companies/example/jobs/product-manager"],
   "sourceDocument": {
     "fixture": "wttj-approved-synthetic",
     "team": "product"

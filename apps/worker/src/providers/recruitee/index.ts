@@ -1,18 +1,11 @@
 import { z } from "zod";
-import {
-  DisabledProviderTransport,
-  type ProviderCore,
-} from "../core";
+import { DisabledProviderTransport, type ProviderCore } from "../core";
 import {
   FixtureOnlyAtsSourceAdapter,
   type AtsFixtureCursor,
   type AtsFixtureScope,
 } from "../ats-fixture";
-import {
-  IngestionError,
-  type SourceAdapter,
-  type SourceContext,
-} from "@hirly/ingestion";
+import { IngestionError, type SourceAdapter, type SourceContext } from "@hirly/ingestion";
 import {
   fetchBoundedAtsJson,
   parseAtsTrialOptions,
@@ -31,9 +24,7 @@ const optionalUrl = z.url().nullable().optional();
 // closed at the provider boundary.
 function normalizeRecruiteeTimestamp(value: unknown): unknown {
   if (typeof value === "string") {
-    const recruiteeUtc = /^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2}) UTC$/.exec(
-      value,
-    );
+    const recruiteeUtc = /^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2}) UTC$/.exec(value);
     if (recruiteeUtc) {
       return `${recruiteeUtc[1]}T${recruiteeUtc[2]}Z`;
     }
@@ -134,9 +125,7 @@ function requireTenantKey(value: string): string {
     tenantKey.length === 0 ||
     tenantKey.length > 63 ||
     !/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(tenantKey) ||
-    ["api", "app", "apply", "careers", "help", "jobs", "support", "www"].includes(
-      tenantKey,
-    )
+    ["api", "app", "apply", "careers", "help", "jobs", "support", "www"].includes(tenantKey)
   ) {
     throw new IngestionError(
       "invalid_input",
@@ -179,11 +168,7 @@ function requireBoundRecruiteeUrl(input: {
       "Recruitee canonical URL contains an invalid encoded path",
     );
   }
-  if (
-    parts.length !== 2 ||
-    parts[0] !== "o" ||
-    parts[1] !== input.slug.toLowerCase()
-  ) {
+  if (parts.length !== 2 || parts[0] !== "o" || parts[1] !== input.slug.toLowerCase()) {
     throw new IngestionError(
       "invalid_input",
       "Recruitee canonical URL is not bound to the source tenant and offer",
@@ -192,17 +177,13 @@ function requireBoundRecruiteeUrl(input: {
   return url.href;
 }
 
-function normalized(
-  rawValue: RecruiteeRawJob,
-  tenantValue: string,
-  fallbackCountryCode: string,
-) {
+function normalized(rawValue: RecruiteeRawJob, tenantValue: string, fallbackCountryCode: string) {
   const raw = recruiteeRawJobSchema.parse(rawValue);
   const tenantKey = requireTenantKey(tenantValue);
   const slug = raw.slug ?? raw.id;
   const fallbackUrl = `https://${tenantKey}.recruitee.com/o/${encodeURIComponent(slug)}`;
-  const candidateUrls = [raw.careers_url, raw.careers_apply_url].filter(
-    (value): value is string => Boolean(value),
+  const candidateUrls = [raw.careers_url, raw.careers_apply_url].filter((value): value is string =>
+    Boolean(value),
   );
   for (const value of candidateUrls) {
     requireBoundRecruiteeUrl({ value, tenantKey, slug });
@@ -265,8 +246,7 @@ export const recruiteeProvider: ProviderCore<RecruiteeRawJob> = {
 };
 
 class RecruiteeFixtureSourceAdapter extends FixtureOnlyAtsSourceAdapter<RecruiteeRawJob> {
-  protected readonly documentationUrl =
-    "https://docs.recruitee.com/reference/offers";
+  protected readonly documentationUrl = "https://docs.recruitee.com/reference/offers";
 
   normalize(rawValue: RecruiteeRawJob, context: SourceContext) {
     const raw = recruiteeRawJobSchema.parse(rawValue);
@@ -293,12 +273,7 @@ export function createRecruiteeFixtureSourceAdapter(
   rows: readonly RecruiteeRawJob[],
   fixturePolicyId: string,
 ): SourceAdapter<RecruiteeRawJob, AtsFixtureCursor, AtsFixtureScope> {
-  return new RecruiteeFixtureSourceAdapter(
-    "recruitee",
-    rateLimit,
-    rows,
-    fixturePolicyId,
-  );
+  return new RecruiteeFixtureSourceAdapter("recruitee", rateLimit, rows, fixturePolicyId);
 }
 
 export function createRecruiteeTrialTransport(
@@ -333,9 +308,9 @@ export function createRecruiteeTrialTransport(
   };
 }
 
-export function createRecruiteeShadowTransport(
-  options: AtsTrialTransportOptions,
-): ReturnType<typeof createRecruiteeTrialTransport> & {
+export function createRecruiteeShadowTransport(options: AtsTrialTransportOptions): ReturnType<
+  typeof createRecruiteeTrialTransport
+> & {
   readonly shadowOnly: true;
 } {
   return {

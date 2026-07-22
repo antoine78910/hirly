@@ -30,9 +30,7 @@ function compact(sql: string): string {
   return sql.replace(/--.*$/gm, "").replace(/\s+/g, " ").trim().toLowerCase();
 }
 
-function securityDefinerFunctions(
-  sql: string,
-): Array<{ name: string; body: string }> {
+function securityDefinerFunctions(sql: string): Array<{ name: string; body: string }> {
   return Array.from(
     compact(sql).matchAll(
       /create(?: or replace)? function\s+([a-z0-9_."]+)\s*\([\s\S]*?\)\s*returns[\s\S]*?security definer[\s\S]*?as \$\$([\s\S]*?)\$\$;/g,
@@ -46,9 +44,7 @@ describe("G002 additive inventory migration", () => {
     const migration = foundationMigration();
     const sql = compact(migration.sql);
 
-    expect(basename(migration.path)).toMatch(
-      /^\d+_typescript_worker_foundation\.sql$/,
-    );
+    expect(basename(migration.path)).toMatch(/^\d+_typescript_worker_foundation\.sql$/);
     for (const table of [
       "worker_runs",
       "worker_tasks",
@@ -56,9 +52,7 @@ describe("G002 additive inventory migration", () => {
       "worker_schedules",
       "provider_registry",
     ]) {
-      expect(sql).toMatch(
-        new RegExp(`create table(?: if not exists)? (?:public\\.)?${table}\\b`),
-      );
+      expect(sql).toMatch(new RegExp(`create table(?: if not exists)? (?:public\\.)?${table}\\b`));
     }
 
     expect(sql).not.toMatch(/\balter table (?:public\.)?jobs\b/);
@@ -77,15 +71,11 @@ describe("G002 additive inventory migration", () => {
 
     expect(sql).toMatch(/unique\s*\(\s*kind\s*,\s*idempotency_key\s*\)/);
     expect(sql).toMatch(/unique\s*\(\s*run_id\s*,\s*task_key\s*\)/);
-    expect(sql).toMatch(
-      /unique\s*\(\s*task_id\s*,\s*attempt_number\s*\)/,
-    );
+    expect(sql).toMatch(/unique\s*\(\s*task_id\s*,\s*attempt_number\s*\)/);
     expect(sql).toContain("lease_token");
     expect(sql).toContain("claim_generation");
     expect(sql).toMatch(/for update(?: of [a-z_]+)? skip locked/);
-    expect(sql).toMatch(
-      /(?:[a-z_]+\.)?attempts\s*<\s*(?:[a-z_]+\.)?max_attempts/,
-    );
+    expect(sql).toMatch(/(?:[a-z_]+\.)?attempts\s*<\s*(?:[a-z_]+\.)?max_attempts/);
     expect(sql).toMatch(/worker_task_attempts[\s\S]*on delete restrict/);
     expect(sql).toMatch(
       /(?:revoke|trigger)[\s\S]*worker_task_attempts|worker_task_attempts[\s\S]*(?:revoke|trigger)/,
@@ -108,9 +98,7 @@ describe("G002 additive inventory migration", () => {
         body.includes("next_due_at"),
     );
     const canonicalWriteFunction = functions.find(
-      ({ body }) =>
-        body.includes("insert into public.jobs") &&
-        body.includes("provider_registry"),
+      ({ body }) => body.includes("insert into public.jobs") && body.includes("provider_registry"),
     );
 
     expect(sql).toMatch(
@@ -140,12 +128,8 @@ describe("G002 additive inventory migration", () => {
     expect(normalized).toMatch(
       /security definer[\s\S]*set search_path\s*=\s*(?:pg_catalog|public)/,
     );
-    expect(normalized).toMatch(
-      /revoke all on all functions in schema worker_private from public/,
-    );
-    expect(normalized).toMatch(
-      /revoke all on all functions in schema worker_private from anon/,
-    );
+    expect(normalized).toMatch(/revoke all on all functions in schema worker_private from public/);
+    expect(normalized).toMatch(/revoke all on all functions in schema worker_private from anon/);
     expect(normalized).toMatch(
       /revoke all on all functions in schema worker_private from authenticated/,
     );

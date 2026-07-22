@@ -47,7 +47,9 @@ const ONBOARDING_STEP_LABELS = {
 
 function readCookie(name) {
   if (typeof document === "undefined") return "";
-  const match = document.cookie.match(new RegExp(`(?:^|; )${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}=([^;]*)`));
+  const match = document.cookie.match(
+    new RegExp(`(?:^|; )${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}=([^;]*)`),
+  );
   return match ? decodeURIComponent(match[1]) : "";
 }
 
@@ -172,12 +174,15 @@ export function trackOnboardingContinue(stepId, params = {}) {
 export function trackOnboardingIntroContinue(introIndex, slideCount, params = {}) {
   const total = Math.max(1, Number(slideCount) || 1);
   const slideNumber = Math.min(Math.max(0, Number(introIndex) || 0) + 1, total);
-  trackDatafastGoal(ONBOARDING_CONTINUE_GOAL, withStepMeta("intro", {
-    intro_slide: String(introIndex),
-    intro_total: String(total),
-    intro_slide_number: String(slideNumber),
-    ...params,
-  }));
+  trackDatafastGoal(
+    ONBOARDING_CONTINUE_GOAL,
+    withStepMeta("intro", {
+      intro_slide: String(introIndex),
+      intro_total: String(total),
+      intro_slide_number: String(slideNumber),
+      ...params,
+    }),
+  );
 }
 
 export function trackOnboardingSkip(stepId, params = {}) {

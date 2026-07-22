@@ -1,8 +1,5 @@
 import type { Provider } from "@hirly/contracts";
-import {
-  DisabledProviderTransport,
-  type ProviderCore,
-} from "../core";
+import { DisabledProviderTransport, type ProviderCore } from "../core";
 import { normalizeSproutJob } from "./normalization";
 import type { SproutRawJob } from "./schema";
 

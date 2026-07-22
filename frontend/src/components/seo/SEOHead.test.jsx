@@ -24,11 +24,23 @@ describe("SEOHead locale metadata", () => {
   test("keeps absolute canonical URLs intact and injects supplied hreflang links", () => {
     const canonical = publicCanonicalUrl("en", "/how-it-works");
     const alternates = publicHreflangLinks("/how-it-works", "https://tryhirly.com", ["en"]);
-    act(() => root.render(<SEOHead title="How it works" description="Description" canonical={canonical} alternates={alternates} />));
+    act(() =>
+      root.render(
+        <SEOHead
+          title="How it works"
+          description="Description"
+          canonical={canonical}
+          alternates={alternates}
+        />,
+      ),
+    );
 
     expect(document.querySelector('link[rel="canonical"]')?.getAttribute("href")).toBe(canonical);
-    expect([...document.querySelectorAll('link[rel="alternate"]')].map((link) => ({
-      hrefLang: link.getAttribute("hreflang"), href: link.getAttribute("href"),
-    }))).toEqual(alternates);
+    expect(
+      [...document.querySelectorAll('link[rel="alternate"]')].map((link) => ({
+        hrefLang: link.getAttribute("hreflang"),
+        href: link.getAttribute("href"),
+      })),
+    ).toEqual(alternates);
   });
 });

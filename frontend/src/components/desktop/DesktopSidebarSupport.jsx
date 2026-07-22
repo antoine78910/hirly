@@ -35,7 +35,11 @@ export default function DesktopSidebarSupport({ supportBtnClass, isDark = false 
         </button>
       </div>
 
-      <SuggestFeatureDialog open={suggestOpen} onClose={() => setSuggestOpen(false)} isDark={isDark} />
+      <SuggestFeatureDialog
+        open={suggestOpen}
+        onClose={() => setSuggestOpen(false)}
+        isDark={isDark}
+      />
     </>
   );
 }

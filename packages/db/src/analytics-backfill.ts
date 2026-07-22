@@ -25,10 +25,7 @@ export interface MigrationLedgerSeed {
   payloadHash: string;
   timestampQuality: AnalyticsTimestampQuality;
   identityQuality: MigrationIdentityQuality;
-  status: Extract<
-    MigrationLedgerStatus,
-    "pending" | "excluded" | "quarantined"
-  >;
+  status: Extract<MigrationLedgerStatus, "pending" | "excluded" | "quarantined">;
   dispositionReason: string | null;
   transformedPayload: Record<string, unknown> | null;
 }
@@ -122,9 +119,11 @@ export class AnalyticsBackfillRepository {
             ${row.canonicalEventName}, ${row.transformVersion}, ${row.payloadHash},
             ${row.timestampQuality}, ${row.identityQuality}, ${row.status},
             ${row.dispositionReason},
-            ${row.transformedPayload
-              ? transaction.json(JSON.parse(JSON.stringify(row.transformedPayload)))
-              : null}
+            ${
+              row.transformedPayload
+                ? transaction.json(JSON.parse(JSON.stringify(row.transformedPayload)))
+                : null
+            }
           )
           ON CONFLICT (run_id, source_event_id) DO UPDATE SET
             canonical_event_name = EXCLUDED.canonical_event_name,
@@ -152,9 +151,7 @@ export class AnalyticsBackfillRepository {
           RETURNING source_event_id
         `;
         if (changed.length === 0) {
-          throw new Error(
-            `ledger_source_mutation_detected:${row.sourceEventId}`,
-          );
+          throw new Error(`ledger_source_mutation_detected:${row.sourceEventId}`);
         }
       }
     });

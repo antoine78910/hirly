@@ -31,7 +31,9 @@ export function resolveProfileContractType(profile) {
 }
 
 export function contractTypeToJobTypes(contractType) {
-  const key = String(contractType || "").trim().toLowerCase();
+  const key = String(contractType || "")
+    .trim()
+    .toLowerCase();
   if (!key) return [];
   return CONTRACT_TYPE_TO_JOB_TYPES[key] || [];
 }
@@ -56,13 +58,13 @@ const normalizeLocationKey = (value) =>
 
 /** Drop Paris/finance demo filters that leaked into localStorage for normal users. */
 export function reconcileFiltersForUser(persisted, profile) {
-  const profileLocation = profile?.target_location_data?.location_label || profile?.target_location || "";
+  const profileLocation =
+    profile?.target_location_data?.location_label || profile?.target_location || "";
   const profileKey = normalizeLocationKey(profileLocation);
   let next = persisted;
 
   if (next && profileKey) {
-    const persistedLabel =
-      next.locationsData?.[0]?.location_label || next.locations?.[0] || "";
+    const persistedLabel = next.locationsData?.[0]?.location_label || next.locations?.[0] || "";
     const persistedKey = normalizeLocationKey(persistedLabel);
     const looksLikeFinanceDemoParis =
       /paris/.test(persistedKey) && profileKey && persistedKey !== profileKey;

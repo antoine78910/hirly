@@ -36,10 +36,7 @@
       "cv_uploaded",
       "onboarding_completed"
     ],
-    "passiveActivityExcluded": [
-      "$pageview",
-      "job_card_viewed"
-    ],
+    "passiveActivityExcluded": ["$pageview", "job_card_viewed"],
     "warehouseActivityFacts": [
       "public__swipes.created_at",
       "public__applications.created_at",
@@ -83,12 +80,7 @@
     "paidSubscriptionChurn": {
       "path": "packages/contracts/src/posthog-customer-analytics-paid-churn.hogql",
       "sha256": "9d3dfb88d4e2930b82d20de6d79c090047683576f7d40bea3eeca82defce4f14",
-      "parameters": [
-        "start_day",
-        "end_day",
-        "j0_start_at_signup",
-        "paid_source_start_at"
-      ],
+      "parameters": ["start_day", "end_day", "j0_start_at_signup", "paid_source_start_at"],
       "paidSourceStartAt": "2026-07-05 00:00:00",
       "title": "First-paid activation-cohort loss",
       "anchor": "earliest first-observed subscription_activated per canonical distinct_id",

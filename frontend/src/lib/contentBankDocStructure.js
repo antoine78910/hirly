@@ -18,11 +18,7 @@ const LABELS = {
 };
 
 function normalizeHeading(text) {
-  return (text || "")
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/\p{M}/gu, "")
-    .trim();
+  return (text || "").toLowerCase().normalize("NFD").replace(/\p{M}/gu, "").trim();
 }
 
 function categorizeHeading(text) {

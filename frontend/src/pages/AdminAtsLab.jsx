@@ -122,7 +122,9 @@ export default function AdminAtsLab() {
         { timeout: 180000 },
       );
       setResult(data);
-      toast.success(`Generated in ${Math.round((data.elapsed_ms || 0) / 1000)}s${data.persisted ? " and saved" : ""}`);
+      toast.success(
+        `Generated in ${Math.round((data.elapsed_ms || 0) / 1000)}s${data.persisted ? " and saved" : ""}`,
+      );
     } catch (err) {
       toast.error(adminApiErrorMessage(err, "Generation failed"));
       setError(adminApiErrorMessage(err, "Generation failed"));
@@ -168,15 +170,21 @@ export default function AdminAtsLab() {
     <AdminShell
       title="ATS Lab"
       subtitle="Experiment with GPT tailoring, keyword analysis, and PDF export (admin only)."
-      actions={(
+      actions={
         <Button type="button" variant="outline" onClick={loadApplications} disabled={loadingApps}>
-          {loadingApps ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+          {loadingApps ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <RefreshCw className="h-4 w-4" />
+          )}
         </Button>
-      )}
+      }
     >
       {accessDenied ? <AdminAccessDenied /> : null}
       {error && !accessDenied ? (
-        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
+        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {error}
+        </div>
       ) : null}
 
       <Section title="Select application">
@@ -198,15 +206,22 @@ export default function AdminAtsLab() {
               <option value="">Choose an application…</option>
               {applications.map((app) => (
                 <option key={app.application_id} value={app.application_id}>
-                  {app.company || "Company"} — {app.job_title || "Role"} — {app.user_email || app.user_id}
+                  {app.company || "Company"} — {app.job_title || "Role"} —{" "}
+                  {app.user_email || app.user_id}
                 </option>
               ))}
             </select>
             {selectedApp ? (
               <p className="text-sm text-zinc-500">
-                ATS: <span className="font-semibold text-zinc-800">{selectedApp.ats_provider || "unknown"}</span>
+                ATS:{" "}
+                <span className="font-semibold text-zinc-800">
+                  {selectedApp.ats_provider || "unknown"}
+                </span>
                 {" · "}
-                <Link to={`/admin/applications/${selectedApp.application_id}`} className="text-linkedin hover:underline">
+                <Link
+                  to={`/admin/applications/${selectedApp.application_id}`}
+                  className="text-linkedin hover:underline"
+                >
                   Open application detail
                 </Link>
               </p>
@@ -218,7 +233,11 @@ export default function AdminAtsLab() {
               Save result to application
             </label>
             <Button type="button" onClick={runGeneration} disabled={!selectedId || generating}>
-              {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <FlaskConical className="h-4 w-4" />}
+              {generating ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <FlaskConical className="h-4 w-4" />
+              )}
               {generating ? "Generating…" : "Run ATS generation"}
             </Button>
           </div>
@@ -228,8 +247,14 @@ export default function AdminAtsLab() {
       {result ? (
         <div className="mt-6 space-y-6">
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <ScorePill label="ATS score (before)" value={generation.ats_score_before ?? atsAnalysis.score_current} />
-            <ScorePill label="ATS score (after)" value={generation.ats_score_after ?? atsAnalysis.score_after_optimization} />
+            <ScorePill
+              label="ATS score (before)"
+              value={generation.ats_score_before ?? atsAnalysis.score_current}
+            />
+            <ScorePill
+              label="ATS score (after)"
+              value={generation.ats_score_after ?? atsAnalysis.score_after_optimization}
+            />
             <ScorePill label="Match score" value={generation.match_score} />
             <ScorePill label="ATS provider" value={generation.ats_provider || job.ats_provider} />
           </div>
@@ -241,34 +266,52 @@ export default function AdminAtsLab() {
           <div className="grid gap-6 xl:grid-cols-2">
             <Section title="CV changes">
               <div className="space-y-4">
-                {Array.isArray(tailoredResume.content_plan) && tailoredResume.content_plan.length ? (
+                {Array.isArray(tailoredResume.content_plan) &&
+                tailoredResume.content_plan.length ? (
                   <div>
-                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">Content plan</p>
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                      Content plan
+                    </p>
                     <ul className="list-disc space-y-1 pl-5 text-sm text-zinc-700">
-                      {tailoredResume.content_plan.map((item) => <li key={item}>{item}</li>)}
+                      {tailoredResume.content_plan.map((item) => (
+                        <li key={item}>{item}</li>
+                      ))}
                     </ul>
                   </div>
                 ) : null}
-                {Array.isArray(atsAnalysis.final_checklist) && atsAnalysis.final_checklist.length ? (
+                {Array.isArray(atsAnalysis.final_checklist) &&
+                atsAnalysis.final_checklist.length ? (
                   <div>
-                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">Final checklist</p>
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                      Final checklist
+                    </p>
                     <ul className="list-disc space-y-1 pl-5 text-sm text-zinc-700">
-                      {atsAnalysis.final_checklist.map((item) => <li key={item}>{item}</li>)}
+                      {atsAnalysis.final_checklist.map((item) => (
+                        <li key={item}>{item}</li>
+                      ))}
                     </ul>
                   </div>
                 ) : null}
-                {Array.isArray(atsAnalysis.optimized_experience_notes) && atsAnalysis.optimized_experience_notes.length ? (
+                {Array.isArray(atsAnalysis.optimized_experience_notes) &&
+                atsAnalysis.optimized_experience_notes.length ? (
                   <div>
-                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">Experience edits</p>
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                      Experience edits
+                    </p>
                     <ul className="list-disc space-y-1 pl-5 text-sm text-zinc-700">
-                      {atsAnalysis.optimized_experience_notes.map((item) => <li key={item}>{item}</li>)}
+                      {atsAnalysis.optimized_experience_notes.map((item) => (
+                        <li key={item}>{item}</li>
+                      ))}
                     </ul>
                   </div>
                 ) : null}
                 <div>
-                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">Original CV excerpt</p>
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                    Original CV excerpt
+                  </p>
                   <pre className="max-h-48 overflow-auto rounded-lg bg-zinc-50 p-3 text-xs text-zinc-700 whitespace-pre-wrap">
-                    {(result.profile_snapshot?.cv_text || "").slice(0, 2500) || "No CV text on profile."}
+                    {(result.profile_snapshot?.cv_text || "").slice(0, 2500) ||
+                      "No CV text on profile."}
                   </pre>
                 </div>
               </div>
@@ -309,7 +352,8 @@ export default function AdminAtsLab() {
         </div>
       ) : (
         <p className="mt-6 text-sm text-zinc-500">
-          Select an application and run ATS generation to inspect keyword optimization, CV edits, and the tailored cover letter.
+          Select an application and run ATS generation to inspect keyword optimization, CV edits,
+          and the tailored cover letter.
         </p>
       )}
     </AdminShell>

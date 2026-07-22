@@ -44,14 +44,19 @@ function friendReferralSiteHost() {
 }
 
 export function buildFriendReferralShareUrl(code) {
-  const normalized = String(code || "").trim().toUpperCase();
-  const base = INVITE_BASE_URL
-    || (typeof window !== "undefined" ? window.location.origin : "https://tryhirly.com");
+  const normalized = String(code || "")
+    .trim()
+    .toUpperCase();
+  const base =
+    INVITE_BASE_URL ||
+    (typeof window !== "undefined" ? window.location.origin : "https://tryhirly.com");
   return `${base.replace(/\/+$/, "")}/onboarding?referral=${encodeURIComponent(normalized)}`;
 }
 
 export function buildFriendReferralSharePayload(code, lang = "en") {
-  const normalized = String(code || "").trim().toUpperCase();
+  const normalized = String(code || "")
+    .trim()
+    .toUpperCase();
   const url = buildFriendReferralShareUrl(normalized);
   const site = friendReferralSiteHost();
 
@@ -107,7 +112,9 @@ export function clearPendingFriendReferralCode() {
 
 /** Native share when available; otherwise copies the full invite message. */
 export async function shareFriendReferralCode(code, lang = "en") {
-  const normalized = String(code || "").trim().toUpperCase();
+  const normalized = String(code || "")
+    .trim()
+    .toUpperCase();
   if (!normalized) {
     return { ok: false, reason: "no_code" };
   }
@@ -210,7 +217,9 @@ export async function validateOnboardingReferralCode(code) {
 }
 
 export async function redeemFriendReferralCode(code) {
-  const normalized = String(code || "").trim().toUpperCase();
+  const normalized = String(code || "")
+    .trim()
+    .toUpperCase();
   const { data } = await api.post("/referrals/friends/redeem", { code: normalized });
   if (data?.ok) {
     trackFriendReferralCodeRedeemed({
@@ -242,5 +251,7 @@ export function isFriendReferralCode(value) {
 
 /** Keep referral input to digits only, max 6 characters. */
 export function normalizeReferralCodeInput(value) {
-  return String(value || "").replace(/\D/g, "").slice(0, 6);
+  return String(value || "")
+    .replace(/\D/g, "")
+    .slice(0, 6);
 }

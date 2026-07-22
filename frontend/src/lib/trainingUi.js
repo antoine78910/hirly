@@ -22,8 +22,10 @@ export const TRAINING_UI = {
     contentBankSection: "Content bank",
     contentBankHint: "Optional reference scripts — not part of your course progress.",
     disclaimerTitle: "Important Notice: Confidentiality Agreement",
-    disclaimerBody: "By accessing this document, you agree that it is strictly confidential. You are not authorized to share this document with anyone else, either through direct sharing, screenshots, or other means of distribution. Unauthorized sharing or distribution of this document will result in immediate revocation of access and may lead to further regulatory action.",
-    disclaimerHelp: "If you have any questions about sharing this content, please contact the document owner for guidance.",
+    disclaimerBody:
+      "By accessing this document, you agree that it is strictly confidential. You are not authorized to share this document with anyone else, either through direct sharing, screenshots, or other means of distribution. Unauthorized sharing or distribution of this document will result in immediate revocation of access and may lead to further regulatory action.",
+    disclaimerHelp:
+      "If you have any questions about sharing this content, please contact the document owner for guidance.",
     titleColumn: "Title",
     levelColumn: "Level",
     courseCatalog: "Course catalog",
@@ -234,8 +236,5 @@ export function trainingT(lang, key, vars = {}) {
     cur = cur?.[part];
   }
   if (typeof cur !== "string") return key;
-  return Object.entries(vars).reduce(
-    (text, [k, v]) => text.replace(`{${k}}`, String(v)),
-    cur,
-  );
+  return Object.entries(vars).reduce((text, [k, v]) => text.replace(`{${k}}`, String(v)), cur);
 }

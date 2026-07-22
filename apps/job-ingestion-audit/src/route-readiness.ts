@@ -51,11 +51,7 @@ export interface RouteReadinessReport extends RouteReadinessAggregateInput {
   digest: string;
 }
 
-export type OccurrenceAuthority =
-  | "direct_employer"
-  | "official_public"
-  | "aggregator"
-  | "unknown";
+export type OccurrenceAuthority = "direct_employer" | "official_public" | "aggregator" | "unknown";
 
 export type OccurrenceRoute =
   | "verified_runtime_ats"
@@ -96,8 +92,7 @@ export const occurrencePreferenceRelations = [
   "canonical_job_group_members",
 ] as const;
 
-export type OccurrencePreferenceRelation =
-  (typeof occurrencePreferenceRelations)[number];
+export type OccurrencePreferenceRelation = (typeof occurrencePreferenceRelations)[number];
 
 export interface OccurrencePreferenceStructuralBlockerInput {
   status: "BLOCKED_STRUCTURAL";
@@ -250,10 +245,7 @@ export function buildRouteReadinessReport(
 
   const layeredFrenchJobs = count(input.layeredFrenchJobs, "layeredFrenchJobs");
   const actionableJobs = count(input.actionableJobs, "actionableJobs");
-  const staticAutoApplicable = count(
-    input.staticAutoApplicable,
-    "staticAutoApplicable",
-  );
+  const staticAutoApplicable = count(input.staticAutoApplicable, "staticAutoApplicable");
   const runtimeReadyAutoApplicable = count(
     input.runtimeReadyAutoApplicable,
     "runtimeReadyAutoApplicable",
@@ -262,16 +254,13 @@ export function buildRouteReadinessReport(
     input.franceTravailRuntimeReady,
     "franceTravailRuntimeReady",
   );
-  const topProviderRuntimeReady = count(
-    input.topProviderRuntimeReady,
-    "topProviderRuntimeReady",
-  );
+  const topProviderRuntimeReady = count(input.topProviderRuntimeReady, "topProviderRuntimeReady");
   if (
-    runtimeReadyAutoApplicable > staticAutoApplicable
-    || staticAutoApplicable > actionableJobs
-    || actionableJobs > layeredFrenchJobs
-    || franceTravailRuntimeReady > runtimeReadyAutoApplicable
-    || topProviderRuntimeReady > runtimeReadyAutoApplicable
+    runtimeReadyAutoApplicable > staticAutoApplicable ||
+    staticAutoApplicable > actionableJobs ||
+    actionableJobs > layeredFrenchJobs ||
+    franceTravailRuntimeReady > runtimeReadyAutoApplicable ||
+    topProviderRuntimeReady > runtimeReadyAutoApplicable
   ) {
     fail("inventory counters violate strict-auto <= static-auto <= actionable <= inventory");
   }
@@ -282,10 +271,7 @@ export function buildRouteReadinessReport(
       count(input.failureBuckets[reason], `failureBuckets.${reason}`),
     ]),
   ) as Record<RouteFailureReason, number>;
-  const failureTotal = Object.values(failureBuckets).reduce(
-    (sum, value) => sum + value,
-    0,
-  );
+  const failureTotal = Object.values(failureBuckets).reduce((sum, value) => sum + value, 0);
   if (failureTotal + runtimeReadyAutoApplicable !== layeredFrenchJobs) {
     fail("failure buckets do not reconcile to layered French inventory");
   }
@@ -304,9 +290,9 @@ export function buildRouteReadinessReport(
     p90: count(input.paidUserCoverage.p90, "paidUserCoverage.p90"),
   };
   if (
-    coverage.exhaustedPaidUsers > coverage.evaluatedPaidUsers
-    || coverage.p10 > coverage.p50
-    || coverage.p50 > coverage.p90
+    coverage.exhaustedPaidUsers > coverage.evaluatedPaidUsers ||
+    coverage.p10 > coverage.p50 ||
+    coverage.p50 > coverage.p90
   ) {
     fail("paid-user coverage counters are inconsistent");
   }
@@ -327,18 +313,9 @@ export function buildRouteReadinessReport(
     paidUserCoverage: coverage,
     autoApplicableRate: rate(runtimeReadyAutoApplicable, layeredFrenchJobs),
     optimisticOverclaim: staticAutoApplicable - runtimeReadyAutoApplicable,
-    feedExhaustionRate: rate(
-      coverage.exhaustedPaidUsers,
-      coverage.evaluatedPaidUsers,
-    ),
-    franceTravailRuntimeReadyShare: rate(
-      franceTravailRuntimeReady,
-      runtimeReadyAutoApplicable,
-    ),
-    topProviderRuntimeReadyShare: rate(
-      topProviderRuntimeReady,
-      runtimeReadyAutoApplicable,
-    ),
+    feedExhaustionRate: rate(coverage.exhaustedPaidUsers, coverage.evaluatedPaidUsers),
+    franceTravailRuntimeReadyShare: rate(franceTravailRuntimeReady, runtimeReadyAutoApplicable),
+    topProviderRuntimeReadyShare: rate(topProviderRuntimeReady, runtimeReadyAutoApplicable),
   };
   return { ...unsigned, digest: digest(unsigned) };
 }
@@ -359,24 +336,18 @@ function diversificationSnapshot(
       input.topProviderRuntimeReadyJobs,
       `${path}.topProviderRuntimeReadyJobs`,
     ),
-    evaluatedPaidUsers: count(
-      input.evaluatedPaidUsers,
-      `${path}.evaluatedPaidUsers`,
-    ),
-    exhaustedPaidUsers: count(
-      input.exhaustedPaidUsers,
-      `${path}.exhaustedPaidUsers`,
-    ),
+    evaluatedPaidUsers: count(input.evaluatedPaidUsers, `${path}.evaluatedPaidUsers`),
+    exhaustedPaidUsers: count(input.exhaustedPaidUsers, `${path}.exhaustedPaidUsers`),
     p10: count(input.p10, `${path}.p10`),
     p50: count(input.p50, `${path}.p50`),
     p90: count(input.p90, `${path}.p90`),
   };
   if (
-    snapshot.franceTravailRuntimeReadyJobs > snapshot.runtimeReadyJobs
-    || snapshot.topProviderRuntimeReadyJobs > snapshot.runtimeReadyJobs
-    || snapshot.exhaustedPaidUsers > snapshot.evaluatedPaidUsers
-    || snapshot.p10 > snapshot.p50
-    || snapshot.p50 > snapshot.p90
+    snapshot.franceTravailRuntimeReadyJobs > snapshot.runtimeReadyJobs ||
+    snapshot.topProviderRuntimeReadyJobs > snapshot.runtimeReadyJobs ||
+    snapshot.exhaustedPaidUsers > snapshot.evaluatedPaidUsers ||
+    snapshot.p10 > snapshot.p50 ||
+    snapshot.p50 > snapshot.p90
   ) {
     fail(`${path} counters are inconsistent`);
   }
@@ -387,27 +358,29 @@ export function buildSourceDiversificationGate(
   input: SourceDiversificationGateInput,
 ): SourceDiversificationGateReport {
   if (input.status !== "COMPLETE") {
-    fail(`diversification status is not scoreable: ${input.blockerReason ?? "missing blocker reason"}`);
+    fail(
+      `diversification status is not scoreable: ${input.blockerReason ?? "missing blocker reason"}`,
+    );
   }
   if (input.sample !== false) fail("diversification sample evidence is not scoreable");
   const generatedAt = timestamp(input.generatedAt, "generatedAt");
   if (
-    !sha256Pattern.test(input.routeReadinessDigest)
-    || !sha256Pattern.test(input.netNewMeasurementDigest)
+    !sha256Pattern.test(input.routeReadinessDigest) ||
+    !sha256Pattern.test(input.netNewMeasurementDigest)
   ) {
     fail("diversification evidence digests must be SHA-256 values");
   }
   const current = diversificationSnapshot(input.current, "current");
   const projected = diversificationSnapshot(input.projected, "projected");
   if (
-    current.evaluatedPaidUsers === 0
-    || projected.evaluatedPaidUsers !== current.evaluatedPaidUsers
+    current.evaluatedPaidUsers === 0 ||
+    projected.evaluatedPaidUsers !== current.evaluatedPaidUsers
   ) {
     fail("paid-user cohorts must be non-empty and identical");
   }
   if (
-    projected.runtimeReadyJobs < current.runtimeReadyJobs
-    || projected.franceTravailRuntimeReadyJobs > current.franceTravailRuntimeReadyJobs
+    projected.runtimeReadyJobs < current.runtimeReadyJobs ||
+    projected.franceTravailRuntimeReadyJobs > current.franceTravailRuntimeReadyJobs
   ) {
     fail("projected inventory cannot remove runtime-ready jobs or add France Travail jobs");
   }
@@ -466,19 +439,13 @@ export function buildSourceDiversificationGate(
 
   const currentMetrics = {
     ...current,
-    franceTravailShare: rate(
-      current.franceTravailRuntimeReadyJobs,
-      current.runtimeReadyJobs,
-    ),
+    franceTravailShare: rate(current.franceTravailRuntimeReadyJobs, current.runtimeReadyJobs),
     topProviderShare: rate(current.topProviderRuntimeReadyJobs, current.runtimeReadyJobs),
     feedExhaustionRate: rate(current.exhaustedPaidUsers, current.evaluatedPaidUsers),
   };
   const projectedMetrics = {
     ...projected,
-    franceTravailShare: rate(
-      projected.franceTravailRuntimeReadyJobs,
-      projected.runtimeReadyJobs,
-    ),
+    franceTravailShare: rate(projected.franceTravailRuntimeReadyJobs, projected.runtimeReadyJobs),
     topProviderShare: rate(projected.topProviderRuntimeReadyJobs, projected.runtimeReadyJobs),
     feedExhaustionRate: rate(projected.exhaustedPaidUsers, projected.evaluatedPaidUsers),
   };
@@ -487,8 +454,8 @@ export function buildSourceDiversificationGate(
     failedGates.push("runtime_ready_uplift_below_minimum");
   }
   if (
-    projectedMetrics.franceTravailShare >= currentMetrics.franceTravailShare
-    || projectedMetrics.franceTravailShare > threshold.maxFranceTravailShare
+    projectedMetrics.franceTravailShare >= currentMetrics.franceTravailShare ||
+    projectedMetrics.franceTravailShare > threshold.maxFranceTravailShare
   ) {
     failedGates.push("france_travail_concentration_not_reduced");
   }
@@ -502,17 +469,17 @@ export function buildSourceDiversificationGate(
     failedGates.push("paid_user_p10_below_minimum");
   }
   if (
-    projected.exhaustedPaidUsers > current.exhaustedPaidUsers
-    || projected.p10 < current.p10
-    || projected.p50 < current.p50
-    || projected.p90 < current.p90
+    projected.exhaustedPaidUsers > current.exhaustedPaidUsers ||
+    projected.p10 < current.p10 ||
+    projected.p50 < current.p50 ||
+    projected.p90 < current.p90
   ) {
     failedGates.push("paid_user_coverage_regressed");
   }
 
   const unsigned = {
     schemaVersion: "hirly.source-diversification-gate.v1" as const,
-    status: failedGates.length === 0 ? "GO" as const : "NO_GO" as const,
+    status: failedGates.length === 0 ? ("GO" as const) : ("NO_GO" as const),
     generatedAt,
     current: currentMetrics,
     projected: projectedMetrics,
@@ -552,9 +519,9 @@ const authorityRank: Record<OccurrenceAuthority, number> = {
 function preferenceScore(candidate: OccurrencePreferenceCandidate): number {
   if (!candidate.active) return -1;
   if (
-    !Number.isFinite(candidate.confidence)
-    || candidate.confidence < 0
-    || candidate.confidence > 1
+    !Number.isFinite(candidate.confidence) ||
+    candidate.confidence < 0 ||
+    candidate.confidence > 1
   ) {
     fail("occurrence confidence must be between 0 and 1");
   }
@@ -563,10 +530,10 @@ function preferenceScore(candidate: OccurrencePreferenceCandidate): number {
     : 0;
   const recency = verified === 0 ? 0 : Math.floor(verified / 86_400_000) % 10_000;
   return (
-    routeRank[candidate.route] * 1_000_000
-    + authorityRank[candidate.authority] * 10_000
-    + Math.round(candidate.confidence * 1_000) * 10
-    + recency
+    routeRank[candidate.route] * 1_000_000 +
+    authorityRank[candidate.authority] * 10_000 +
+    Math.round(candidate.confidence * 1_000) * 10 +
+    recency
   );
 }
 
@@ -595,31 +562,29 @@ export function buildOccurrencePreferenceDryRun(
   let directSelections = 0;
   const sealedSelections: Array<[string, string]> = [];
   for (const [groupKey, group] of [...groups].sort(([left], [right]) =>
-    left.localeCompare(right))) {
+    left.localeCompare(right),
+  )) {
     const ranked = group
       .map((candidate) => ({ candidate, score: preferenceScore(candidate) }))
       .filter(({ score }) => score >= 0)
       .sort(
         (left, right) =>
-          right.score - left.score
-          || left.candidate.occurrenceKey.localeCompare(
-            right.candidate.occurrenceKey,
-          ),
+          right.score - left.score ||
+          left.candidate.occurrenceKey.localeCompare(right.candidate.occurrenceKey),
       );
     const selected = ranked[0]?.candidate;
     if (!selected) continue;
     groupsWithSelection += 1;
     const current = group.find(
-      (candidate) => candidate.occurrenceKey === currentSelections[groupKey]
-        && candidate.active,
+      (candidate) => candidate.occurrenceKey === currentSelections[groupKey] && candidate.active,
     );
     if (current?.route === "verified_runtime_ats") {
       currentVerifiedRuntimeSelections += 1;
     }
     if (
-      current?.route === "verified_runtime_ats"
-      || current?.route === "direct_ats"
-      || current?.route === "direct_company"
+      current?.route === "verified_runtime_ats" ||
+      current?.route === "direct_ats" ||
+      current?.route === "direct_company"
     ) {
       currentDirectSelections += 1;
     }
@@ -630,9 +595,9 @@ export function buildOccurrencePreferenceDryRun(
       verifiedRuntimeSelections += 1;
     }
     if (
-      selected.route === "verified_runtime_ats"
-      || selected.route === "direct_ats"
-      || selected.route === "direct_company"
+      selected.route === "verified_runtime_ats" ||
+      selected.route === "direct_ats" ||
+      selected.route === "direct_company"
     ) {
       directSelections += 1;
     }
@@ -645,8 +610,7 @@ export function buildOccurrencePreferenceDryRun(
     selectionsChanged,
     currentVerifiedRuntimeSelections,
     verifiedRuntimeSelections,
-    verifiedRuntimeSelectionUplift:
-      verifiedRuntimeSelections - currentVerifiedRuntimeSelections,
+    verifiedRuntimeSelectionUplift: verifiedRuntimeSelections - currentVerifiedRuntimeSelections,
     currentDirectSelections,
     directSelections,
     directSelectionUplift: directSelections - currentDirectSelections,
@@ -675,7 +639,8 @@ export function buildOccurrencePreferenceStructuralBlocker(
     fail("occurrence missingRelations must be unique");
   }
   const missingRelations = occurrencePreferenceRelations.filter((relation) =>
-    relationSet.has(relation));
+    relationSet.has(relation),
+  );
   if (missingRelations.length === 0) {
     fail("occurrence evidence requires at least one missing relation");
   }

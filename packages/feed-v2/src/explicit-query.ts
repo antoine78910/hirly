@@ -38,12 +38,34 @@ export interface FeedEffectiveQuery extends FeedEffectiveQueryPayload {
 }
 
 const PAYLOAD_KEYS = [
-  "countryCode", "experienceLevels", "freeTextLocations", "hiddenCompanies", "hiddenIndustries",
-  "includeNonAutoApply", "includeUnknownLocation", "includeUnknownSalary", "jobTypes", "locations",
-  "minimumSalary", "onlyCompanies", "onlyIndustries", "onlyMyCountry", "postedWithin", "radiusKm",
-  "role", "version", "workModes",
+  "countryCode",
+  "experienceLevels",
+  "freeTextLocations",
+  "hiddenCompanies",
+  "hiddenIndustries",
+  "includeNonAutoApply",
+  "includeUnknownLocation",
+  "includeUnknownSalary",
+  "jobTypes",
+  "locations",
+  "minimumSalary",
+  "onlyCompanies",
+  "onlyIndustries",
+  "onlyMyCountry",
+  "postedWithin",
+  "radiusKm",
+  "role",
+  "version",
+  "workModes",
 ] as const;
-const LOCATION_KEYS = ["country", "countryCode", "label", "latitude", "longitude", "placeId"] as const;
+const LOCATION_KEYS = [
+  "country",
+  "countryCode",
+  "label",
+  "latitude",
+  "longitude",
+  "placeId",
+] as const;
 
 function cleanString(value: unknown, maximum: number): string {
   if (typeof value !== "string") throw new Error("invalid_explicit_query");
@@ -57,7 +79,8 @@ function nullableString(value: unknown, maximum: number): string | null {
 }
 
 function stringList(value: unknown, maximumItems: number): string[] {
-  if (!Array.isArray(value) || value.length > maximumItems) throw new Error("invalid_explicit_query");
+  if (!Array.isArray(value) || value.length > maximumItems)
+    throw new Error("invalid_explicit_query");
   return [...new Set(value.map((item) => cleanString(item, 128)))].sort();
 }
 
@@ -77,8 +100,11 @@ function coordinate(value: unknown, minimum: number, maximum: number): number | 
 }
 
 function location(value: unknown): FeedExplicitQueryLocation {
-  if (!value || typeof value !== "object"
-    || Object.keys(value).sort().join(",") !== [...LOCATION_KEYS].sort().join(",")) {
+  if (
+    !value ||
+    typeof value !== "object" ||
+    Object.keys(value).sort().join(",") !== [...LOCATION_KEYS].sort().join(",")
+  ) {
     throw new Error("invalid_explicit_query");
   }
   const candidate = value as Record<string, unknown>;
@@ -95,8 +121,11 @@ function location(value: unknown): FeedExplicitQueryLocation {
 function canonical(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonical);
   if (value && typeof value === "object") {
-    return Object.fromEntries(Object.entries(value).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)
-      .map(([key, child]) => [key, canonical(child)]));
+    return Object.fromEntries(
+      Object.entries(value)
+        .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+        .map(([key, child]) => [key, canonical(child)]),
+    );
   }
   return value;
 }
@@ -106,29 +135,50 @@ function canonicalJson(value: unknown): string {
 }
 
 function normalizePayload(value: unknown): FeedEffectiveQueryPayload {
-  if (!value || typeof value !== "object"
-    || Object.keys(value).sort().join(",") !== [...PAYLOAD_KEYS].sort().join(",")) {
+  if (
+    !value ||
+    typeof value !== "object" ||
+    Object.keys(value).sort().join(",") !== [...PAYLOAD_KEYS].sort().join(",")
+  ) {
     throw new Error("invalid_explicit_query");
   }
   const candidate = value as Record<string, unknown>;
   const radiusKm = candidate.radiusKm;
   const minimumSalary = candidate.minimumSalary;
-  if (!Number.isInteger(radiusKm) || (radiusKm as number) < 1 || (radiusKm as number) > 500
-    || !Number.isInteger(minimumSalary) || (minimumSalary as number) < 0 || (minimumSalary as number) > 10_000_000) {
+  if (
+    !Number.isInteger(radiusKm) ||
+    (radiusKm as number) < 1 ||
+    (radiusKm as number) > 500 ||
+    !Number.isInteger(minimumSalary) ||
+    (minimumSalary as number) < 0 ||
+    (minimumSalary as number) > 10_000_000
+  ) {
     throw new Error("invalid_explicit_query");
   }
   const postedWithin = candidate.postedWithin;
   if (postedWithin !== null && !["any", "1d", "7d", "30d"].includes(String(postedWithin))) {
     throw new Error("invalid_explicit_query");
   }
-  if (!Array.isArray(candidate.locations) || candidate.locations.length > 8) throw new Error("invalid_explicit_query");
+  if (!Array.isArray(candidate.locations) || candidate.locations.length > 8)
+    throw new Error("invalid_explicit_query");
   const workModes = stringList(candidate.workModes, 3);
-  if (workModes.some((mode) => !["remote", "hybrid", "onsite"].includes(mode))) throw new Error("invalid_explicit_query");
-  for (const key of ["includeUnknownLocation", "includeUnknownSalary", "includeNonAutoApply", "onlyMyCountry"] as const) {
+  if (workModes.some((mode) => !["remote", "hybrid", "onsite"].includes(mode)))
+    throw new Error("invalid_explicit_query");
+  for (const key of [
+    "includeUnknownLocation",
+    "includeUnknownSalary",
+    "includeNonAutoApply",
+    "onlyMyCountry",
+  ] as const) {
     if (typeof candidate[key] !== "boolean") throw new Error("invalid_explicit_query");
   }
   return {
-    version: candidate.version === FEED_EFFECTIVE_QUERY_VERSION ? candidate.version : (() => { throw new Error("invalid_explicit_query"); })(),
+    version:
+      candidate.version === FEED_EFFECTIVE_QUERY_VERSION
+        ? candidate.version
+        : (() => {
+            throw new Error("invalid_explicit_query");
+          })(),
     role: nullableString(candidate.role, 200),
     radiusKm: radiusKm as number,
     locations: candidate.locations.map(location).sort((a, b) => {
@@ -155,7 +205,9 @@ function normalizePayload(value: unknown): FeedEffectiveQueryPayload {
 }
 
 export function fingerprintFeedEffectiveQuery(payload: FeedEffectiveQueryPayload): string {
-  return createHash("sha256").update(canonicalJson(normalizePayload(payload))).digest("hex");
+  return createHash("sha256")
+    .update(canonicalJson(normalizePayload(payload)))
+    .digest("hex");
 }
 
 export function createFeedEffectiveQuery(payload: FeedEffectiveQueryPayload): FeedEffectiveQuery {
@@ -166,13 +218,19 @@ export function createFeedEffectiveQuery(payload: FeedEffectiveQueryPayload): Fe
 export function isFeedEffectiveQuery(value: unknown): value is FeedEffectiveQuery {
   if (!value || typeof value !== "object") return false;
   const candidate = value as Record<string, unknown>;
-  if (Object.keys(candidate).sort().join(",") !== [...PAYLOAD_KEYS, "fingerprint"].sort().join(",")
-    || typeof candidate.fingerprint !== "string" || !/^[a-f0-9]{64}$/.test(candidate.fingerprint)) return false;
+  if (
+    Object.keys(candidate).sort().join(",") !== [...PAYLOAD_KEYS, "fingerprint"].sort().join(",") ||
+    typeof candidate.fingerprint !== "string" ||
+    !/^[a-f0-9]{64}$/.test(candidate.fingerprint)
+  )
+    return false;
   try {
     const payload = Object.fromEntries(PAYLOAD_KEYS.map((key) => [key, candidate[key]]));
     const normalized = normalizePayload(payload);
-    return canonicalJson(payload) === canonicalJson(normalized)
-      && candidate.fingerprint === fingerprintFeedEffectiveQuery(normalized);
+    return (
+      canonicalJson(payload) === canonicalJson(normalized) &&
+      candidate.fingerprint === fingerprintFeedEffectiveQuery(normalized)
+    );
   } catch {
     return false;
   }

@@ -1,9 +1,6 @@
 import { createHash } from "node:crypto";
 import { describe, expect, test } from "bun:test";
-import type {
-  SourceTrialManifest,
-  SourceTrialResult,
-} from "@hirly/contracts";
+import type { SourceTrialManifest, SourceTrialResult } from "@hirly/contracts";
 import {
   cspDataGouvTrialReadiness,
   createQualifiedDataGouvTrialTransport,
@@ -51,8 +48,7 @@ function resourceManifestInput(
     attribution: {
       licenceName: "Licence Ouverte 2.0",
       attributionText: "Source: qualified publisher via data.gouv.fr",
-      sourceUrl:
-        "https://www.data.gouv.fr/fr/datasets/qualified-employment-dataset/",
+      sourceUrl: "https://www.data.gouv.fr/fr/datasets/qualified-employment-dataset/",
     },
     budgets: {
       maxRequests: 1,
@@ -98,8 +94,7 @@ const row = {
   contractType: "CDI",
   status: "active",
   applyUrls: ["https://apply.example.org/jobs/job-001"],
-  sourceUrl:
-    "https://www.data.gouv.fr/fr/datasets/qualified-employment-dataset/",
+  sourceUrl: "https://www.data.gouv.fr/fr/datasets/qualified-employment-dataset/",
   publishedAt: "2026-07-19T08:00:00.000Z",
   expiresAt: "2026-08-19T08:00:00.000Z",
   sourceDocument: {
@@ -198,9 +193,7 @@ describe("G014 qualified data.gouv evidence-only trial", () => {
     });
     expect(preview.digest).toMatch(/^[0-9a-f]{64}$/);
     expect(preview.pageContentHash).toMatch(/^[0-9a-f]{64}$/);
-    expect(JSON.stringify(preview.rawPage)).not.toContain(
-      "candidate@example.org",
-    );
+    expect(JSON.stringify(preview.rawPage)).not.toContain("candidate@example.org");
   });
 
   test("persists only immutable G014 evidence and a reconciled terminal result", async () => {
@@ -313,8 +306,7 @@ describe("G014 qualified data.gouv evidence-only trial", () => {
     expect(() =>
       sealDataGouvTrialResourceManifest(
         resourceManifestInput({
-          resourceUrl:
-            "https://static.data.gouv.fr/resources/resource.json?access_token=secret",
+          resourceUrl: "https://static.data.gouv.fr/resources/resource.json?access_token=secret",
         }),
       ),
     ).toThrow("credential-free HTTPS resource");
@@ -360,8 +352,7 @@ describe("G014 qualified data.gouv evidence-only trial", () => {
       createQualifiedDataGouvTrialTransport({
         resourceManifest: oversized,
         approvedManifestDigests: [oversized.manifestDigest],
-        fetch: async () =>
-          response([row]),
+        fetch: async () => response([row]),
       }).fetch(new AbortController().signal),
     ).rejects.toMatchObject({ classification: "budget_exceeded" });
   });
@@ -474,8 +465,6 @@ describe("G014 qualified data.gouv evidence-only trial", () => {
       }
       return JSON.stringify(value);
     };
-    expect(manifestDigest).toBe(
-      createHash("sha256").update(canonical(unsigned)).digest("hex"),
-    );
+    expect(manifestDigest).toBe(createHash("sha256").update(canonical(unsigned)).digest("hex"));
   });
 });

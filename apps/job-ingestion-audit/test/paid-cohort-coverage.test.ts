@@ -35,12 +35,14 @@ const input: PaidCohortCoverageInput = {
       seenCanonicalGroupDigests: [],
     },
   ],
-  trialSources: [{
-    trialRunId: "00000000-0000-4000-8000-000000000020",
-    sourceId: "00000000-0000-4000-8000-000000000010",
-    provider: "greenhouse",
-    tenantKey: "acme",
-  }],
+  trialSources: [
+    {
+      trialRunId: "00000000-0000-4000-8000-000000000020",
+      sourceId: "00000000-0000-4000-8000-000000000010",
+      provider: "greenhouse",
+      tenantKey: "acme",
+    },
+  ],
 };
 
 class FakeStore implements PaidCohortCoverageStore {
@@ -48,33 +50,37 @@ class FakeStore implements PaidCohortCoverageStore {
   canonicalWrites = 0;
 
   async loadCurrentCandidates() {
-    return [{
-      canonicalGroupDigest: currentGroup,
-      sourceId: null,
-      provider: "france_travail",
-      tenantKey: null,
-      titleTokens: ["software", "engineer"],
-      countryCode: "FR",
-      freshAt: "2026-07-10T00:00:00.000Z",
-      actionable: true,
-      routeKnown: false,
-      directEmployer: false,
-    }];
+    return [
+      {
+        canonicalGroupDigest: currentGroup,
+        sourceId: null,
+        provider: "france_travail",
+        tenantKey: null,
+        titleTokens: ["software", "engineer"],
+        countryCode: "FR",
+        freshAt: "2026-07-10T00:00:00.000Z",
+        actionable: true,
+        routeKnown: false,
+        directEmployer: false,
+      },
+    ];
   }
 
   async loadTrialCandidates() {
-    return [{
-      canonicalGroupDigest: trialGroup,
-      sourceId: input.trialSources[0]!.sourceId,
-      provider: "greenhouse",
-      tenantKey: "acme",
-      titleTokens: ["platform", "engineer"],
-      countryCode: "FR",
-      freshAt: "2026-07-19T00:00:00.000Z",
-      actionable: true,
-      routeKnown: true,
-      directEmployer: true,
-    }];
+    return [
+      {
+        canonicalGroupDigest: trialGroup,
+        sourceId: input.trialSources[0]!.sourceId,
+        provider: "greenhouse",
+        tenantKey: "acme",
+        titleTokens: ["platform", "engineer"],
+        countryCode: "FR",
+        freshAt: "2026-07-19T00:00:00.000Z",
+        actionable: true,
+        routeKnown: true,
+        directEmployer: true,
+      },
+    ];
   }
 
   async persistEvidence(evidence: CoverageEvidence) {
@@ -118,10 +124,13 @@ describe("G016 paid cohort coverage producer", () => {
     const first = new FakeStore();
     const second = new FakeStore();
     const firstReport = await producePaidCohortCoverage(input, first);
-    const secondReport = await producePaidCohortCoverage({
-      ...input,
-      cohort: [...input.cohort].reverse(),
-    }, second);
+    const secondReport = await producePaidCohortCoverage(
+      {
+        ...input,
+        cohort: [...input.cohort].reverse(),
+      },
+      second,
+    );
     expect(secondReport.cohortDigest).toBe(firstReport.cohortDigest);
     expect(secondReport.evidenceDigest).toBe(firstReport.evidenceDigest);
     expect(first.canonicalWrites).toBe(0);
@@ -137,30 +146,48 @@ describe("G016 paid cohort coverage producer", () => {
   });
 
   test("refuses stale windows, unsafe cohorts, and escaped source bindings", async () => {
-    await expect(producePaidCohortCoverage({
-      ...input,
-      freshnessCutoff: "2026-06-21T14:00:00.000Z",
-    }, new FakeStore())).rejects.toThrow("exactly match");
-    await expect(producePaidCohortCoverage({
-      ...input,
-      cohort: [{
-        ...input.cohort[0]!,
-        cohortDimensions: { user_id: "unsafe" },
-      }],
-    }, new FakeStore())).rejects.toThrow("unsafe dimension");
+    await expect(
+      producePaidCohortCoverage(
+        {
+          ...input,
+          freshnessCutoff: "2026-06-21T14:00:00.000Z",
+        },
+        new FakeStore(),
+      ),
+    ).rejects.toThrow("exactly match");
+    await expect(
+      producePaidCohortCoverage(
+        {
+          ...input,
+          cohort: [
+            {
+              ...input.cohort[0]!,
+              cohortDimensions: { user_id: "unsafe" },
+            },
+          ],
+        },
+        new FakeStore(),
+      ),
+    ).rejects.toThrow("unsafe dimension");
     const escaped = new FakeStore();
-    escaped.loadTrialCandidates = async () => [{
-      ...(await new FakeStore().loadTrialCandidates())[0]!,
-      provider: "lever",
-    }];
-    await expect(producePaidCohortCoverage(input, escaped))
-      .rejects.toThrow("escaped its provider/source/tenant binding");
+    escaped.loadTrialCandidates = async () => [
+      {
+        ...(await new FakeStore().loadTrialCandidates())[0]!,
+        provider: "lever",
+      },
+    ];
+    await expect(producePaidCohortCoverage(input, escaped)).rejects.toThrow(
+      "escaped its provider/source/tenant binding",
+    );
     const staleCurrent = new FakeStore();
-    staleCurrent.loadCurrentCandidates = async () => [{
-      ...(await new FakeStore().loadCurrentCandidates())[0]!,
-      freshAt: "2026-06-01T00:00:00.000Z",
-    }];
-    await expect(producePaidCohortCoverage(input, staleCurrent))
-      .rejects.toThrow("frozen freshness window");
+    staleCurrent.loadCurrentCandidates = async () => [
+      {
+        ...(await new FakeStore().loadCurrentCandidates())[0]!,
+        freshAt: "2026-06-01T00:00:00.000Z",
+      },
+    ];
+    await expect(producePaidCohortCoverage(input, staleCurrent)).rejects.toThrow(
+      "frozen freshness window",
+    );
   });
 });

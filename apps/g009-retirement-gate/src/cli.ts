@@ -12,10 +12,10 @@ function valueAfter(argv: string[], flag: string): string | undefined {
 
 export async function runG009RetirementGateCli(argv: string[]): Promise<void> {
   const inputPath = valueAfter(argv, "--input");
-  const outputPath = valueAfter(argv, "--output")
-    ?? "artifacts/candidate-matching/g009-retirement-gate.json";
+  const outputPath =
+    valueAfter(argv, "--output") ?? "artifacts/candidate-matching/g009-retirement-gate.json";
   const input = inputPath
-    ? JSON.parse(await readFile(inputPath, "utf8")) as G009RetirementGateInput
+    ? (JSON.parse(await readFile(inputPath, "utf8")) as G009RetirementGateInput)
     : {};
   const evidence = evaluateG009RetirementGate(input);
   await mkdir(dirname(outputPath), { recursive: true });

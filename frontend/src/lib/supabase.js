@@ -18,13 +18,15 @@ const DEFAULT_SUPABASE_ANON_KEY = "sb_publishable_Wm5f8zeSZs0h7RQ0udaYKg_PZvNfXv
 
 const rawSupabaseUrl = process.env.REACT_APP_SUPABASE_URL || DEFAULT_SUPABASE_URL;
 const supabaseUrl = normalizeSupabaseProjectUrl(rawSupabaseUrl);
-const supabaseAnonKey = normalizeSupabaseAnonKey(process.env.REACT_APP_SUPABASE_ANON_KEY || DEFAULT_SUPABASE_ANON_KEY);
+const supabaseAnonKey = normalizeSupabaseAnonKey(
+  process.env.REACT_APP_SUPABASE_ANON_KEY || DEFAULT_SUPABASE_ANON_KEY,
+);
 
 if (
-  typeof process !== "undefined"
-  && process.env.NODE_ENV !== "test"
-  && rawSupabaseUrl
-  && supabaseUrl !== rawSupabaseUrl.trim().replace(/\/+$/, "")
+  typeof process !== "undefined" &&
+  process.env.NODE_ENV !== "test" &&
+  rawSupabaseUrl &&
+  supabaseUrl !== rawSupabaseUrl.trim().replace(/\/+$/, "")
 ) {
   console.warn(
     "[supabase] REACT_APP_SUPABASE_URL should be the project root (https://<ref>.supabase.co), not /rest/v1.",

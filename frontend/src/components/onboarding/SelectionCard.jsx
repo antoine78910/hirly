@@ -31,12 +31,12 @@ export default function SelectionCard({
         ) : null}
         <div className={`flex w-full flex-col items-center gap-1 ${showCheck ? "px-6" : "px-2"}`}>
           <div className="flex max-w-full items-center justify-center gap-2">
-            {Icon ? (
-              <Icon className={`h-4 w-4 shrink-0 ${ob.accent}`} strokeWidth={2} />
-            ) : null}
+            {Icon ? <Icon className={`h-4 w-4 shrink-0 ${ob.accent}`} strokeWidth={2} /> : null}
             <p className="text-sm font-semibold leading-snug text-zinc-900">{title}</p>
           </div>
-          {hint ? <p className={`max-w-[18rem] text-center text-xs leading-snug ${ob.muted}`}>{hint}</p> : null}
+          {hint ? (
+            <p className={`max-w-[18rem] text-center text-xs leading-snug ${ob.muted}`}>{hint}</p>
+          ) : null}
         </div>
       </button>
     );
@@ -52,7 +52,9 @@ export default function SelectionCard({
           selected ? ob.optionOn : ob.optionOff
         } ${showCheck ? "pr-11" : ""}`}
       >
-        {Icon ? <Icon className={`h-4 w-4 shrink-0 sm:h-5 sm:w-5 ${ob.accent}`} strokeWidth={2} /> : null}
+        {Icon ? (
+          <Icon className={`h-4 w-4 shrink-0 sm:h-5 sm:w-5 ${ob.accent}`} strokeWidth={2} />
+        ) : null}
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold leading-snug text-zinc-900">{title}</p>
           {hint ? <p className={`mt-0.5 text-xs leading-snug ${ob.muted}`}>{hint}</p> : null}
@@ -77,7 +79,9 @@ export default function SelectionCard({
         selected ? ob.optionOn : ob.optionOff
       }`}
     >
-      {Icon ? <Icon className={`h-4 w-4 shrink-0 sm:h-5 sm:w-5 ${ob.accent}`} strokeWidth={2} /> : null}
+      {Icon ? (
+        <Icon className={`h-4 w-4 shrink-0 sm:h-5 sm:w-5 ${ob.accent}`} strokeWidth={2} />
+      ) : null}
       <div className="min-w-0 flex-1">
         <p className="text-sm font-semibold leading-snug text-zinc-900 sm:text-[15px]">{title}</p>
         {hint ? <p className={`mt-0.5 text-xs leading-snug ${ob.muted}`}>{hint}</p> : null}

@@ -14,8 +14,7 @@ export const sel = {
   listOn:
     "bg-gradient-to-br from-violet-50 via-fuchsia-50/70 to-violet-50 text-violet-800 font-semibold",
   listOff: "text-zinc-700 hover:bg-violet-50/40",
-  tag:
-    "inline-flex items-center gap-1 px-2.5 py-1 rounded-full border border-violet-300/50 bg-gradient-to-br from-violet-50 via-fuchsia-50/70 to-violet-50 text-violet-800 text-xs font-semibold",
+  tag: "inline-flex items-center gap-1 px-2.5 py-1 rounded-full border border-violet-300/50 bg-gradient-to-br from-violet-50 via-fuchsia-50/70 to-violet-50 text-violet-800 text-xs font-semibold",
   checkDot:
     "w-5 h-5 rounded-full border border-violet-500/80 bg-gradient-to-br from-violet-100 to-fuchsia-100 text-violet-700 grid place-items-center shadow-sm",
 };

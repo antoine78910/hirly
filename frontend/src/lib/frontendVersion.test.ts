@@ -28,12 +28,7 @@ describe("frontend version checks", () => {
   });
 
   it("accepts abbreviated SHAs for the same deployment", () => {
-    expect(
-      versionsDiffer(
-        "abcdef1234567890abcdef1234567890abcdef12",
-        "abcdef1",
-      ),
-    ).toBe(false);
+    expect(versionsDiffer("abcdef1234567890abcdef1234567890abcdef12", "abcdef1")).toBe(false);
     expect(versionsDiffer("abcdef1", "1234567")).toBe(true);
   });
 

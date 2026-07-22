@@ -18,10 +18,8 @@ const safeHttpsUrlSchema = z.url().superRefine((value, context) => {
   }
 });
 
-export const CSP_DATASET_ID =
-  "les-offres-diffusees-sur-choisir-le-service-public" as const;
-export const CSP_QUALIFICATION_RESOURCE_ID =
-  "csp-qualification-fixture-v1" as const;
+export const CSP_DATASET_ID = "les-offres-diffusees-sur-choisir-le-service-public" as const;
+export const CSP_QUALIFICATION_RESOURCE_ID = "csp-qualification-fixture-v1" as const;
 export const CSP_DATASET_URL =
   "https://www.data.gouv.fr/datasets/les-offres-diffusees-sur-choisir-le-service-public" as const;
 
@@ -60,9 +58,7 @@ class CspFixtureSourceAdapter extends FixtureOnlyDataGouvSourceAdapter<CspRawJob
 
   override normalize(
     rawValue: CspRawJob,
-    context: Parameters<
-      FixtureOnlyDataGouvSourceAdapter<CspRawJob>["normalize"]
-    >[1],
+    context: Parameters<FixtureOnlyDataGouvSourceAdapter<CspRawJob>["normalize"]>[1],
   ) {
     return super.normalize(cspRawJobSchema.parse(rawValue), context);
   }

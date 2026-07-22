@@ -50,7 +50,13 @@ function array(value: unknown): unknown[] {
 }
 
 function normalizedTokens(value: unknown, maximum: number): string[] {
-  return [...new Set(array(value).map(normalizedToken).filter((item): item is string => Boolean(item)))]
+  return [
+    ...new Set(
+      array(value)
+        .map(normalizedToken)
+        .filter((item): item is string => Boolean(item)),
+    ),
+  ]
     .sort()
     .slice(0, maximum);
 }
@@ -60,13 +66,20 @@ function identifierTokens(value: unknown, maximum: number): string[] {
 }
 
 function strings(value: unknown, maximum: number): string[] {
-  return [...new Set(array(value).map(text).filter((item): item is string => Boolean(item)))]
+  return [
+    ...new Set(
+      array(value)
+        .map(text)
+        .filter((item): item is string => Boolean(item)),
+    ),
+  ]
     .sort()
     .slice(0, maximum);
 }
 
 function numberValue(value: unknown): number | null {
-  const parsed = typeof value === "number" ? value : typeof value === "string" ? Number(value) : Number.NaN;
+  const parsed =
+    typeof value === "number" ? value : typeof value === "string" ? Number(value) : Number.NaN;
   return Number.isFinite(parsed) ? parsed : null;
 }
 
@@ -84,22 +97,38 @@ function timestamp(value: unknown, fallback: string): string {
 }
 
 function countryCodes(value: unknown): string[] {
-  return [...new Set(strings(value, 250).map((item) => item.toUpperCase()).filter((item) => /^[A-Z]{2}$/.test(item)))];
+  return [
+    ...new Set(
+      strings(value, 250)
+        .map((item) => item.toUpperCase())
+        .filter((item) => /^[A-Z]{2}$/.test(item)),
+    ),
+  ];
 }
 
 function romeCodes(value: unknown): string[] {
-  return [...new Set(strings(value, 32).map((item) => item.toUpperCase()).filter((item) => /^[A-Z]\d{4}$/.test(item)))];
+  return [
+    ...new Set(
+      strings(value, 32)
+        .map((item) => item.toUpperCase())
+        .filter((item) => /^[A-Z]\d{4}$/.test(item)),
+    ),
+  ];
 }
 
 function workModes(value: unknown): Array<"onsite" | "hybrid" | "remote"> {
   const modes = normalizedTokens(value, 3);
   if (modes.includes("any")) return ["onsite", "hybrid", "remote"];
-  return [...new Set(modes.flatMap((mode) => {
-    if (["remote", "full remote", "teletravail"].includes(mode)) return ["remote" as const];
-    if (["hybrid", "hybride"].includes(mode)) return ["hybrid" as const];
-    if (["onsite", "on site", "sur site"].includes(mode)) return ["onsite" as const];
-    return [];
-  }))].sort();
+  return [
+    ...new Set(
+      modes.flatMap((mode) => {
+        if (["remote", "full remote", "teletravail"].includes(mode)) return ["remote" as const];
+        if (["hybrid", "hybride"].includes(mode)) return ["hybrid" as const];
+        if (["onsite", "on site", "sur site"].includes(mode)) return ["onsite" as const];
+        return [];
+      }),
+    ),
+  ].sort();
 }
 
 function radiusValue(value: unknown): number | null {
@@ -112,17 +141,23 @@ function radiusValue(value: unknown): number | null {
 function roleFamilies(explicit: unknown, targetRoles: unknown): string[] {
   const provided = identifierTokens(explicit, 32);
   if (provided.length > 0) return provided;
-  return [...new Set(normalizedTokens(targetRoles, 32).flatMap((role) => {
-    if (/security|securite|cyber/.test(role)) return ["security-engineering"];
-    if (/data|donnee/.test(role)) return ["data-engineering"];
-    if (/product|produit/.test(role)) return ["product-management"];
-    if (/developer|developpeur|engineer|ingenieur|full stack|backend|frontend|software/.test(role)) {
-      return ["software-engineering"];
-    }
-    if (/marketing|growth|communication/.test(role)) return ["marketing"];
-    if (/sales|commercial|vente/.test(role)) return ["sales"];
-    return [];
-  }))].sort();
+  return [
+    ...new Set(
+      normalizedTokens(targetRoles, 32).flatMap((role) => {
+        if (/security|securite|cyber/.test(role)) return ["security-engineering"];
+        if (/data|donnee/.test(role)) return ["data-engineering"];
+        if (/product|produit/.test(role)) return ["product-management"];
+        if (
+          /developer|developpeur|engineer|ingenieur|full stack|backend|frontend|software/.test(role)
+        ) {
+          return ["software-engineering"];
+        }
+        if (/marketing|growth|communication/.test(role)) return ["marketing"];
+        if (/sales|commercial|vente/.test(role)) return ["sales"];
+        return [];
+      }),
+    ),
+  ].sort();
 }
 
 function consentPaused(user: Record<string, unknown>): boolean {
@@ -207,21 +242,29 @@ export function normalizeCandidateProfile(input: {
   const allTargetRoles = [targetRole, ...targetRoles];
   const latitude = numberValue(first(location.latitude, location.lat));
   const longitude = numberValue(first(location.longitude, location.lng, location.lon));
-  const countries = countryCodes(first(profile.country_codes, location.country_code, location.countryCode));
+  const countries = countryCodes(
+    first(profile.country_codes, location.country_code, location.countryCode),
+  );
   const explicitCoordinates = latitude !== null && longitude !== null;
-  const radius = radiusValue(first(
-    profile.radius_km,
-    profile.search_radius_km,
-    profile.search_radius,
-    onboarding.search_radius,
-    location.radius_km,
-  ));
+  const radius = radiusValue(
+    first(
+      profile.radius_km,
+      profile.search_radius_km,
+      profile.search_radius,
+      onboarding.search_radius,
+      location.radius_km,
+    ),
+  );
   const contractTypes = identifierTokens(
     first(profile.contract_types, profile.contract_type, onboarding.contract_type),
     16,
   ).map((value) => ({ cdi: "permanent", cdd: "fixed term", stage: "internship" })[value] ?? value);
-  const modes = workModes(first(profile.work_modes, profile.remote_preference, onboarding.remote_preference));
-  const salaryFloor = numberValue(first(profile.salary_floor, profile.salary_min, onboarding.salary_min));
+  const modes = workModes(
+    first(profile.work_modes, profile.remote_preference, onboarding.remote_preference),
+  );
+  const salaryFloor = numberValue(
+    first(profile.salary_floor, profile.salary_min, onboarding.salary_min),
+  );
   const currency = text(first(profile.currency, onboarding.currency))?.toUpperCase() ?? null;
 
   return candidateSearchProfileSchema.parse({
@@ -231,22 +274,28 @@ export function normalizeCandidateProfile(input: {
     status: "active",
     targetRoleLabelNormalized: normalizedToken(targetRole),
     targetRoleLabelsNormalized: normalizedTokens(allTargetRoles, 32),
-    roleFamilyIds: roleFamilies(first(profile.role_family_ids, profile.role_family_codes), allTargetRoles),
-    sectorIds: identifierTokens(first(
-      profile.sector_ids,
-      profile.sectors,
-      onboarding.sector_ids,
-      onboarding.sectors,
-    ), 32),
-    industryIds: identifierTokens(first(
-      profile.industry_ids,
-      profile.industries,
-      profile.industry,
-      onboarding.industry_ids,
-      onboarding.industries,
-      onboarding.industry,
-    ), 32),
-    romeCodes: romeCodes(first(profile.rome_codes, profile.rome_code, record(profile.rome_profile).rome_code)),
+    roleFamilyIds: roleFamilies(
+      first(profile.role_family_ids, profile.role_family_codes),
+      allTargetRoles,
+    ),
+    sectorIds: identifierTokens(
+      first(profile.sector_ids, profile.sectors, onboarding.sector_ids, onboarding.sectors),
+      32,
+    ),
+    industryIds: identifierTokens(
+      first(
+        profile.industry_ids,
+        profile.industries,
+        profile.industry,
+        onboarding.industry_ids,
+        onboarding.industries,
+        onboarding.industry,
+      ),
+      32,
+    ),
+    romeCodes: romeCodes(
+      first(profile.rome_codes, profile.rome_code, record(profile.rome_profile).rome_code),
+    ),
     skillIds: identifierTokens(profile.skill_ids, 128),
     skillTerms: normalizedTokens(profile.skills, 128),
     seniorityMin: integer(profile.seniority_min, 0, 20),
@@ -255,9 +304,14 @@ export function normalizeCandidateProfile(input: {
     workModes: modes,
     originLatitude: explicitCoordinates ? latitude : null,
     originLongitude: explicitCoordinates ? longitude : null,
-    radiusKm: explicitCoordinates && radius !== null && radius > 0 ? Math.min(radius, 20_000) : null,
+    radiusKm:
+      explicitCoordinates && radius !== null && radius > 0 ? Math.min(radius, 20_000) : null,
     countryCodes: countries,
-    locationPolicy: explicitCoordinates ? "explicit" : countries.length > 0 ? "country" : "worldwide",
+    locationPolicy: explicitCoordinates
+      ? "explicit"
+      : countries.length > 0
+        ? "country"
+        : "worldwide",
     salaryFloor: salaryFloor !== null && salaryFloor >= 0 ? salaryFloor : null,
     currency: currency && /^[A-Z]{3}$/.test(currency) ? currency : null,
     freshnessWindowDays: integer(first(profile.freshness_window_days, 30), 1, 365) ?? 30,
@@ -277,16 +331,18 @@ export function normalizeCandidateAction(input: {
 }): CandidateActionProjection {
   const source = sourceRecord(input.source);
   const direction = normalizedToken(source.direction);
-  const eventKind = input.event.eventFamily === "applications"
-    ? "applied"
-    : direction === "left"
-      ? "dismissed"
-      : direction === "right"
-        ? "applied"
-        : normalizedToken(first(source.kind, source.action_kind)) ?? "seen";
-  const kind = eventKind === "dismissed" || eventKind === "applied" || eventKind === "undo"
-    ? eventKind
-    : "seen";
+  const eventKind =
+    input.event.eventFamily === "applications"
+      ? "applied"
+      : direction === "left"
+        ? "dismissed"
+        : direction === "right"
+          ? "applied"
+          : (normalizedToken(first(source.kind, source.action_kind)) ?? "seen");
+  const kind =
+    eventKind === "dismissed" || eventKind === "applied" || eventKind === "undo"
+      ? eventKind
+      : "seen";
   const jobId = text(first(source.job_id, source.source_job_id));
   if (!jobId) throw new Error("candidate_action_missing_job_id");
   return candidateActionProjectionSchema.parse({

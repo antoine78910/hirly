@@ -7,7 +7,11 @@ export function queueTrainingCompletionFeedback(courseId) {
   sessionStorage.setItem(PENDING_KEY, String(courseId));
 }
 
-export function shouldShowTrainingCompletionFeedback(courseId, userId, { atFullProgress = false } = {}) {
+export function shouldShowTrainingCompletionFeedback(
+  courseId,
+  userId,
+  { atFullProgress = false } = {},
+) {
   if (typeof window === "undefined" || !courseId) return false;
 
   const params = new URLSearchParams(window.location.search);
@@ -20,7 +24,10 @@ export function shouldShowTrainingCompletionFeedback(courseId, userId, { atFullP
     return false;
   }
 
-  if (userId && sessionStorage.getItem(`${DISMISSED_SESSION_PREFIX}${userId}.${courseId}`) === "1") {
+  if (
+    userId &&
+    sessionStorage.getItem(`${DISMISSED_SESSION_PREFIX}${userId}.${courseId}`) === "1"
+  ) {
     return false;
   }
 

@@ -16,9 +16,7 @@ import { z } from "zod";
 export const fixtureProvenanceSchema = z
   .object({
     kind: z.literal("synthetic_sanitized"),
-    approvalRef: z.literal(
-      ".omx/plans/prd-nextjs-bun-foundation.md#phase-4",
-    ),
+    approvalRef: z.literal(".omx/plans/prd-nextjs-bun-foundation.md#phase-4"),
     containsPersonalData: z.literal(false),
   })
   .strict();
@@ -38,9 +36,7 @@ const fixtureJobFields = {
   sourceDocument: z.record(z.string(), z.unknown()).default({}),
 } as const;
 
-export function createFixtureJobSchema<ProviderName extends Provider>(
-  provider: ProviderName,
-) {
+export function createFixtureJobSchema<ProviderName extends Provider>(provider: ProviderName) {
   return z
     .object({
       provider: z.literal(provider),
@@ -63,9 +59,7 @@ export interface ProviderCore<RawJob> {
   transport: ProviderTransport<RawJob>;
 }
 
-export class DisabledProviderTransport<RawJob>
-  implements ProviderTransport<RawJob>
-{
+export class DisabledProviderTransport<RawJob> implements ProviderTransport<RawJob> {
   constructor(readonly provider: Provider) {}
 
   async fetch(
@@ -125,10 +119,7 @@ export function defineProviderCore<
           envelope: {
             provider: input.provider,
             externalId: parsed.externalId,
-            payload: JSON.parse(JSON.stringify(parsed)) as Record<
-              string,
-              unknown
-            >,
+            payload: JSON.parse(JSON.stringify(parsed)) as Record<string, unknown>,
           },
           title: parsed.title,
           company: parsed.company,

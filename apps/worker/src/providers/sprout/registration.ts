@@ -22,38 +22,33 @@ export const sproutFranceRegistrationSchema = z
   })
   .strict();
 
-export type SproutFranceRegistration = z.infer<
-  typeof sproutFranceRegistrationSchema
->;
+export type SproutFranceRegistration = z.infer<typeof sproutFranceRegistrationSchema>;
 
-export const SPROUT_FRANCE_DISABLED_REGISTRATION =
-  sproutFranceRegistrationSchema.parse({
-    provider: "sprout",
-    sourceKey: "sprout-france",
-    countryCodes: ["FR"],
-    accessType: "partner_feed",
-    authorizationStatus: "unverified",
-    writerRuntime: "none",
-    policyStatus: "pending",
-    requestsPerMinute: 20,
-    concurrency: 1,
-    enabled: false,
-    transportEnabled: false,
-    canaryEnabled: false,
-    incrementalEnabled: false,
-    backfillEnabled: false,
-    providerCountryKillSwitch: true,
-    sourceCountryKillSwitch: true,
-    approvedPageSize: null,
-  });
+export const SPROUT_FRANCE_DISABLED_REGISTRATION = sproutFranceRegistrationSchema.parse({
+  provider: "sprout",
+  sourceKey: "sprout-france",
+  countryCodes: ["FR"],
+  accessType: "partner_feed",
+  authorizationStatus: "unverified",
+  writerRuntime: "none",
+  policyStatus: "pending",
+  requestsPerMinute: 20,
+  concurrency: 1,
+  enabled: false,
+  transportEnabled: false,
+  canaryEnabled: false,
+  incrementalEnabled: false,
+  backfillEnabled: false,
+  providerCountryKillSwitch: true,
+  sourceCountryKillSwitch: true,
+  approvedPageSize: null,
+});
 
 export const sproutActivationSchema = sproutFranceRegistrationSchema.extend({
   policyEvidenceRef: z.string().trim().min(1).max(512).nullable(),
   redisplayAllowed: z.boolean(),
   fullTextRetentionAllowed: z.boolean(),
-  credentialRef: z
-    .string()
-    .regex(/^secret:\/\/[a-z0-9][a-z0-9/_-]{2,127}$/),
+  credentialRef: z.string().regex(/^secret:\/\/[a-z0-9][a-z0-9/_-]{2,127}$/),
   canaryEvidence: z
     .object({
       status: z.enum(["pending", "failed", "passed"]),
@@ -85,7 +80,9 @@ export const sproutTaskPayloadSchema = z
     sourceId: z.uuid(),
     mode: z.enum(["canary", "backfill", "incremental"]),
     maxResponseBytes: z.number().int().positive().max(50_000_000),
-    filterVariant: z.enum(["qualified_radius", "country_only", "global_unfiltered"]).default("qualified_radius"),
+    filterVariant: z
+      .enum(["qualified_radius", "country_only", "global_unfiltered"])
+      .default("qualified_radius"),
     // Retained only to accept already-enqueued tasks from the pre-lane
     // fallback implementation. Discovery lanes no longer use this counter
     // to change query semantics, so it must never block checkpoint recovery.
@@ -112,8 +109,8 @@ export function assertSproutActivationReady(
     mode === "canary"
       ? activation.canaryEnabled
       : mode === "backfill"
-      ? activation.backfillEnabled
-      : activation.incrementalEnabled;
+        ? activation.backfillEnabled
+        : activation.incrementalEnabled;
   if (
     activation.authorizationStatus !== "authorized" ||
     activation.writerRuntime !== "typescript" ||

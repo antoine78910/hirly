@@ -13,12 +13,7 @@ function parseArgs(argv: string[]): {
     const name = argv[index];
     const value = argv[index + 1];
     if (
-      ![
-        "--input",
-        "--policy-evidence",
-        "--sql-output",
-        "--manifest-output",
-      ].includes(name ?? "") ||
+      !["--input", "--policy-evidence", "--sql-output", "--manifest-output"].includes(name ?? "") ||
       !value ||
       value.startsWith("--") ||
       values.has(name!)
@@ -53,16 +48,15 @@ const result = provisionSourceTrial(
   JSON.parse(await readFile(resolve(args.policyEvidence), "utf8")),
 );
 await writeNew(args.sqlOutput, result.sql);
-await writeNew(
-  args.manifestOutput,
-  `${JSON.stringify(result.manifest, null, 2)}\n`,
+await writeNew(args.manifestOutput, `${JSON.stringify(result.manifest, null, 2)}\n`);
+console.log(
+  JSON.stringify({
+    status: "REVIEW_REQUIRED",
+    sqlOutput: args.sqlOutput,
+    manifestOutput: args.manifestOutput,
+    digest: result.digest,
+    canonicalWrites: false,
+    sourceActivationChanges: false,
+    databaseCalls: 0,
+  }),
 );
-console.log(JSON.stringify({
-  status: "REVIEW_REQUIRED",
-  sqlOutput: args.sqlOutput,
-  manifestOutput: args.manifestOutput,
-  digest: result.digest,
-  canonicalWrites: false,
-  sourceActivationChanges: false,
-  databaseCalls: 0,
-}));

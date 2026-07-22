@@ -1,9 +1,6 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { runBackfill } from "./runner";
-import {
-  parseLegacyAnalyticsRows,
-  type BackfillCheckpoint,
-} from "./transform";
+import { parseLegacyAnalyticsRows, type BackfillCheckpoint } from "./transform";
 
 function valueAfter(flag: string): string | null {
   const index = process.argv.indexOf(flag);
@@ -23,8 +20,7 @@ if (!inputPath || !manifestPath || !cutoff) {
 }
 if (
   execute &&
-  process.env.HIRLY_POSTHOG_BACKFILL_OPERATOR_ACK !==
-    "I_ACKNOWLEDGE_THIS_CAN_MUTATE_POSTHOG"
+  process.env.HIRLY_POSTHOG_BACKFILL_OPERATOR_ACK !== "I_ACKNOWLEDGE_THIS_CAN_MUTATE_POSTHOG"
 ) {
   throw new Error("execute mode requires explicit operator acknowledgement");
 }
@@ -34,9 +30,7 @@ if (execute) {
   );
 }
 
-const rows = parseLegacyAnalyticsRows(
-  JSON.parse(await readFile(inputPath, "utf8")) as unknown,
-);
+const rows = parseLegacyAnalyticsRows(JSON.parse(await readFile(inputPath, "utf8")) as unknown);
 const checkpoint = checkpointPath
   ? (JSON.parse(await readFile(checkpointPath, "utf8")) as BackfillCheckpoint)
   : null;

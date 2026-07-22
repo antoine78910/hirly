@@ -3,8 +3,18 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import {
-  MessageSquare, Flame, Trophy, Target, Sparkles, ChevronRight, Play,
-  Loader2, X, Send, CheckCircle2, ArrowRight,
+  MessageSquare,
+  Flame,
+  Trophy,
+  Target,
+  Sparkles,
+  ChevronRight,
+  Play,
+  Loader2,
+  X,
+  Send,
+  CheckCircle2,
+  ArrowRight,
 } from "lucide-react";
 import { api } from "../lib/api";
 import { Textarea } from "../components/ui/textarea";
@@ -22,7 +32,10 @@ const CAT_COLORS = {
 
 function StatCard({ icon: Icon, label, value, testid }) {
   return (
-    <div className="flex-1 rounded-2xl bg-sprout-surface border border-sprout-border p-4" data-testid={testid}>
+    <div
+      className="flex-1 rounded-2xl bg-sprout-surface border border-sprout-border p-4"
+      data-testid={testid}
+    >
       <div className="flex items-center gap-2 text-sprout-muted text-xs uppercase tracking-wider">
         <Icon className="w-3.5 h-3.5" /> {label}
       </div>
@@ -34,8 +47,13 @@ function StatCard({ icon: Icon, label, value, testid }) {
 function QuestionPill({ q }) {
   const color = CAT_COLORS[q.category] || "bg-sprout-mint-soft text-sprout-mint";
   return (
-    <div className="p-4 rounded-2xl border border-sprout-border bg-sprout-surface" data-testid="likely-question">
-      <span className={`inline-flex items-center text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-full ${color}`}>
+    <div
+      className="p-4 rounded-2xl border border-sprout-border bg-sprout-surface"
+      data-testid="likely-question"
+    >
+      <span
+        className={`inline-flex items-center text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-full ${color}`}
+      >
         {q.category}
       </span>
       <p className="mt-3 text-white font-semibold leading-snug">{q.q}</p>
@@ -54,7 +72,13 @@ function MockInterview({ open, questions, onClose, onFinished }) {
   const [scoring, setScoring] = useState(false);
 
   useEffect(() => {
-    if (open) { setStep(0); setAnswers([]); setDraft(""); setResult(null); setScoring(false); }
+    if (open) {
+      setStep(0);
+      setAnswers([]);
+      setDraft("");
+      setResult(null);
+      setScoring(false);
+    }
   }, [open]);
 
   if (!open) return null;
@@ -87,13 +111,20 @@ function MockInterview({ open, questions, onClose, onFinished }) {
   return (
     <AnimatePresence>
       <motion.div
-        initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
+        initial={{ y: "100%" }}
+        animate={{ y: 0 }}
+        exit={{ y: "100%" }}
         transition={{ type: "spring", stiffness: 320, damping: 32 }}
         className="sprout fixed inset-0 z-[80] bg-sprout-bg text-white flex flex-col"
         data-testid="mock-interview-sheet"
       >
         <header className="px-5 pt-6 pb-3 flex items-center gap-3 border-b border-sprout-border">
-          <button onClick={onClose} className="w-10 h-10 grid place-items-center rounded-full hover:bg-sprout-surface" data-testid="mock-close-btn" aria-label={t("common.back")}>
+          <button
+            onClick={onClose}
+            className="w-10 h-10 grid place-items-center rounded-full hover:bg-sprout-surface"
+            data-testid="mock-close-btn"
+            aria-label={t("common.back")}
+          >
             <X className="w-5 h-5 text-white" />
           </button>
           <h2 className="font-display font-bold text-xl flex-1">
@@ -110,11 +141,21 @@ function MockInterview({ open, questions, onClose, onFinished }) {
             {/* Progress */}
             <div className="flex gap-1.5 mb-6">
               {Array.from({ length: n }).map((_, i) => (
-                <div key={i} className={`flex-1 h-1.5 rounded-full ${i <= step ? "bg-sprout-mint" : "bg-sprout-surface-2"}`} />
+                <div
+                  key={i}
+                  className={`flex-1 h-1.5 rounded-full ${i <= step ? "bg-sprout-mint" : "bg-sprout-surface-2"}`}
+                />
               ))}
             </div>
-            <p className="text-[10px] font-bold tracking-[0.2em] uppercase text-sprout-mint">{t("interviews.interviewer")}</p>
-            <h3 className="mt-2 font-display font-black text-3xl leading-tight tracking-tight" data-testid="mock-question">{questions[step]}</h3>
+            <p className="text-[10px] font-bold tracking-[0.2em] uppercase text-sprout-mint">
+              {t("interviews.interviewer")}
+            </p>
+            <h3
+              className="mt-2 font-display font-black text-3xl leading-tight tracking-tight"
+              data-testid="mock-question"
+            >
+              {questions[step]}
+            </h3>
             <Textarea
               rows={8}
               value={draft}
@@ -123,7 +164,9 @@ function MockInterview({ open, questions, onClose, onFinished }) {
               className="mt-6 rounded-2xl bg-sprout-surface-2 border-sprout-border text-white placeholder:text-sprout-dim text-base"
               data-testid="mock-answer-input"
             />
-            <p className="mt-2 text-xs text-sprout-dim">{t("interviews.wordCount", { count: wordCount })}</p>
+            <p className="mt-2 text-xs text-sprout-dim">
+              {t("interviews.wordCount", { count: wordCount })}
+            </p>
           </div>
         )}
 
@@ -137,26 +180,55 @@ function MockInterview({ open, questions, onClose, onFinished }) {
         )}
 
         {onResult && (
-          <div className="flex-1 overflow-y-auto px-5 pb-44 pt-5 max-w-md mx-auto w-full" data-testid="mock-result">
+          <div
+            className="flex-1 overflow-y-auto px-5 pb-44 pt-5 max-w-md mx-auto w-full"
+            data-testid="mock-result"
+          >
             <div className="rounded-3xl p-6 bg-swiipr-gradient text-white">
-              <p className="text-xs uppercase tracking-widest text-white/80">{t("interviews.overall")}</p>
-              <p className="font-display font-black text-6xl mt-1" data-testid="mock-overall">{result.overall}</p>
+              <p className="text-xs uppercase tracking-widest text-white/80">
+                {t("interviews.overall")}
+              </p>
+              <p className="font-display font-black text-6xl mt-1" data-testid="mock-overall">
+                {result.overall}
+              </p>
               <p className="mt-1 font-semibold">{result.headline}</p>
             </div>
 
             <div className="mt-5 grid grid-cols-3 gap-2">
-              <StatCard icon={Target} label={t("interviews.confidence")} value={result.confidence} testid="mock-confidence" />
-              <StatCard icon={MessageSquare} label={t("interviews.communication")} value={result.communication} testid="mock-communication" />
-              <StatCard icon={Sparkles} label={t("interviews.technical")} value={result.technical} testid="mock-technical" />
+              <StatCard
+                icon={Target}
+                label={t("interviews.confidence")}
+                value={result.confidence}
+                testid="mock-confidence"
+              />
+              <StatCard
+                icon={MessageSquare}
+                label={t("interviews.communication")}
+                value={result.communication}
+                testid="mock-communication"
+              />
+              <StatCard
+                icon={Sparkles}
+                label={t("interviews.technical")}
+                value={result.technical}
+                testid="mock-technical"
+              />
             </div>
 
             {result.strengths?.length > 0 && (
               <section className="mt-6">
-                <h3 className="text-[10px] font-bold uppercase tracking-[0.2em] text-sprout-mint mb-3">{t("interviews.strengths")}</h3>
+                <h3 className="text-[10px] font-bold uppercase tracking-[0.2em] text-sprout-mint mb-3">
+                  {t("interviews.strengths")}
+                </h3>
                 <ul className="space-y-2">
                   {result.strengths.map((s, i) => (
-                    <li key={i} className="flex gap-3 items-start text-zinc-200 text-[15px]" data-testid={`mock-strength-${i}`}>
-                      <CheckCircle2 className="w-4 h-4 text-sprout-mint mt-1 shrink-0" />{s}
+                    <li
+                      key={i}
+                      className="flex gap-3 items-start text-zinc-200 text-[15px]"
+                      data-testid={`mock-strength-${i}`}
+                    >
+                      <CheckCircle2 className="w-4 h-4 text-sprout-mint mt-1 shrink-0" />
+                      {s}
                     </li>
                   ))}
                 </ul>
@@ -165,11 +237,18 @@ function MockInterview({ open, questions, onClose, onFinished }) {
 
             {result.improvements?.length > 0 && (
               <section className="mt-6">
-                <h3 className="text-[10px] font-bold uppercase tracking-[0.2em] text-rose-400 mb-3">{t("interviews.improvements")}</h3>
+                <h3 className="text-[10px] font-bold uppercase tracking-[0.2em] text-rose-400 mb-3">
+                  {t("interviews.improvements")}
+                </h3>
                 <ul className="space-y-2">
                   {result.improvements.map((s, i) => (
-                    <li key={i} className="flex gap-3 items-start text-zinc-200 text-[15px]" data-testid={`mock-improvement-${i}`}>
-                      <ArrowRight className="w-4 h-4 text-rose-400 mt-1 shrink-0" />{s}
+                    <li
+                      key={i}
+                      className="flex gap-3 items-start text-zinc-200 text-[15px]"
+                      data-testid={`mock-improvement-${i}`}
+                    >
+                      <ArrowRight className="w-4 h-4 text-rose-400 mt-1 shrink-0" />
+                      {s}
                     </li>
                   ))}
                 </ul>
@@ -221,7 +300,8 @@ export default function Interviews() {
   const [open, setOpen] = useState(false);
 
   const load = async (refresh = false) => {
-    if (refresh) setRefreshing(true); else setLoading(true);
+    if (refresh) setRefreshing(true);
+    else setLoading(true);
     try {
       const [prep, st] = await Promise.all([
         api.get(`/coach/interview${refresh ? "?refresh=true" : ""}`),
@@ -238,7 +318,9 @@ export default function Interviews() {
     }
   };
 
-  useEffect(() => { load(false); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
+  useEffect(() => {
+    load(false); /* eslint-disable-next-line react-hooks/exhaustive-deps */
+  }, []);
 
   if (loading) {
     return (
@@ -250,10 +332,15 @@ export default function Interviews() {
 
   return (
     <AppPage className="sprout bg-sprout-bg text-white md:bg-transparent md:py-8 dark:md:text-zinc-100">
-      <header className="mx-auto flex w-full max-w-md shrink-0 items-center justify-between px-5 pt-6 md:hidden" data-testid="interviews-header">
+      <header
+        className="mx-auto flex w-full max-w-md shrink-0 items-center justify-between px-5 pt-6 md:hidden"
+        data-testid="interviews-header"
+      >
         <div className="flex items-center gap-2">
           <MessageSquare className="w-6 h-6 text-white" strokeWidth={2} />
-          <h1 className="font-display font-bold text-3xl tracking-tight">{t("interviews.title")}</h1>
+          <h1 className="font-display font-bold text-3xl tracking-tight">
+            {t("interviews.title")}
+          </h1>
         </div>
         <button
           onClick={() => load(true)}
@@ -266,72 +353,99 @@ export default function Interviews() {
       </header>
 
       <AppPageScroll className={APP_CONTENT_WIDTH}>
-      <DesktopPageHeader
-        title={t("interviews.title")}
-        subtitle={t("interviews.subtitle")}
-        actions={(
-          <button
-            type="button"
-            onClick={() => load(true)}
-            disabled={refreshing}
-            className="rounded-xl border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold text-violet-600 hover:bg-violet-50 disabled:opacity-50"
-          >
-            {refreshing ? t("interviews.refreshing") : t("interviews.refresh")}
-          </button>
+        <DesktopPageHeader
+          title={t("interviews.title")}
+          subtitle={t("interviews.subtitle")}
+          actions={
+            <button
+              type="button"
+              onClick={() => load(true)}
+              disabled={refreshing}
+              className="rounded-xl border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold text-violet-600 hover:bg-violet-50 disabled:opacity-50"
+            >
+              {refreshing ? t("interviews.refreshing") : t("interviews.refresh")}
+            </button>
+          }
+        />
+        <p className="mt-1 text-sm text-sprout-muted md:hidden">{t("interviews.subtitle")}</p>
+
+        {/* Streak strip */}
+        <div className="mt-5 flex gap-3" data-testid="interviews-streak">
+          <StatCard
+            icon={Flame}
+            label={t("interviews.streak")}
+            value={`${streak.streak}d`}
+            testid="streak-days"
+          />
+          <StatCard
+            icon={Target}
+            label={t("interviews.thisWeek")}
+            value={streak.sessions_week}
+            testid="streak-week"
+          />
+          <StatCard
+            icon={Trophy}
+            label={t("interviews.bestScore")}
+            value={streak.best || "—"}
+            testid="streak-best"
+          />
+        </div>
+
+        {/* Start mock card */}
+        <button
+          onClick={() => setOpen(true)}
+          className="mt-6 w-full text-left rounded-3xl p-6 bg-swiipr-gradient relative overflow-hidden"
+          data-testid="start-mock-btn"
+        >
+          <Sparkles className="absolute -right-4 -top-4 w-32 h-32 text-white/10" />
+          <p className="text-xs uppercase tracking-widest text-white/80 font-bold">
+            {t("interviews.mockTitle")}
+          </p>
+          <h2 className="mt-1 font-display font-black text-2xl leading-tight text-white">
+            {t("interviews.mockCta")}
+          </h2>
+          <p className="mt-2 text-white/85 text-sm">{t("interviews.mockDesc")}</p>
+          <span className="mt-4 inline-flex items-center gap-1 font-semibold text-white">
+            <Play className="w-4 h-4" fill="white" /> {t("interviews.startNow")}
+          </span>
+        </button>
+
+        {/* Tips */}
+        {data?.tips?.length > 0 && (
+          <section className="mt-7" data-testid="interview-tips">
+            <h3 className="text-xs uppercase tracking-[0.16em] text-sprout-muted px-1 mb-3">
+              {t("interviews.coachTips")}
+            </h3>
+            <ul className="space-y-2">
+              {data.tips.map((tip, i) => (
+                <li
+                  key={i}
+                  className="flex gap-3 items-start p-3 rounded-xl bg-sprout-surface border border-sprout-border"
+                >
+                  <Sparkles className="w-4 h-4 text-sprout-mint mt-0.5 shrink-0" />
+                  <span className="text-zinc-200 text-[15px] leading-snug">{tip}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
         )}
-      />
-      <p className="mt-1 text-sm text-sprout-muted md:hidden">{t("interviews.subtitle")}</p>
 
-      {/* Streak strip */}
-      <div className="mt-5 flex gap-3" data-testid="interviews-streak">
-        <StatCard icon={Flame}  label={t("interviews.streak")}      value={`${streak.streak}d`}        testid="streak-days" />
-        <StatCard icon={Target} label={t("interviews.thisWeek")}   value={streak.sessions_week}      testid="streak-week" />
-        <StatCard icon={Trophy} label={t("interviews.bestScore")}  value={streak.best || "—"}        testid="streak-best" />
-      </div>
-
-      {/* Start mock card */}
-      <button
-        onClick={() => setOpen(true)}
-        className="mt-6 w-full text-left rounded-3xl p-6 bg-swiipr-gradient relative overflow-hidden"
-        data-testid="start-mock-btn"
-      >
-        <Sparkles className="absolute -right-4 -top-4 w-32 h-32 text-white/10" />
-        <p className="text-xs uppercase tracking-widest text-white/80 font-bold">{t("interviews.mockTitle")}</p>
-        <h2 className="mt-1 font-display font-black text-2xl leading-tight text-white">{t("interviews.mockCta")}</h2>
-        <p className="mt-2 text-white/85 text-sm">{t("interviews.mockDesc")}</p>
-        <span className="mt-4 inline-flex items-center gap-1 font-semibold text-white">
-          <Play className="w-4 h-4" fill="white" /> {t("interviews.startNow")}
-        </span>
-      </button>
-
-      {/* Tips */}
-      {data?.tips?.length > 0 && (
-        <section className="mt-7" data-testid="interview-tips">
-          <h3 className="text-xs uppercase tracking-[0.16em] text-sprout-muted px-1 mb-3">{t("interviews.coachTips")}</h3>
-          <ul className="space-y-2">
-            {data.tips.map((tip, i) => (
-              <li key={i} className="flex gap-3 items-start p-3 rounded-xl bg-sprout-surface border border-sprout-border">
-                <Sparkles className="w-4 h-4 text-sprout-mint mt-0.5 shrink-0" />
-                <span className="text-zinc-200 text-[15px] leading-snug">{tip}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      {/* Likely questions */}
-      {data?.likely_questions?.length > 0 && (
-        <section className="mt-7" data-testid="likely-questions">
-          <div className="flex items-center justify-between px-1 mb-3">
-            <h3 className="text-xs uppercase tracking-[0.16em] text-sprout-muted">{t("interviews.likelyQuestions")}</h3>
-            <span className="text-xs text-sprout-dim">{data.likely_questions.length}</span>
-          </div>
-          <div className="space-y-3">
-            {data.likely_questions.map((q, i) => <QuestionPill key={i} q={q} />)}
-          </div>
-        </section>
-      )}
-
+        {/* Likely questions */}
+        {data?.likely_questions?.length > 0 && (
+          <section className="mt-7" data-testid="likely-questions">
+            <div className="flex items-center justify-between px-1 mb-3">
+              <h3 className="text-xs uppercase tracking-[0.16em] text-sprout-muted">
+                {t("interviews.likelyQuestions")}
+              </h3>
+              <span className="text-xs text-sprout-dim">{data.likely_questions.length}</span>
+            </div>
+            <div className="space-y-3">
+              {data.likely_questions.map((q, i) => (
+                <QuestionPill key={i} q={q} />
+              ))}
+            </div>
+          </section>
+        )}
       </AppPageScroll>
 
       <MockInterview

@@ -9,7 +9,12 @@ import ModuleGalleryCard from "../components/training/ModuleGalleryCard";
 import TrainingFaq from "../components/training/TrainingFaq";
 import TrainingCompletionFeedbackModal from "../components/training/TrainingCompletionFeedbackModal";
 import TrainingWelcomeModal from "../components/training/TrainingWelcomeModal";
-import { fetchTrainingCatalog, fetchTrainingCourseDetail, syncLocalTrainingProgress, tryEnrollCourse } from "../lib/trainingData";
+import {
+  fetchTrainingCatalog,
+  fetchTrainingCourseDetail,
+  syncLocalTrainingProgress,
+  tryEnrollCourse,
+} from "../lib/trainingData";
 import { TRAINING_COURSE_ID } from "../lib/demoTrainingData";
 import { areAllScoredModulesComplete, courseProgressFraction } from "../lib/trainingProgress";
 import {
@@ -18,10 +23,7 @@ import {
   shouldShowTrainingCompletionFeedback,
 } from "../lib/trainingCompletionFeedback";
 import { dismissTrainingWelcome, shouldOpenTrainingWelcome } from "../lib/trainingWelcome";
-import {
-  parseTrainingLocale,
-  trainingModulePath,
-} from "../lib/trainingRoutes";
+import { parseTrainingLocale, trainingModulePath } from "../lib/trainingRoutes";
 
 export default function Training() {
   useTrainingPageMode();
@@ -64,7 +66,9 @@ export default function Training() {
     }
   }, [lang, setIsTrainingCreator, t]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
   useEffect(() => {
     if (!user?.user_id || loading) return;
@@ -98,12 +102,17 @@ export default function Training() {
 
   useEffect(() => {
     if (!user?.user_id || loading) return;
-    const forcePreview = new URLSearchParams(window.location.search).get("trainingFeedback") === "1"
-      || new URLSearchParams(window.location.search).get("trainingComplete") === "1";
+    const forcePreview =
+      new URLSearchParams(window.location.search).get("trainingFeedback") === "1" ||
+      new URLSearchParams(window.location.search).get("trainingComplete") === "1";
     const atFullProgress = progressPct >= 100 || scoredComplete;
     if (!forcePreview && !atFullProgress) return;
     if (atFullProgress) queueTrainingCompletionFeedback(courseId);
-    if (shouldShowTrainingCompletionFeedback(courseId, user.user_id, { atFullProgress: forcePreview || atFullProgress })) {
+    if (
+      shouldShowTrainingCompletionFeedback(courseId, user.user_id, {
+        atFullProgress: forcePreview || atFullProgress,
+      })
+    ) {
       setFeedbackOpen(true);
     }
   }, [user?.user_id, loading, progressPct, scoredComplete, courseId]);
@@ -177,7 +186,9 @@ export default function Training() {
                   size="hub"
                   onSelect={() => {
                     const firstSection = mod.sections?.[0]?.section_id;
-                    navigate(trainingModulePath(routeLocale, courseId, mod.module_id, firstSection));
+                    navigate(
+                      trainingModulePath(routeLocale, courseId, mod.module_id, firstSection),
+                    );
                   }}
                   t={t}
                 />

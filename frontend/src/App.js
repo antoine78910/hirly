@@ -75,7 +75,7 @@ import { isTrainingRoute } from "@/lib/trainingRoutes";
 import { needsOAuthCallbackRedirect } from "@/lib/oauthCallback";
 import PostHogLifecycle from "@/components/analytics/PostHogLifecycle";
 
-import PasswordReset from '@/pages/PasswordReset';
+import PasswordReset from "@/pages/PasswordReset";
 
 function AppRoute({ children, requireProfile = false }) {
   if (devBypassAuth) return children;
@@ -99,13 +99,24 @@ function isTrainingRoutePath(pathname) {
 }
 
 function shouldShowBottomNav(pathname) {
-  if (pathname === '/reset-password') return false;
+  if (pathname === "/reset-password") return false;
   if (pathname === "/" || pathname === "/auth/callback") return false;
   if (LANDING_CONTRACT_PATH_SLUGS.some((slug) => pathname === `/${slug}`)) return false;
   if (pathname === "/signup" || pathname === "/signin") return false;
   if (pathname.startsWith("/invite/")) return false;
-  if (pathname === "/how-it-works" || pathname === "/use-cases" || pathname === "/creators" || pathname === "/creators/apply") return false;
-  if (pathname.startsWith("/blog") || pathname.startsWith("/compare") || pathname.startsWith("/for/")) return false;
+  if (
+    pathname === "/how-it-works" ||
+    pathname === "/use-cases" ||
+    pathname === "/creators" ||
+    pathname === "/creators/apply"
+  )
+    return false;
+  if (
+    pathname.startsWith("/blog") ||
+    pathname.startsWith("/compare") ||
+    pathname.startsWith("/for/")
+  )
+    return false;
   if (pathname === "/admin" || pathname.startsWith("/admin/")) return false;
   if (pathname === "/onboarding" || pathname.startsWith("/onboarding/")) return false;
   if (pathname === "/terms" || pathname === "/privacy") return false;
@@ -149,12 +160,7 @@ function AppRouter() {
   const showBottomNav = shouldShowBottomNav(location.pathname);
 
   if (needsOAuthCallbackRedirect(location)) {
-    return (
-      <Navigate
-        to={`/auth/callback${location.search}${location.hash}`}
-        replace
-      />
-    );
+    return <Navigate to={`/auth/callback${location.search}${location.hash}`} replace />;
   }
 
   if (location.pathname.length > 1 && location.pathname.endsWith("/")) {
@@ -170,7 +176,7 @@ function AppRouter() {
     <DomainRouter>
       <ScrollManager />
       <Routes>
-        <Route path='/reset-password' element={<PasswordReset />} />
+        <Route path="/reset-password" element={<PasswordReset />} />
         <Route path="/en" element={<Navigate to="/" replace />} />
         <Route path="/" element={<Landing />} />
         {LANDING_CONTRACT_PATH_SLUGS.map((slug) => (
@@ -190,57 +196,309 @@ function AppRouter() {
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/auth/callback" element={<AuthCallback />} />
         <Route path="/invite/:code" element={<InviteLanding />} />
-        <Route path="/admin" element={<AdminPage><Navigate to="/admin/overview" replace /></AdminPage>} />
-        <Route path="/admin/overview" element={<AdminPage><AdminOverview /></AdminPage>} />
-        <Route path="/admin/jobs" element={<AdminPage><AdminJobs /></AdminPage>} />
-        <Route path="/admin/applications" element={<AdminPage><AdminApplications /></AdminPage>} />
-        <Route path="/admin/applications/:id" element={<AdminPage><AdminApplicationDetail /></AdminPage>} />
-        <Route path="/admin/users" element={<AdminPage><AdminUsers /></AdminPage>} />
-        <Route path="/admin/user-analytics" element={<AdminPage><AdminUserAnalytics /></AdminPage>} />
-        <Route path="/admin/users/:userId" element={<AdminPage><AdminUserDetail /></AdminPage>} />
-        <Route path="/admin/influencers" element={<AdminPage><AdminInfluencers /></AdminPage>} />
-        <Route path="/admin/creators" element={<AdminPage><AdminCreators /></AdminPage>} />
-        <Route path="/admin/training" element={<AdminPage><AdminTraining /></AdminPage>} />
-        <Route path="/admin/features" element={<AdminPage><AdminFeatures /></AdminPage>} />
-        <Route path="/admin/ats-lab" element={<AdminPage><AdminAtsLab /></AdminPage>} />
-        <Route path="/admin/auto-apply-lab" element={<AdminPage><AdminAutoApplyLab /></AdminPage>} />
+        <Route
+          path="/admin"
+          element={
+            <AdminPage>
+              <Navigate to="/admin/overview" replace />
+            </AdminPage>
+          }
+        />
+        <Route
+          path="/admin/overview"
+          element={
+            <AdminPage>
+              <AdminOverview />
+            </AdminPage>
+          }
+        />
+        <Route
+          path="/admin/jobs"
+          element={
+            <AdminPage>
+              <AdminJobs />
+            </AdminPage>
+          }
+        />
+        <Route
+          path="/admin/applications"
+          element={
+            <AdminPage>
+              <AdminApplications />
+            </AdminPage>
+          }
+        />
+        <Route
+          path="/admin/applications/:id"
+          element={
+            <AdminPage>
+              <AdminApplicationDetail />
+            </AdminPage>
+          }
+        />
+        <Route
+          path="/admin/users"
+          element={
+            <AdminPage>
+              <AdminUsers />
+            </AdminPage>
+          }
+        />
+        <Route
+          path="/admin/user-analytics"
+          element={
+            <AdminPage>
+              <AdminUserAnalytics />
+            </AdminPage>
+          }
+        />
+        <Route
+          path="/admin/users/:userId"
+          element={
+            <AdminPage>
+              <AdminUserDetail />
+            </AdminPage>
+          }
+        />
+        <Route
+          path="/admin/influencers"
+          element={
+            <AdminPage>
+              <AdminInfluencers />
+            </AdminPage>
+          }
+        />
+        <Route
+          path="/admin/creators"
+          element={
+            <AdminPage>
+              <AdminCreators />
+            </AdminPage>
+          }
+        />
+        <Route
+          path="/admin/training"
+          element={
+            <AdminPage>
+              <AdminTraining />
+            </AdminPage>
+          }
+        />
+        <Route
+          path="/admin/features"
+          element={
+            <AdminPage>
+              <AdminFeatures />
+            </AdminPage>
+          }
+        />
+        <Route
+          path="/admin/ats-lab"
+          element={
+            <AdminPage>
+              <AdminAtsLab />
+            </AdminPage>
+          }
+        />
+        <Route
+          path="/admin/auto-apply-lab"
+          element={
+            <AdminPage>
+              <AdminAutoApplyLab />
+            </AdminPage>
+          }
+        />
         <Route
           path="/admin/analytics"
-          element={(
+          element={
             <AdminPage>
               <AdminAnalyticsBoundary>
                 <AdminAnalytics />
               </AdminAnalyticsBoundary>
             </AdminPage>
-          )}
+          }
         />
         <Route path="/onboarding" element={<Onboarding />} />
         <Route element={<AppLayout />}>
-        <Route path="/app" element={<AppRoute requireProfile><Swipe /></AppRoute>} />
-        <Route path="/swipe" element={<AppRoute requireProfile><Swipe /></AppRoute>} />
-        <Route path="/review" element={<AppRoute requireProfile><Review /></AppRoute>} />
-        <Route path="/review/:applicationId/:docType" element={<AppRoute requireProfile><ReviewApplicationDetail /></AppRoute>} />
-        <Route path="/review/:applicationId" element={<AppRoute requireProfile><ReviewApplicationDetail /></AppRoute>} />
-        <Route path="/feedback" element={<AppRoute><Feedback /></AppRoute>} />
-        <Route path="/interviews" element={<AppRoute requireProfile><Interviews /></AppRoute>} />
-        <Route path="/improve" element={<AppRoute requireProfile><Improve /></AppRoute>} />
-        <Route path="/people" element={<AppRoute requireProfile><People /></AppRoute>} />
-        <Route path="/tracker" element={<AppRoute requireProfile><Tracker /></AppRoute>} />
-        <Route path="/emails" element={<AppRoute requireProfile><Emails /></AppRoute>} />
-        <Route path="/profile" element={<AppRoute><Profile /></AppRoute>} />
-        <Route path="/credits" element={<CreditsRedirect />} />
-        <Route path="/billing" element={<AppRoute><Billing /></AppRoute>} />
-        <Route path="/referral" element={<AppRoute><Referral /></AppRoute>} />
-        <Route path="/settings" element={<AppRoute><Settings /></AppRoute>} />
-        <Route path="/history" element={<AppRoute requireProfile><History /></AppRoute>} />
+          <Route
+            path="/app"
+            element={
+              <AppRoute requireProfile>
+                <Swipe />
+              </AppRoute>
+            }
+          />
+          <Route
+            path="/swipe"
+            element={
+              <AppRoute requireProfile>
+                <Swipe />
+              </AppRoute>
+            }
+          />
+          <Route
+            path="/review"
+            element={
+              <AppRoute requireProfile>
+                <Review />
+              </AppRoute>
+            }
+          />
+          <Route
+            path="/review/:applicationId/:docType"
+            element={
+              <AppRoute requireProfile>
+                <ReviewApplicationDetail />
+              </AppRoute>
+            }
+          />
+          <Route
+            path="/review/:applicationId"
+            element={
+              <AppRoute requireProfile>
+                <ReviewApplicationDetail />
+              </AppRoute>
+            }
+          />
+          <Route
+            path="/feedback"
+            element={
+              <AppRoute>
+                <Feedback />
+              </AppRoute>
+            }
+          />
+          <Route
+            path="/interviews"
+            element={
+              <AppRoute requireProfile>
+                <Interviews />
+              </AppRoute>
+            }
+          />
+          <Route
+            path="/improve"
+            element={
+              <AppRoute requireProfile>
+                <Improve />
+              </AppRoute>
+            }
+          />
+          <Route
+            path="/people"
+            element={
+              <AppRoute requireProfile>
+                <People />
+              </AppRoute>
+            }
+          />
+          <Route
+            path="/tracker"
+            element={
+              <AppRoute requireProfile>
+                <Tracker />
+              </AppRoute>
+            }
+          />
+          <Route
+            path="/emails"
+            element={
+              <AppRoute requireProfile>
+                <Emails />
+              </AppRoute>
+            }
+          />
+          <Route
+            path="/profile"
+            element={
+              <AppRoute>
+                <Profile />
+              </AppRoute>
+            }
+          />
+          <Route path="/credits" element={<CreditsRedirect />} />
+          <Route
+            path="/billing"
+            element={
+              <AppRoute>
+                <Billing />
+              </AppRoute>
+            }
+          />
+          <Route
+            path="/referral"
+            element={
+              <AppRoute>
+                <Referral />
+              </AppRoute>
+            }
+          />
+          <Route
+            path="/settings"
+            element={
+              <AppRoute>
+                <Settings />
+              </AppRoute>
+            }
+          />
+          <Route
+            path="/history"
+            element={
+              <AppRoute requireProfile>
+                <History />
+              </AppRoute>
+            }
+          />
         </Route>
-        <Route path="/record-tools" element={<AppRoute><RecordTools /></AppRoute>} />
-        <Route path="/training" element={<TrainingRoute><Training /></TrainingRoute>} />
+        <Route
+          path="/record-tools"
+          element={
+            <AppRoute>
+              <RecordTools />
+            </AppRoute>
+          }
+        />
+        <Route
+          path="/training"
+          element={
+            <TrainingRoute>
+              <Training />
+            </TrainingRoute>
+          }
+        />
         <Route path="/training/creator" element={<TrainingLegacyRedirect />} />
-        <Route path="/training/:courseId" element={<TrainingRoute><TrainingCourse /></TrainingRoute>} />
-        <Route path="/:locale/training" element={<TrainingRoute localized><Training /></TrainingRoute>} />
-        <Route path="/:locale/training/creator" element={<TrainingRoute localized><TrainingCreator /></TrainingRoute>} />
-        <Route path="/:locale/training/:courseId" element={<TrainingRoute localized><TrainingCourse /></TrainingRoute>} />
+        <Route
+          path="/training/:courseId"
+          element={
+            <TrainingRoute>
+              <TrainingCourse />
+            </TrainingRoute>
+          }
+        />
+        <Route
+          path="/:locale/training"
+          element={
+            <TrainingRoute localized>
+              <Training />
+            </TrainingRoute>
+          }
+        />
+        <Route
+          path="/:locale/training/creator"
+          element={
+            <TrainingRoute localized>
+              <TrainingCreator />
+            </TrainingRoute>
+          }
+        />
+        <Route
+          path="/:locale/training/:courseId"
+          element={
+            <TrainingRoute localized>
+              <TrainingCourse />
+            </TrainingRoute>
+          }
+        />
       </Routes>
       {showBottomNav ? <BottomNav /> : null}
     </DomainRouter>
@@ -257,9 +515,9 @@ function App() {
             <AppLocaleProvider>
               <FrontendVersionChecker />
               <MobileThemeProvider>
-              <AppErrorBoundary>
-                <AppRouter />
-              </AppErrorBoundary>
+                <AppErrorBoundary>
+                  <AppRouter />
+                </AppErrorBoundary>
               </MobileThemeProvider>
             </AppLocaleProvider>
             <AdminToaster />

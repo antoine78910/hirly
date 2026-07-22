@@ -82,14 +82,19 @@ export default function ProfileResumeSection({ profile, onUploadResume, showAiFo
     <ProfileFormSection
       title={t("profile.documents.resumeTitle")}
       description={t("profile.documents.resumeSectionDesc")}
-      footer={showAiFooter ? (
-        <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-xs leading-relaxed shell-body">
-            {t("profile.documents.configureAiSettingsHint")}
-          </p>
-          <ConfigureAiSettingsButton className="shrink-0 sm:w-auto" testId="profile-resume-ai-settings-footer" />
-        </div>
-      ) : null}
+      footer={
+        showAiFooter ? (
+          <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-xs leading-relaxed shell-body">
+              {t("profile.documents.configureAiSettingsHint")}
+            </p>
+            <ConfigureAiSettingsButton
+              className="shrink-0 sm:w-auto"
+              testId="profile-resume-ai-settings-footer"
+            />
+          </div>
+        ) : null
+      }
     >
       {hasResume ? (
         <div className="space-y-4">

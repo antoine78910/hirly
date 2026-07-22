@@ -27,7 +27,9 @@ function ApplyChatBubble({ step, state }) {
       {state === "active" ? (
         <ShimmerStatus>{step.status}</ShimmerStatus>
       ) : (
-        <p className={`flex items-center gap-1.5 text-sm font-semibold tracking-tight ${done ? "text-zinc-800" : "text-zinc-500"}`}>
+        <p
+          className={`flex items-center gap-1.5 text-sm font-semibold tracking-tight ${done ? "text-zinc-800" : "text-zinc-500"}`}
+        >
           {done ? (
             <span className="grid h-4 w-4 shrink-0 place-items-center rounded-full bg-emerald-500 text-white">
               <Check className="h-2.5 w-2.5" strokeWidth={2.5} aria-hidden />
@@ -84,9 +86,7 @@ export default function LandingHeroApplyFlow({ steps, activeStep, visible }) {
               const state = resolveBubbleState(index, activeStep, steps.length, visible);
               if (state === "hidden") return null;
 
-              return (
-                <ApplyChatBubble key={step.id} step={step} state={state} />
-              );
+              return <ApplyChatBubble key={step.id} step={step} state={state} />;
             })}
           </AnimatePresence>
         </motion.div>

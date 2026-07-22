@@ -10,15 +10,11 @@ export interface BackendVersionResponse {
 
 export function getCurrentFrontendVersion(): string | null {
   const buildVersion =
-    typeof __HIRLY_FRONTEND_VERSION__ === "string"
-      ? __HIRLY_FRONTEND_VERSION__.trim()
-      : "";
+    typeof __HIRLY_FRONTEND_VERSION__ === "string" ? __HIRLY_FRONTEND_VERSION__.trim() : "";
   if (GIT_SHA_PATTERN.test(buildVersion)) return buildVersion.toLowerCase();
 
   const environmentVersion = process.env.REACT_APP_GIT_SHA?.trim() || "";
-  return GIT_SHA_PATTERN.test(environmentVersion)
-    ? environmentVersion.toLowerCase()
-    : null;
+  return GIT_SHA_PATTERN.test(environmentVersion) ? environmentVersion.toLowerCase() : null;
 }
 
 export function normalizeBackendVersion(value: unknown): string | null {
@@ -32,10 +28,7 @@ export function versionsDiffer(
   backendVersion: string | null,
 ): boolean {
   if (!currentVersion || !backendVersion) return false;
-  return !(
-    currentVersion.startsWith(backendVersion)
-    || backendVersion.startsWith(currentVersion)
-  );
+  return !(currentVersion.startsWith(backendVersion) || backendVersion.startsWith(currentVersion));
 }
 
 export async function backendHasNewerFrontend(): Promise<boolean> {
@@ -48,10 +41,7 @@ export async function backendHasNewerFrontend(): Promise<boolean> {
       params: { _: Date.now() },
       timeout: 5000,
     });
-    return versionsDiffer(
-      currentVersion,
-      normalizeBackendVersion(response.data?.git_sha),
-    );
+    return versionsDiffer(currentVersion, normalizeBackendVersion(response.data?.git_sha));
   } catch {
     // Version checks must never make an otherwise healthy app unusable.
     return false;

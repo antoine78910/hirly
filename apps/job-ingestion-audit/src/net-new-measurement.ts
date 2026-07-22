@@ -58,11 +58,13 @@ export interface NetNewMeasurementReport {
     projectedFranceTravailConcentration: number;
     franceTravailConcentrationDelta: number;
   };
-  sources: Array<SourceNetNewAggregate & {
-    duplicateTotal: number;
-    duplicateRate: number;
-    netNewRate: number;
-  }>;
+  sources: Array<
+    SourceNetNewAggregate & {
+      duplicateTotal: number;
+      duplicateRate: number;
+      netNewRate: number;
+    }
+  >;
   digest: string;
 }
 
@@ -73,8 +75,7 @@ const fail = (message: string): never => {
 const round = (value: number): number => Number(value.toFixed(8));
 const rate = (numerator: number, denominator: number): number =>
   denominator === 0 ? 0 : round(numerator / denominator);
-const uuidPattern =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const isoTimestampPattern =
   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})$/i;
 
@@ -143,21 +144,18 @@ function validateBaseline(input: CurrentInventoryAggregate): CurrentInventoryAgg
     ),
   };
   if (
-    baseline.fresh30dUniqueJobs > baseline.layeredUniqueJobs
-    || baseline.autoApplicableUniqueJobs > baseline.layeredUniqueJobs
-    || baseline.franceTravailUniqueJobs > baseline.layeredUniqueJobs
-    || baseline.franceTravailAutoApplicableJobs > baseline.franceTravailUniqueJobs
-    || baseline.franceTravailAutoApplicableJobs > baseline.autoApplicableUniqueJobs
+    baseline.fresh30dUniqueJobs > baseline.layeredUniqueJobs ||
+    baseline.autoApplicableUniqueJobs > baseline.layeredUniqueJobs ||
+    baseline.franceTravailUniqueJobs > baseline.layeredUniqueJobs ||
+    baseline.franceTravailAutoApplicableJobs > baseline.franceTravailUniqueJobs ||
+    baseline.franceTravailAutoApplicableJobs > baseline.autoApplicableUniqueJobs
   ) {
     fail("baseline counters violate aggregate monotonicity");
   }
   return baseline;
 }
 
-function validateSource(
-  input: SourceNetNewAggregate,
-  index: number,
-): SourceNetNewAggregate {
+function validateSource(input: SourceNetNewAggregate, index: number): SourceNetNewAggregate {
   const path = `sources[${index}]`;
   const source = {
     provider: requireText(input.provider, `${path}.provider`),
@@ -191,28 +189,28 @@ function validateSource(
     paidUserJobMatches: requireCount(input.paidUserJobMatches, `${path}.paidUserJobMatches`),
   };
   const classified =
-    source.exactOccurrenceDuplicates
-    + source.canonicalUrlDuplicates
-    + source.atsIdentityDuplicates
-    + source.fingerprintDuplicates
-    + source.incrementalNetNew;
+    source.exactOccurrenceDuplicates +
+    source.canonicalUrlDuplicates +
+    source.atsIdentityDuplicates +
+    source.fingerprintDuplicates +
+    source.incrementalNetNew;
   if (classified !== source.observedCandidates) {
     fail(`${path} layered dedup accounting does not reconcile`);
   }
   if (
-    source.incrementalFreshRelevantActionable > source.incrementalNetNew
-    || source.incrementalAutoApplicable > source.incrementalNetNew
+    source.incrementalFreshRelevantActionable > source.incrementalNetNew ||
+    source.incrementalAutoApplicable > source.incrementalNetNew
   ) {
     fail(`${path} uplift counters exceed incremental net-new inventory`);
   }
   return source;
 }
 
-export function buildNetNewMeasurement(
-  input: NetNewMeasurementInput,
-): NetNewMeasurementReport {
+export function buildNetNewMeasurement(input: NetNewMeasurementInput): NetNewMeasurementReport {
   if (input.status !== "COMPLETE") {
-    fail(`status ${input.status} is not scoreable: ${input.blockerReason ?? "missing blocker reason"}`);
+    fail(
+      `status ${input.status} is not scoreable: ${input.blockerReason ?? "missing blocker reason"}`,
+    );
   }
   if (input.sample !== false) fail("sample evidence is not scoreable");
   const generatedAt = requireTimestamp(input.generatedAt, "generatedAt");
@@ -225,7 +223,8 @@ export function buildNetNewMeasurement(
     fail("trialRunIds must contain at least one run");
   }
   const trialRunIds = input.trialRunIds.map((runId, index) =>
-    requireUuid(runId, `trialRunIds[${index}]`));
+    requireUuid(runId, `trialRunIds[${index}]`),
+  );
   if (new Set(trialRunIds).size !== trialRunIds.length) {
     fail("trialRunIds contains duplicates");
   }
@@ -233,8 +232,10 @@ export function buildNetNewMeasurement(
   const baseline = validateBaseline(input.baseline);
   const sources = input.sources
     .map(validateSource)
-    .sort((left, right) =>
-      left.provider.localeCompare(right.provider) || left.tenant.localeCompare(right.tenant));
+    .sort(
+      (left, right) =>
+        left.provider.localeCompare(right.provider) || left.tenant.localeCompare(right.tenant),
+    );
   if (sources.length === 0) fail("sources must contain at least one aggregate row");
   const sourceKeys = sources.map((source) => `${source.provider}\u0000${source.tenant}`);
   if (new Set(sourceKeys).size !== sourceKeys.length) {
@@ -302,10 +303,10 @@ export function buildNetNewMeasurement(
     },
     sources: sources.map((source) => {
       const duplicateTotal =
-        source.exactOccurrenceDuplicates
-        + source.canonicalUrlDuplicates
-        + source.atsIdentityDuplicates
-        + source.fingerprintDuplicates;
+        source.exactOccurrenceDuplicates +
+        source.canonicalUrlDuplicates +
+        source.atsIdentityDuplicates +
+        source.fingerprintDuplicates;
       return {
         ...source,
         duplicateTotal,

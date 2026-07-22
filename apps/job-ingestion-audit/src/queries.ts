@@ -128,8 +128,7 @@ export const JOB_SUPPLY_OBSERVABILITY_QUERIES = {
   `,
 } as const;
 
-export type JobSupplyObservabilityQuery =
-  keyof typeof JOB_SUPPLY_OBSERVABILITY_QUERIES;
+export type JobSupplyObservabilityQuery = keyof typeof JOB_SUPPLY_OBSERVABILITY_QUERIES;
 
 export interface AuditQueryExecutor {
   query<T extends Record<string, unknown>>(
@@ -186,7 +185,9 @@ export function assertReadOnlyObservabilityQueries(): string[] {
   return Object.entries(JOB_SUPPLY_OBSERVABILITY_QUERIES).flatMap(([name, query]) => {
     const normalized = query.replace(/--.*$/gm, " ").trim().toLowerCase();
     if (!/^(select|with)\b/.test(normalized)) return [`${name}:not_read_only`];
-    if (/\b(insert|update|delete|merge|truncate|alter|drop|create|grant|revoke)\b/.test(normalized)) {
+    if (
+      /\b(insert|update|delete|merge|truncate|alter|drop|create|grant|revoke)\b/.test(normalized)
+    ) {
       return [`${name}:mutation_detected`];
     }
     return [];

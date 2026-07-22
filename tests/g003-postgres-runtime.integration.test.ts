@@ -1,13 +1,9 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
-import {
-  createDatabase,
-  WorkerRepository,
-} from "../packages/db/src/index";
+import { createDatabase, WorkerRepository } from "../packages/db/src/index";
 
-const databaseUrl =
-  process.env.G003_TEST_DATABASE_URL ?? process.env.G002_TEST_DATABASE_URL;
+const databaseUrl = process.env.G003_TEST_DATABASE_URL ?? process.env.G002_TEST_DATABASE_URL;
 const repoRoot = join(import.meta.dir, "..");
 const runIntegration = databaseUrl ? test : test.skip;
 
@@ -22,18 +18,7 @@ async function psql(sql: string): Promise<SqlResult> {
     throw new Error("G003_TEST_DATABASE_URL is required");
   }
   const process = Bun.spawn(
-    [
-      "psql",
-      databaseUrl,
-      "-X",
-      "-v",
-      "ON_ERROR_STOP=1",
-      "-A",
-      "-t",
-      "-q",
-      "-c",
-      sql,
-    ],
+    ["psql", databaseUrl, "-X", "-v", "ON_ERROR_STOP=1", "-A", "-t", "-q", "-c", sql],
     { stdout: "pipe", stderr: "pipe" },
   );
   const [exitCode, stdout, stderr] = await Promise.all([
@@ -49,16 +34,7 @@ async function applyFile(relativePath: string): Promise<void> {
     throw new Error("G003_TEST_DATABASE_URL is required");
   }
   const process = Bun.spawn(
-    [
-      "psql",
-      databaseUrl,
-      "-X",
-      "-v",
-      "ON_ERROR_STOP=1",
-      "-q",
-      "-f",
-      join(repoRoot, relativePath),
-    ],
+    ["psql", databaseUrl, "-X", "-v", "ON_ERROR_STOP=1", "-q", "-f", join(repoRoot, relativePath)],
     { stdout: "pipe", stderr: "pipe" },
   );
   const [exitCode, stderr] = await Promise.all([
@@ -73,9 +49,7 @@ async function applyFile(relativePath: string): Promise<void> {
 function migrationPath(): string {
   const directory = join(repoRoot, "backend", "db", "migrations");
   const migration = readdirSync(directory).find(
-    (name) =>
-      name.endsWith("_typescript_worker_foundation.sql") &&
-      !name.endsWith(".down.sql"),
+    (name) => name.endsWith("_typescript_worker_foundation.sql") && !name.endsWith(".down.sql"),
   );
   if (!migration) {
     throw new Error("TypeScript worker foundation migration is missing");
@@ -86,8 +60,7 @@ function migrationPath(): string {
 function runtimeMigrationPath(): string {
   const directory = join(repoRoot, "backend", "db", "migrations");
   const migration = readdirSync(directory).find(
-    (name) =>
-      name.endsWith("_bun_worker_runtime.sql") && !name.endsWith(".down.sql"),
+    (name) => name.endsWith("_bun_worker_runtime.sql") && !name.endsWith(".down.sql"),
   );
   if (!migration) {
     throw new Error("Bun worker runtime migration is missing");
@@ -271,30 +244,27 @@ describe("G003 least-privilege runtime repository", () => {
     },
   );
 
-  runIntegration(
-    "discovers only due enabled schedules through the worker function",
-    async () => {
-      await seedRuntimeFixtures();
-      const sql = createDatabase(databaseUrl!, { max: 1 });
-      try {
-        await sql`SET ROLE hirly_inventory_worker`;
-        const repository = new WorkerRepository(sql);
-        const schedules = await repository.listDueSchedules(10);
+  runIntegration("discovers only due enabled schedules through the worker function", async () => {
+    await seedRuntimeFixtures();
+    const sql = createDatabase(databaseUrl!, { max: 1 });
+    try {
+      await sql`SET ROLE hirly_inventory_worker`;
+      const repository = new WorkerRepository(sql);
+      const schedules = await repository.listDueSchedules(10);
 
-        expect(schedules.map(({ id }) => id)).toEqual(["g003-due"]);
-        expect(schedules[0]).toMatchObject({
-          id: "g003-due",
-          cronExpression: "* * * * *",
-          timezone: "UTC",
-          maxCatchUp: 3,
-        });
-        expect(schedules[0]?.nextDueAt).toBeInstanceOf(Date);
-        expect(schedules[0]?.databaseNow).toBeInstanceOf(Date);
-      } finally {
-        await sql.end({ timeout: 1 });
-      }
-    },
-  );
+      expect(schedules.map(({ id }) => id)).toEqual(["g003-due"]);
+      expect(schedules[0]).toMatchObject({
+        id: "g003-due",
+        cronExpression: "* * * * *",
+        timezone: "UTC",
+        maxCatchUp: 3,
+      });
+      expect(schedules[0]?.nextDueAt).toBeInstanceOf(Date);
+      expect(schedules[0]?.databaseNow).toBeInstanceOf(Date);
+    } finally {
+      await sql.end({ timeout: 1 });
+    }
+  });
 
   runIntegration(
     "enqueues one persisted occurrence and rejects stale schedule replay",
@@ -310,13 +280,8 @@ describe("G003 least-privilege runtime repository", () => {
         successor.setUTCSeconds(0, 0);
         successor.setUTCMinutes(successor.getUTCMinutes() + 1);
 
-        const first = await repository.enqueueDueSchedule(
-          schedule!.id,
-          successor,
-        );
-        await expect(
-          repository.enqueueDueSchedule(schedule!.id, successor),
-        ).rejects.toThrow(
+        const first = await repository.enqueueDueSchedule(schedule!.id, successor);
+        await expect(repository.enqueueDueSchedule(schedule!.id, successor)).rejects.toThrow(
           "next due time must advance",
         );
 
@@ -336,11 +301,9 @@ describe("G003 least-privilege runtime repository", () => {
     },
   );
 
-  runIntegration(
-    "returns a redacted RunView without granting table reads",
-    async () => {
-      const runId = await seedRuntimeFixtures();
-      await assertSql(`
+  runIntegration("returns a redacted RunView without granting table reads", async () => {
+    const runId = await seedRuntimeFixtures();
+    await assertSql(`
         UPDATE public.worker_runs
         SET summary = jsonb_build_object(
           'accepted', 3,
@@ -350,60 +313,52 @@ describe("G003 least-privilege runtime repository", () => {
         )
         WHERE id = '${runId}'::uuid;
       `);
-      const sql = createDatabase(databaseUrl!, { max: 1 });
-      try {
-        await sql`SET ROLE hirly_inventory_worker`;
-        const repository = new WorkerRepository(sql);
-        const run = await repository.getRun(runId);
-        const serialized = JSON.stringify(run);
+    const sql = createDatabase(databaseUrl!, { max: 1 });
+    try {
+      await sql`SET ROLE hirly_inventory_worker`;
+      const repository = new WorkerRepository(sql);
+      const run = await repository.getRun(runId);
+      const serialized = JSON.stringify(run);
 
-        expect(run).toMatchObject({
-          id: runId,
-          kind: "inventory_maintenance",
-          provider: null,
-          triggerSource: "system",
-          status: "queued",
-        });
-        expect(run?.summary).toEqual(expect.any(Object));
-        expect(serialized).not.toContain("payload_secret");
-        expect(serialized).not.toContain("must-never-leave");
-        expect(serialized).not.toContain("idempotency");
-        expect(serialized).not.toContain("lease");
-      } finally {
-        await sql.end({ timeout: 1 });
-      }
+      expect(run).toMatchObject({
+        id: runId,
+        kind: "inventory_maintenance",
+        provider: null,
+        triggerSource: "system",
+        status: "queued",
+      });
+      expect(run?.summary).toEqual(expect.any(Object));
+      expect(serialized).not.toContain("payload_secret");
+      expect(serialized).not.toContain("must-never-leave");
+      expect(serialized).not.toContain("idempotency");
+      expect(serialized).not.toContain("lease");
+    } finally {
+      await sql.end({ timeout: 1 });
+    }
 
-      const directRead = await psql(`
+    const directRead = await psql(`
         SET ROLE hirly_inventory_worker;
         SELECT payload FROM public.worker_tasks LIMIT 1;
       `);
-      expect(directRead.exitCode).not.toBe(0);
-      expect(directRead.stderr).toContain("permission denied");
-    },
-  );
+    expect(directRead.exitCode).not.toBe(0);
+    expect(directRead.stderr).toContain("permission denied");
+  });
 
-  runIntegration(
-    "keeps discovery and run lookup unavailable to client roles",
-    async () => {
-      await seedRuntimeFixtures();
-      for (const role of ["anon", "authenticated"]) {
-        expect(
-          await assertSql(
-            `SELECT count(*) FROM pg_roles WHERE rolname = '${role}';`,
-          ),
-        ).toBe("1");
+  runIntegration("keeps discovery and run lookup unavailable to client roles", async () => {
+    await seedRuntimeFixtures();
+    for (const role of ["anon", "authenticated"]) {
+      expect(await assertSql(`SELECT count(*) FROM pg_roles WHERE rolname = '${role}';`)).toBe("1");
 
-        for (const statement of [
-          "SELECT count(*) FROM worker_private.list_due_schedules(10)",
-          "SELECT count(*) FROM worker_private.get_run('00000000-0000-4000-8000-000000000000'::uuid)",
-        ]) {
-          const result = await psql(`SET ROLE ${role}; ${statement};`);
-          expect(result.exitCode).not.toBe(0);
-          expect(result.stderr).toContain("permission denied");
-        }
+      for (const statement of [
+        "SELECT count(*) FROM worker_private.list_due_schedules(10)",
+        "SELECT count(*) FROM worker_private.get_run('00000000-0000-4000-8000-000000000000'::uuid)",
+      ]) {
+        const result = await psql(`SET ROLE ${role}; ${statement};`);
+        expect(result.exitCode).not.toBe(0);
+        expect(result.stderr).toContain("permission denied");
       }
-    },
-  );
+    }
+  });
 
   runIntegration(
     "fixes search_path and exposes only the documented redacted result shape",

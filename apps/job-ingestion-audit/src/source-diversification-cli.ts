@@ -28,10 +28,12 @@ const report = buildSourceDiversificationGate(input);
 const output = resolve(outputPath);
 await mkdir(dirname(output), { recursive: true });
 await writeFile(output, `${JSON.stringify(report, null, 2)}\n`);
-console.log(JSON.stringify({
-  status: report.status,
-  runtimeReadyUplift: report.runtimeReadyUplift,
-  franceTravailShareDelta: report.franceTravailShareDelta,
-  output: outputPath,
-  digest: report.digest,
-}));
+console.log(
+  JSON.stringify({
+    status: report.status,
+    runtimeReadyUplift: report.runtimeReadyUplift,
+    franceTravailShareDelta: report.franceTravailShareDelta,
+    output: outputPath,
+    digest: report.digest,
+  }),
+);

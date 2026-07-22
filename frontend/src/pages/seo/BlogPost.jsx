@@ -22,7 +22,10 @@ function Section({ section, index, totalSections, ctaMid }) {
         {section.list && (
           <ul className="mt-3 space-y-2 pl-1">
             {section.list.map((item, i) => (
-              <li key={i} className="flex items-start gap-2.5 text-zinc-600 text-sm leading-relaxed">
+              <li
+                key={i}
+                className="flex items-start gap-2.5 text-zinc-600 text-sm leading-relaxed"
+              >
                 <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-linkedin flex-shrink-0" />
                 {item}
               </li>
@@ -74,21 +77,21 @@ export default function BlogPost() {
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "Article",
-    "headline": post.title,
-    "description": post.metaDescription,
-    "datePublished": post.date,
-    "dateModified": post.date,
-    "mainEntityOfPage": { "@type": "WebPage", "@id": `https://tryhirly.com/blog/${post.slug}` },
-    "publisher": { "@type": "Organization", "name": "Hirly", "url": "https://tryhirly.com" },
+    headline: post.title,
+    description: post.metaDescription,
+    datePublished: post.date,
+    dateModified: post.date,
+    mainEntityOfPage: { "@type": "WebPage", "@id": `https://tryhirly.com/blog/${post.slug}` },
+    publisher: { "@type": "Organization", name: "Hirly", url: "https://tryhirly.com" },
   };
 
   const faqLd = {
     "@context": "https://schema.org",
     "@type": "FAQPage",
-    "mainEntity": post.faq.map((q) => ({
+    mainEntity: post.faq.map((q) => ({
       "@type": "Question",
-      "name": q.question,
-      "acceptedAnswer": { "@type": "Answer", "text": q.answer },
+      name: q.question,
+      acceptedAnswer: { "@type": "Answer", text: q.answer },
     })),
   };
 
@@ -104,7 +107,10 @@ export default function BlogPost() {
 
       <article className="max-w-2xl mx-auto px-6 py-14">
         {/* Back */}
-        <Link to="/blog" className="inline-flex items-center gap-1.5 text-sm text-zinc-400 hover:text-zinc-700 transition-colors mb-8">
+        <Link
+          to="/blog"
+          className="inline-flex items-center gap-1.5 text-sm text-zinc-400 hover:text-zinc-700 transition-colors mb-8"
+        >
           <ArrowLeft className="w-3.5 h-3.5" /> Tous les articles
         </Link>
 
@@ -139,9 +145,7 @@ export default function BlogPost() {
 
         {/* FAQ */}
         <div className="mt-14">
-          <h2 className="font-display font-bold text-2xl sm:text-3xl tracking-tight mb-6">
-            FAQ
-          </h2>
+          <h2 className="font-display font-bold text-2xl sm:text-3xl tracking-tight mb-6">FAQ</h2>
           <MarketingFaq items={post.faq} />
         </div>
 

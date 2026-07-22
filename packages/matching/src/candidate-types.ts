@@ -20,9 +20,18 @@ export interface CandidateProjectionSource {
 
 export interface CandidateProjectionStore {
   resolveCanonicalGroup(sourceJobId: string): Promise<string | null>;
-  applyProfile(profile: CandidateSearchProfile, sourceEventId: string): Promise<ProjectionApplyResult>;
-  applyPausedProfile(profile: CandidateSearchProfile, sourceEventId: string): Promise<ProjectionApplyResult>;
-  applyAction(action: CandidateActionProjection, sourceEventId: string): Promise<ProjectionApplyResult>;
+  applyProfile(
+    profile: CandidateSearchProfile,
+    sourceEventId: string,
+  ): Promise<ProjectionApplyResult>;
+  applyPausedProfile(
+    profile: CandidateSearchProfile,
+    sourceEventId: string,
+  ): Promise<ProjectionApplyResult>;
+  applyAction(
+    action: CandidateActionProjection,
+    sourceEventId: string,
+  ): Promise<ProjectionApplyResult>;
   retireAction(event: CandidateProjectionOutboxEvent): Promise<ProjectionApplyResult>;
   applyDeletion(event: CandidateProjectionOutboxEvent): Promise<ProjectionApplyResult>;
 }

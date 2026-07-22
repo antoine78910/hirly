@@ -53,8 +53,12 @@ const jsonPath = resolve(root, args.json);
 const summaryPath = resolve(root, args.summary);
 const runResultsPath = resolve(root, args.runResults);
 
-const rows = JSON.parse(await readFile(resolve(fixtureDir, "audit-rows.json"), "utf8")) as AuditRow[];
-const partitions = JSON.parse(await readFile(resolve(fixtureDir, "pagination-golden.json"), "utf8")) as PartitionFact[];
+const rows = JSON.parse(
+  await readFile(resolve(fixtureDir, "audit-rows.json"), "utf8"),
+) as AuditRow[];
+const partitions = JSON.parse(
+  await readFile(resolve(fixtureDir, "pagination-golden.json"), "utf8"),
+) as PartitionFact[];
 const funnel = JSON.parse(await readFile(resolve(fixtureDir, "funnel.json"), "utf8")) as Funnel;
 const coverageManifest = JSON.parse(
   await readFile(resolve(fixtureDir, "coverage-manifest.json"), "utf8"),
@@ -109,9 +113,19 @@ for (const [command, riskIds] of passCommands) {
   const stdout = spawned.stdout.toString();
   const stderr = spawned.stderr.toString();
   commandResults.push({
-    command, exitCode: spawned.exitCode, rows: riskIds, executedAt, stdout, stderr,
+    command,
+    exitCode: spawned.exitCode,
+    rows: riskIds,
+    executedAt,
+    stdout,
+    stderr,
     checksum: stableDigest({
-      command, exitCode: spawned.exitCode, rows: riskIds, executedAt, stdout, stderr,
+      command,
+      exitCode: spawned.exitCode,
+      rows: riskIds,
+      executedAt,
+      stdout,
+      stderr,
     }),
   });
   if (spawned.exitCode !== 0) {
@@ -131,9 +145,19 @@ for (const row of rows.filter((candidate) => candidate.status === "BLOCKED_EXTER
   const stdout = spawned.stdout.toString();
   const stderr = spawned.stderr.toString();
   commandResults.push({
-    command: check, exitCode: spawned.exitCode, rows: [row.riskId], executedAt, stdout, stderr,
+    command: check,
+    exitCode: spawned.exitCode,
+    rows: [row.riskId],
+    executedAt,
+    stdout,
+    stderr,
     checksum: stableDigest({
-      command: check, exitCode: spawned.exitCode, rows: [row.riskId], executedAt, stdout, stderr,
+      command: check,
+      exitCode: spawned.exitCode,
+      rows: [row.riskId],
+      executedAt,
+      stdout,
+      stderr,
     }),
   });
   if (spawned.exitCode === 0) {
@@ -168,12 +192,16 @@ const machineRows = rows.map((row) => ({
   blocker: row.blocker ?? null,
 }));
 const digestInput = {
-  rows: rows.map(({ riskId, status }) => ({ riskId, status })).sort((a, b) => a.riskId.localeCompare(b.riskId)),
-  partitions: partitions.map(({ id, status, fetchedExternalIds }) => ({
-    id,
-    status,
-    fetchedExternalIds: [...new Set(fetchedExternalIds)].sort(),
-  })).sort((a, b) => a.id.localeCompare(b.id)),
+  rows: rows
+    .map(({ riskId, status }) => ({ riskId, status }))
+    .sort((a, b) => a.riskId.localeCompare(b.riskId)),
+  partitions: partitions
+    .map(({ id, status, fetchedExternalIds }) => ({
+      id,
+      status,
+      fetchedExternalIds: [...new Set(fetchedExternalIds)].sort(),
+    }))
+    .sort((a, b) => a.id.localeCompare(b.id)),
   funnel,
 };
 const generatedAt = new Date().toISOString();
@@ -294,19 +322,26 @@ await writeFile(
 );
 await writeFile(jsonPath, `${JSON.stringify(result, null, 2)}\n`);
 await writeFile(summaryPath, summary);
-await writeFile(runResultsPath, `${JSON.stringify({
-  schemaVersion: 1,
-  runId,
-  runChecksum,
-  generatedAt,
-  datasetDigest,
-  executedAt: generatedAt,
-  fixtureMode: args.fixtureMode,
-  verdict: result.verdict,
-  invariantFailures,
-  commandResults,
-  evidenceDigests,
-  resultChecksum: runChecksum,
-}, null, 2)}\n`);
+await writeFile(
+  runResultsPath,
+  `${JSON.stringify(
+    {
+      schemaVersion: 1,
+      runId,
+      runChecksum,
+      generatedAt,
+      datasetDigest,
+      executedAt: generatedAt,
+      fixtureMode: args.fixtureMode,
+      verdict: result.verdict,
+      invariantFailures,
+      commandResults,
+      evidenceDigests,
+      resultChecksum: runChecksum,
+    },
+    null,
+    2,
+  )}\n`,
+);
 console.log(summary);
 if (invariantFailures.length) process.exitCode = 1;

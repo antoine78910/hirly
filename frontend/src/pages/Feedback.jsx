@@ -10,7 +10,11 @@ import { useAppLocale } from "../context/AppLocaleContext";
 
 const RELEASE_NOTES = [
   { version: "v0.4", date: "Jun 2026", note: "New swipe feed filters and inbox categories." },
-  { version: "v0.3", date: "May 2026", note: "One-tap apply packages with tailored CV + cover letter." },
+  {
+    version: "v0.3",
+    date: "May 2026",
+    note: "One-tap apply packages with tailored CV + cover letter.",
+  },
   { version: "v0.2", date: "Apr 2026", note: "Profile completion wizard and mock interviews." },
 ];
 
@@ -44,7 +48,9 @@ export default function Feedback() {
             type="button"
             className="grid h-9 w-9 place-items-center rounded-full text-linkedin hover:bg-violet-50 sm:h-10 sm:w-10"
             aria-label={t("feedback.callSupport")}
-            onClick={() => window.open(supportMailto(`${BRAND.NAME} support`), "_blank", "noopener")}
+            onClick={() =>
+              window.open(supportMailto(`${BRAND.NAME} support`), "_blank", "noopener")
+            }
           >
             <Phone className="h-5 w-5" strokeWidth={2} />
           </button>
@@ -65,9 +71,7 @@ export default function Feedback() {
               data-testid={`feedback-tab-${item.key}`}
             >
               {item.label}
-              {active ? (
-                <span className="absolute inset-x-0 bottom-0 h-0.5 bg-linkedin" />
-              ) : null}
+              {active ? <span className="absolute inset-x-0 bottom-0 h-0.5 bg-linkedin" /> : null}
             </button>
           );
         })}
@@ -104,7 +108,10 @@ export default function Feedback() {
         ) : (
           <ul className="mt-4 space-y-4">
             {RELEASE_NOTES.map((note) => (
-              <li key={note.version} className="rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-3">
+              <li
+                key={note.version}
+                className="rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-3"
+              >
                 <p className="text-sm font-semibold text-zinc-900">
                   {note.version} · {note.date}
                 </p>

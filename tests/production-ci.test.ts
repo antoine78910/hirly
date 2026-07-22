@@ -29,12 +29,8 @@ describe("main production release workflow", () => {
     expect(workflow).toContain("production-migrations:");
     expect(workflow).toContain("deploy-railway:");
     expect(workflow).toContain("deploy-vercel:");
-    expect(workflow).toMatch(
-      /deploy-railway:[\s\S]*?needs:\s*\n\s+- production-migrations/,
-    );
-    expect(workflow).toMatch(
-      /deploy-vercel:[\s\S]*?needs:\s*\n\s+- deploy-railway/,
-    );
+    expect(workflow).toMatch(/deploy-railway:[\s\S]*?needs:\s*\n\s+- production-migrations/);
+    expect(workflow).toMatch(/deploy-vercel:[\s\S]*?needs:\s*\n\s+- deploy-railway/);
   });
 
   test("blocks Railway on migration success and verifies the deployed commit", () => {
@@ -53,9 +49,7 @@ describe("main production release workflow", () => {
   });
 
   test("preflights Vercel Production package-token metadata before deployment", () => {
-    const preflightIndex = workflow.indexOf(
-      "Require Vercel production package token metadata",
-    );
+    const preflightIndex = workflow.indexOf("Require Vercel production package token metadata");
     const deployIndex = workflow.indexOf("Create a staged production deployment");
     const preflight = workflow.slice(preflightIndex, deployIndex);
 
@@ -63,21 +57,15 @@ describe("main production release workflow", () => {
     expect(preflightIndex).toBeLessThan(deployIndex);
     expect(preflight).toContain("vercel@56.4.0 env ls production");
     expect(preflight).not.toContain("env ls production --yes");
-    expect(preflight).toContain(
-      "grep --quiet --fixed-strings 'CONTRACTSPEC_NPM_TOKEN'",
-    );
+    expect(preflight).toContain("grep --quiet --fixed-strings 'CONTRACTSPEC_NPM_TOKEN'");
     expect(preflight).not.toContain("env pull");
     expect(preflight).not.toContain("CONTRACTSPEC_NPM_TOKEN=");
   });
 
   test("keeps production credentials in GitHub secrets", () => {
-    const productionRelease = workflow.slice(
-      workflow.indexOf("  production-migrations:"),
-    );
+    const productionRelease = workflow.slice(workflow.indexOf("  production-migrations:"));
 
-    expect(workflow).toContain(
-      "SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}",
-    );
+    expect(workflow).toContain("SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}");
     expect(workflow).toContain("RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}");
     expect(workflow).toContain("VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}");
     expect(productionRelease).not.toMatch(/postgres(?:ql)?:\/\/[^$\s]+/);
@@ -92,25 +80,20 @@ describe("main production release workflow", () => {
       workflow.indexOf("  legacy-frontend:"),
       workflow.indexOf("  stack-policy:"),
     );
-    const secretMapping =
-      "CONTRACTSPEC_NPM_TOKEN: ${{ secrets.CONTRACTSPEC_NPM_TOKEN }}";
+    const secretMapping = "CONTRACTSPEC_NPM_TOKEN: ${{ secrets.CONTRACTSPEC_NPM_TOKEN }}";
 
     expect(bunWorkspaces).toContain(secretMapping);
     expect(legacyFrontend).toContain(secretMapping);
   });
 
   test("uses Railway-supported build-time token injection without shipping it", () => {
-    expect(workerDockerfile.startsWith("# syntax=docker/dockerfile:1.7\n")).toBe(
-      true,
-    );
+    expect(workerDockerfile.startsWith("# syntax=docker/dockerfile:1.7\n")).toBe(true);
     expect(workerDockerfile).toContain(
       "COPY package.json bun.lock bunfig.toml tsconfig.base.json .npmrc ./",
     );
+    expect(workerDockerfile).toContain("ARG CONTRACTSPEC_NPM_TOKEN");
     expect(workerDockerfile).toContain(
-      "ARG CONTRACTSPEC_NPM_TOKEN",
-    );
-    expect(workerDockerfile).toContain(
-      "RUN test -n \"$CONTRACTSPEC_NPM_TOKEN\" && bun install --frozen-lockfile",
+      'RUN test -n "$CONTRACTSPEC_NPM_TOKEN" && bun install --frozen-lockfile',
     );
     expect(workerDockerfile).not.toMatch(/^ENV\s+CONTRACTSPEC_NPM_TOKEN/m);
 
@@ -125,15 +108,11 @@ describe("main production release workflow", () => {
     const command = workerPackage.scripts?.["docker:build"];
 
     expect(command).toContain("docker build");
-    expect(command).toContain(
-      "--build-arg CONTRACTSPEC_NPM_TOKEN",
-    );
+    expect(command).toContain("--build-arg CONTRACTSPEC_NPM_TOKEN");
   });
 
   test("requires a Railway build-time package token without persisting it", () => {
-    expect(workerOperations).toContain(
-      "sealed Railway build variable",
-    );
+    expect(workerOperations).toContain("sealed Railway build variable");
     expect(workerOperations).toContain("be present in the final image");
   });
 });

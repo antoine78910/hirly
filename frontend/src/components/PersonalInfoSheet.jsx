@@ -13,7 +13,8 @@ export default function PersonalInfoSheet({ open, profile, userEmail, onClose, o
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (open) setC({ ...(profile?.contact || {}), email: userEmail || profile?.contact?.email || "" });
+    if (open)
+      setC({ ...(profile?.contact || {}), email: userEmail || profile?.contact?.email || "" });
   }, [open, profile, userEmail]);
 
   const save = async () => {
@@ -31,20 +32,60 @@ export default function PersonalInfoSheet({ open, profile, userEmail, onClose, o
   };
 
   return (
-    <Sheet open={open} title="Personal Information" onClose={onClose} testId="personal-info-sheet"
-      footer={<SaveButton saving={saving} onClick={save} testId="personal-info-save" />}>
+    <Sheet
+      open={open}
+      title="Personal Information"
+      onClose={onClose}
+      testId="personal-info-sheet"
+      footer={<SaveButton saving={saving} onClick={save} testId="personal-info-save" />}
+    >
       <div className="space-y-4">
-        <Field label="Full name"  value={c.name}     onChange={(v) => setC({ ...c, name: v })}    placeholder="Jane Doe" testId="pi-name" />
+        <Field
+          label="Full name"
+          value={c.name}
+          onChange={(v) => setC({ ...c, name: v })}
+          placeholder="Jane Doe"
+          testId="pi-name"
+        />
         <div className="space-y-1.5">
-          <label className="text-sm font-semibold text-zinc-200">Email <span className="text-sprout-dim text-xs">(from your Google account)</span></label>
-          <div className="h-11 rounded-xl bg-sprout-surface border border-sprout-border px-4 flex items-center text-zinc-300" data-testid="pi-email-readonly">
+          <label className="text-sm font-semibold text-zinc-200">
+            Email <span className="text-sprout-dim text-xs">(from your Google account)</span>
+          </label>
+          <div
+            className="h-11 rounded-xl bg-sprout-surface border border-sprout-border px-4 flex items-center text-zinc-300"
+            data-testid="pi-email-readonly"
+          >
             {userEmail || c.email || "—"}
           </div>
         </div>
-        <Field label="Phone"      value={c.phone}    onChange={(v) => setC({ ...c, phone: v })}   placeholder="+1 555 0100" testId="pi-phone" />
-        <Field label="Location"   value={c.location} onChange={(v) => setC({ ...c, location: v })} placeholder="City, Country" testId="pi-location" />
-        <Field label="LinkedIn"   value={c.linkedin} onChange={(v) => setC({ ...c, linkedin: v })} placeholder="linkedin.com/in/…" testId="pi-linkedin" />
-        <Field label="Website"    value={c.website}  onChange={(v) => setC({ ...c, website: v })}  placeholder="yoursite.com" testId="pi-website" />
+        <Field
+          label="Phone"
+          value={c.phone}
+          onChange={(v) => setC({ ...c, phone: v })}
+          placeholder="+1 555 0100"
+          testId="pi-phone"
+        />
+        <Field
+          label="Location"
+          value={c.location}
+          onChange={(v) => setC({ ...c, location: v })}
+          placeholder="City, Country"
+          testId="pi-location"
+        />
+        <Field
+          label="LinkedIn"
+          value={c.linkedin}
+          onChange={(v) => setC({ ...c, linkedin: v })}
+          placeholder="linkedin.com/in/…"
+          testId="pi-linkedin"
+        />
+        <Field
+          label="Website"
+          value={c.website}
+          onChange={(v) => setC({ ...c, website: v })}
+          placeholder="yoursite.com"
+          testId="pi-website"
+        />
       </div>
     </Sheet>
   );

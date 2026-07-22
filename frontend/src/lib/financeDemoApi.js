@@ -1,8 +1,4 @@
-import {
-  FINANCE_DEMO_JOBS,
-  FINANCE_DEMO_PROFILE,
-  demoFinanceSwipeRow,
-} from "./financeDemoJobs";
+import { FINANCE_DEMO_JOBS, FINANCE_DEMO_PROFILE, demoFinanceSwipeRow } from "./financeDemoJobs";
 import axios from "axios";
 import { isFinanceDemoEnabled } from "./demoSettings";
 import { mergeDemoCvIntoProfile } from "./demoCvUpload";
@@ -11,7 +7,10 @@ import { parseApiPath } from "./apiPath";
 import { applyJobFilters, feedQueryToFilters } from "./applyJobFilters";
 import { clearMenuFilters, mergeFilters } from "./jobFilters";
 import { clearSwipeFeedCache, clearSwipedJobIdsByPrefix } from "./swipeFeedCache";
-import { buildDemoApplicationFromSwipe, buildDemoShowcaseApplication } from "./demoApplicationFactory";
+import {
+  buildDemoApplicationFromSwipe,
+  buildDemoShowcaseApplication,
+} from "./demoApplicationFactory";
 import { buildDemoInboxPayload } from "./demoEmails";
 import { ensureDemoScreenshotData } from "./demoScreenshotSeed";
 
@@ -145,9 +144,8 @@ function daysAgoIso(days) {
 }
 
 function financeShowcaseJobs() {
-  const pick = (needle) => FINANCE_DEMO_JOBS.find((job) =>
-    job.company.toLowerCase().includes(needle),
-  );
+  const pick = (needle) =>
+    FINANCE_DEMO_JOBS.find((job) => job.company.toLowerCase().includes(needle));
   return [
     pick("société générale") || FINANCE_DEMO_JOBS[3],
     pick("natixis") || FINANCE_DEMO_JOBS[9],
@@ -220,11 +218,11 @@ export function getFinanceDemoSwipeHistory(direction) {
 
 function findJob(jobId) {
   return (
-    getCachedDemoJob(jobId)
-    || state.feedJobs.find((j) => j.job_id === jobId)
-    || state.applications.find((a) => a.job_id === jobId)?.job
-    || [...state.historyRight, ...state.historyLeft].find((r) => r.job_id === jobId)?.job
-    || FINANCE_DEMO_JOBS.find((j) => j.job_id === jobId)
+    getCachedDemoJob(jobId) ||
+    state.feedJobs.find((j) => j.job_id === jobId) ||
+    state.applications.find((a) => a.job_id === jobId)?.job ||
+    [...state.historyRight, ...state.historyLeft].find((r) => r.job_id === jobId)?.job ||
+    FINANCE_DEMO_JOBS.find((j) => j.job_id === jobId)
   );
 }
 
@@ -259,7 +257,12 @@ function handleSwipe(body = {}) {
     state.applications.unshift(application);
     persistFinanceDemoState();
     notifyFinanceDemoChanged();
-    return { ok: true, applied: true, application_id: application.application_id, demo_local: true };
+    return {
+      ok: true,
+      applied: true,
+      application_id: application.application_id,
+      demo_local: true,
+    };
   }
 
   state.historyLeft.unshift(row);
@@ -326,7 +329,8 @@ export function getFinanceDemoResponse(config) {
     const parsed = typeof body === "string" ? JSON.parse(body) : body;
     if (parsed?.target_role) FINANCE_DEMO_PROFILE.target_role = parsed.target_role;
     if (parsed?.target_roles) FINANCE_DEMO_PROFILE.target_roles = parsed.target_roles;
-    if (parsed?.target_location !== undefined) FINANCE_DEMO_PROFILE.target_location = parsed.target_location;
+    if (parsed?.target_location !== undefined)
+      FINANCE_DEMO_PROFILE.target_location = parsed.target_location;
     if (parsed?.target_location_data !== undefined) {
       FINANCE_DEMO_PROFILE.target_location_data = parsed.target_location_data;
     }

@@ -9,14 +9,7 @@ export default function SocialExampleGrid({ items, lang = "en" }) {
         const label = typeof item === "string" ? item : item.label || item.text;
         const url = typeof item === "string" ? "" : item.url || item.href;
         if (!url) return null;
-        return (
-          <SocialExampleCard
-            key={`${label}-${url}`}
-            label={label}
-            url={url}
-            lang={lang}
-          />
-        );
+        return <SocialExampleCard key={`${label}-${url}`} label={label} url={url} lang={lang} />;
       })}
     </div>
   );

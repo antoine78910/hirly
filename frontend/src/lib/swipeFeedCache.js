@@ -73,10 +73,13 @@ function readSwipedIdsPayload() {
 function writeSwipedIdsPayload() {
   if (typeof window === "undefined") return;
   try {
-    window.sessionStorage.setItem(SWIPED_IDS_STORAGE_KEY, JSON.stringify({
-      userId: memory.swipedUserId || null,
-      jobIds: Array.from(memory.swipedJobIds || []),
-    }));
+    window.sessionStorage.setItem(
+      SWIPED_IDS_STORAGE_KEY,
+      JSON.stringify({
+        userId: memory.swipedUserId || null,
+        jobIds: Array.from(memory.swipedJobIds || []),
+      }),
+    );
   } catch (_) {
     try {
       window.sessionStorage.removeItem(SWIPED_IDS_STORAGE_KEY);
@@ -288,7 +291,14 @@ export function getSwipeFeedCacheSnapshot() {
   hydrateMemoryFromSession();
   hydrateSwipedIdsFromSession();
   if (!memory.jobs?.length) {
-    return { jobs: [], meta: null, target: null, targetLocationData: null, filters: null, savedAt: 0 };
+    return {
+      jobs: [],
+      meta: null,
+      target: null,
+      targetLocationData: null,
+      filters: null,
+      savedAt: 0,
+    };
   }
   return {
     jobs: filterOutSwipedJobs(memory.jobs),

@@ -8,10 +8,7 @@ import {
 } from "../src/ats-ranking";
 
 const fixture = JSON.parse(
-  readFileSync(
-    new URL("../fixtures/ats-ranking-input.json", import.meta.url),
-    "utf8",
-  ),
+  readFileSync(new URL("../fixtures/ats-ranking-input.json", import.meta.url), "utf8"),
 );
 
 describe("G011 measured ATS ranking", () => {
@@ -20,10 +17,7 @@ describe("G011 measured ATS ranking", () => {
     expect(report.status).toBe("BLOCKED_EXTERNAL");
     expect(report.sampleEvidence).toBe(true);
     expect(report.connectorChoice).toBeNull();
-    expect(report.ranking.map((row) => row.provider)).toEqual([
-      "greenhouse",
-      "nicoka",
-    ]);
+    expect(report.ranking.map((row) => row.provider)).toEqual(["greenhouse", "nicoka"]);
     expect(report.ranking[0]?.allSourcesDisabled).toBe(true);
     expect(report.ranking[0]?.requestCostMinorPerIncrementalGroup).toBeNull();
   });
@@ -92,12 +86,8 @@ describe("G011 measured ATS ranking", () => {
     );
     expect(assertReadOnlyAtsRankingQueries()).toEqual([]);
     expect(calls).toHaveLength(4);
-    expect(Object.keys(result).sort()).toEqual(
-      Object.keys(ATS_RANKING_QUERIES).sort(),
-    );
-    expect(ATS_RANKING_QUERIES.paidUserImpact).toContain(
-      "paid_user_source_contributions",
-    );
+    expect(Object.keys(result).sort()).toEqual(Object.keys(ATS_RANKING_QUERIES).sort());
+    expect(ATS_RANKING_QUERIES.paidUserImpact).toContain("paid_user_source_contributions");
     expect(ATS_RANKING_QUERIES.requestCost).toContain("request_cost_minor");
   });
 

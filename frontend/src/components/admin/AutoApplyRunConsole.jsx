@@ -19,13 +19,20 @@ const TIMELINE_DOT = {
 };
 
 const FAILURE_HINTS = {
-  submit_not_performed: "The submit button was never clicked. Check the browser log below for missing fields or a changed submit selector.",
-  submit_button_not_found: "No submit button matched on the page. The ATS form layout may have changed.",
-  browser_never_reached_form: "The browser opened but no form steps ran — often a page load failure or login wall.",
-  browser_step_errors: "One or more fill/upload steps failed. Expand the browser execution log for details.",
-  "blocked:bot_protection": "SmartRecruiters blocked automated access (HTTP 403 / bot wall). Retry later, use a residential proxy, or submit manually.",
-  bot_protection: "SmartRecruiters blocked automated access (HTTP 403 / bot wall). Retry later, use a residential proxy, or submit manually.",
-  proxy_connect: "Residential proxy could not reach the ATS (HTTP 572). Check BROWSER_PROXY on Railway or retry for a fresh exit IP.",
+  submit_not_performed:
+    "The submit button was never clicked. Check the browser log below for missing fields or a changed submit selector.",
+  submit_button_not_found:
+    "No submit button matched on the page. The ATS form layout may have changed.",
+  browser_never_reached_form:
+    "The browser opened but no form steps ran — often a page load failure or login wall.",
+  browser_step_errors:
+    "One or more fill/upload steps failed. Expand the browser execution log for details.",
+  "blocked:bot_protection":
+    "SmartRecruiters blocked automated access (HTTP 403 / bot wall). Retry later, use a residential proxy, or submit manually.",
+  bot_protection:
+    "SmartRecruiters blocked automated access (HTTP 403 / bot wall). Retry later, use a residential proxy, or submit manually.",
+  proxy_connect:
+    "Residential proxy could not reach the ATS (HTTP 572). Check BROWSER_PROXY on Railway or retry for a fresh exit IP.",
 };
 
 function stageIndex(stage) {
@@ -73,7 +80,11 @@ function resolveError(report) {
 
 function isRunFailed(report) {
   const failedStatuses = new Set(["error", "submit_failed", "verification_failed", "unsupported"]);
-  return failedStatuses.has(report?.status) || Boolean(resolveError(report)) || Boolean(blockedHint(report));
+  return (
+    failedStatuses.has(report?.status) ||
+    Boolean(resolveError(report)) ||
+    Boolean(blockedHint(report))
+  );
 }
 
 export default function AutoApplyRunConsole({ report, embedded = false }) {
@@ -105,7 +116,12 @@ export default function AutoApplyRunConsole({ report, embedded = false }) {
       ) : null}
 
       {isFailed ? (
-        <ErrorPanel error={runError} reason={report.reason} stage={report.stage_reached} embedded={embedded} />
+        <ErrorPanel
+          error={runError}
+          reason={report.reason}
+          stage={report.stage_reached}
+          embedded={embedded}
+        />
       ) : null}
 
       <div className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950 shadow-lg">
@@ -144,18 +160,26 @@ export default function AutoApplyRunConsole({ report, embedded = false }) {
           </div>
         </div>
 
-        <div className={`overflow-y-auto p-4 font-mono text-xs text-zinc-100 ${embedded ? "max-h-none" : "max-h-[70vh]"}`}>
+        <div
+          className={`overflow-y-auto p-4 font-mono text-xs text-zinc-100 ${embedded ? "max-h-none" : "max-h-[70vh]"}`}
+        >
           {timeline.length ? (
             <Section title="Run timeline">
               <div className="space-y-2">
                 {timeline.map((entry, index) => (
                   <div key={`${entry.stage}-${index}`} className="flex items-start gap-3">
-                    <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${TIMELINE_DOT[entry.status] || "bg-zinc-600"}`} />
+                    <span
+                      className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${TIMELINE_DOT[entry.status] || "bg-zinc-600"}`}
+                    />
                     <div>
                       <p className="text-zinc-200">
-                        <span className="font-semibold uppercase text-violet-300">{entry.stage}</span>
+                        <span className="font-semibold uppercase text-violet-300">
+                          {entry.stage}
+                        </span>
                         {" · "}
-                        <span className={STATUS_STYLES[entry.status] || "text-zinc-400"}>{entry.status}</span>
+                        <span className={STATUS_STYLES[entry.status] || "text-zinc-400"}>
+                          {entry.status}
+                        </span>
                       </p>
                       {entry.detail ? <p className="mt-0.5 text-zinc-400">{entry.detail}</p> : null}
                     </div>
@@ -167,9 +191,13 @@ export default function AutoApplyRunConsole({ report, embedded = false }) {
 
           {debug.application_url ? (
             <LogLine level="info">
-              Application URL:
-              {" "}
-              <a href={debug.application_url} target="_blank" rel="noreferrer" className="text-sky-400 underline">
+              Application URL:{" "}
+              <a
+                href={debug.application_url}
+                target="_blank"
+                rel="noreferrer"
+                className="text-sky-400 underline"
+              >
                 {debug.application_url}
               </a>
             </LogLine>
@@ -179,17 +207,16 @@ export default function AutoApplyRunConsole({ report, embedded = false }) {
             <div className="grid gap-1 sm:grid-cols-2 lg:grid-cols-3">
               {Object.entries(dataAvailability).map(([key, value]) => (
                 <LogLine key={key} level={value ? "ok" : "warn"}>
-                  {key}
-                  :
-                  {" "}
-                  {typeof value === "boolean" ? boolLabel(value) : String(value ?? "—")}
+                  {key}: {typeof value === "boolean" ? boolLabel(value) : String(value ?? "—")}
                 </LogLine>
               ))}
             </div>
           </Section>
 
           {fieldStatus.length ? (
-            <Section title={`Fields (${debug.resolved_count ?? 0} resolved, ${debug.unresolved_count ?? 0} missing)`}>
+            <Section
+              title={`Fields (${debug.resolved_count ?? 0} resolved, ${debug.unresolved_count ?? 0} missing)`}
+            >
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[640px] text-left">
                   <thead className="text-zinc-500">
@@ -212,7 +239,9 @@ export default function AutoApplyRunConsole({ report, embedded = false }) {
                             {hint ? <p className="mt-1 text-amber-400">{hint}</p> : null}
                           </td>
                           <td className="py-2 pr-3 text-zinc-400">{row.type}</td>
-                          <td className={`py-2 pr-3 font-semibold ${STATUS_STYLES[row.status] || "text-zinc-300"}`}>
+                          <td
+                            className={`py-2 pr-3 font-semibold ${STATUS_STYLES[row.status] || "text-zinc-300"}`}
+                          >
                             {row.status}
                           </td>
                           <td className="py-2 pr-3 text-zinc-300">{row.value_preview || "—"}</td>
@@ -234,11 +263,7 @@ export default function AutoApplyRunConsole({ report, embedded = false }) {
             <Section title={`Planned steps (${planSteps.length})`}>
               {planSteps.map((step, index) => (
                 <LogLine key={`${step.action}-${index}`} level="info">
-                  [
-                  {index + 1}
-                  ]
-                  {" "}
-                  {step.action}
+                  [{index + 1}] {step.action}
                   {" → "}
                   {step.locators?.[0] || "(no locator)"}
                   {step.value_preview ? ` · ${step.value_preview}` : ""}
@@ -252,14 +277,11 @@ export default function AutoApplyRunConsole({ report, embedded = false }) {
               {stepLog.map((entry, index) => (
                 <LogLine
                   key={`${entry.action}-${index}`}
-                  level={entry.status === "ok" ? "ok" : entry.status === "not_found" ? "warn" : "error"}
+                  level={
+                    entry.status === "ok" ? "ok" : entry.status === "not_found" ? "warn" : "error"
+                  }
                 >
-                  [
-                  {index + 1}
-                  ]
-                  {" "}
-                  {entry.action}
-                  {" "}
+                  [{index + 1}] {entry.action}{" "}
                   <span className={STATUS_STYLES[entry.status] || ""}>{entry.status}</span>
                   {" · "}
                   {entry.locator || "—"}
@@ -270,15 +292,21 @@ export default function AutoApplyRunConsole({ report, embedded = false }) {
             </Section>
           ) : report.stage_reached === "submit" || report.stage_reached === "verify" ? (
             <Section title="Browser execution log">
-              <LogLine level="warn">No step log recorded (run may have failed before browser steps).</LogLine>
+              <LogLine level="warn">
+                No step log recorded (run may have failed before browser steps).
+              </LogLine>
             </Section>
           ) : report.status === "prepared" ? (
             <Section title="Browser execution log">
-              <LogLine level="info">Dry run — browser was not opened. Uncheck dry run to submit for real.</LogLine>
+              <LogLine level="info">
+                Dry run — browser was not opened. Uncheck dry run to submit for real.
+              </LogLine>
             </Section>
           ) : report.stage_reached === "resolve" ? (
             <Section title="Browser execution log">
-              <LogLine level="warn">Stopped at resolve — fix missing fields above before the browser opens.</LogLine>
+              <LogLine level="warn">
+                Stopped at resolve — fix missing fields above before the browser opens.
+              </LogLine>
             </Section>
           ) : isFailed && report.stage_reached === "submit" ? (
             <Section title="Browser execution log">
@@ -298,7 +326,9 @@ export default function AutoApplyRunConsole({ report, embedded = false }) {
             <LogLine level="ok">Confirmation: {execution.confirmation_text}</LogLine>
           ) : null}
           {(execution.validation_errors || []).map((err) => (
-            <LogLine key={err} level="error">{err}</LogLine>
+            <LogLine key={err} level="error">
+              {err}
+            </LogLine>
           ))}
 
           {Array.isArray(report.screenshots) && report.screenshots[0] ? (
@@ -342,14 +372,17 @@ function ErrorPanel({ error, reason, stage, embedded = false }) {
   return (
     <div className={panelClass}>
       <div className="flex items-start gap-3">
-        <div className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
-          embedded ? "bg-red-500/20 text-red-200" : "bg-red-100 text-red-700"
-        }`}
+        <div
+          className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
+            embedded ? "bg-red-500/20 text-red-200" : "bg-red-100 text-red-700"
+          }`}
         >
           !
         </div>
         <div className="min-w-0 flex-1">
-          <p className={`font-display text-base font-bold ${titleClass}`}>Run failed at {stage || "unknown"}</p>
+          <p className={`font-display text-base font-bold ${titleClass}`}>
+            Run failed at {stage || "unknown"}
+          </p>
           <p className={`mt-1 text-sm font-medium ${messageClass}`}>{message}</p>
           <dl className={`mt-3 grid gap-2 text-xs sm:grid-cols-2 ${valueClass}`}>
             <div>
@@ -376,7 +409,9 @@ function ErrorPanel({ error, reason, stage, embedded = false }) {
             ) : null}
             {error?.target_url ? (
               <div className="sm:col-span-2">
-                <dt className={`font-semibold uppercase tracking-wide ${labelClass}`}>Target URL</dt>
+                <dt className={`font-semibold uppercase tracking-wide ${labelClass}`}>
+                  Target URL
+                </dt>
                 <dd className="break-all font-mono">
                   <a href={error.target_url} target="_blank" rel="noreferrer" className="underline">
                     {error.target_url}
@@ -393,8 +428,12 @@ function ErrorPanel({ error, reason, stage, embedded = false }) {
           ) : null}
           {error?.traceback ? (
             <details className="mt-3">
-              <summary className={`cursor-pointer text-xs font-semibold ${labelClass}`}>Stack trace</summary>
-              <pre className={`mt-2 max-h-48 overflow-auto whitespace-pre-wrap font-mono text-[11px] ${messageClass}`}>
+              <summary className={`cursor-pointer text-xs font-semibold ${labelClass}`}>
+                Stack trace
+              </summary>
+              <pre
+                className={`mt-2 max-h-48 overflow-auto whitespace-pre-wrap font-mono text-[11px] ${messageClass}`}
+              >
                 {error.traceback}
               </pre>
             </details>
@@ -415,21 +454,21 @@ function Section({ title, children }) {
 }
 
 function LogLine({ level = "info", children }) {
-  const color = level === "ok"
-    ? "text-emerald-400"
-    : level === "warn"
-      ? "text-amber-400"
-      : level === "error"
-        ? "text-red-400"
-        : "text-zinc-300";
+  const color =
+    level === "ok"
+      ? "text-emerald-400"
+      : level === "warn"
+        ? "text-amber-400"
+        : level === "error"
+          ? "text-red-400"
+          : "text-zinc-300";
   return <p className={`mb-1 leading-relaxed ${color}`}>{children}</p>;
 }
 
 function ConsoleStat({ label, value }) {
   return (
     <span className="text-zinc-400">
-      <span className="text-zinc-500">{label}:</span>
-      {" "}
+      <span className="text-zinc-500">{label}:</span>{" "}
       <span className="font-semibold capitalize text-zinc-100">{value}</span>
     </span>
   );

@@ -26,10 +26,7 @@ export const INTRODUCE_HIRLY_RESOURCES_FR = [
     rows: [
       [
         FR_TAGS.upload,
-        [
-          "Tout ce que t'as à faire, c'est importer ton CV.",
-          "Importe simplement ton CV.",
-        ],
+        ["Tout ce que t'as à faire, c'est importer ton CV.", "Importe simplement ton CV."],
       ],
       [
         FR_TAGS.ai,
@@ -61,12 +58,7 @@ export const INTRODUCE_HIRLY_RESOURCES_FR = [
     type: "table",
     columns: ["", "Variation 1", "Variation 2", "Variation 3"],
     rows: [
-      [
-        { type: "label", text: "Court" },
-        [FR_TAGS.upload, FR_TAGS.swipe],
-        [],
-        [],
-      ],
+      [{ type: "label", text: "Court" }, [FR_TAGS.upload, FR_TAGS.swipe], [], []],
       [
         { type: "label", text: "Moyen" },
         [FR_TAGS.upload, FR_TAGS.ai, FR_TAGS.swipe],
@@ -90,13 +82,7 @@ export const INTRODUCE_HIRLY_RESOURCES_EN = [
     type: "table",
     columns: ["Fonctionnalités", "Script"],
     rows: [
-      [
-        EN_TAGS.upload,
-        [
-          "All you gotta do is upload your resume",
-          "Just upload your resume",
-        ],
-      ],
+      [EN_TAGS.upload, ["All you gotta do is upload your resume", "Just upload your resume"]],
       [
         EN_TAGS.ai,
         [
@@ -127,12 +113,7 @@ export const INTRODUCE_HIRLY_RESOURCES_EN = [
     type: "table",
     columns: ["", "Variation 1", "Variation 2", "Variation 3"],
     rows: [
-      [
-        { type: "label", text: "Short" },
-        [EN_TAGS.upload, EN_TAGS.swipe],
-        [],
-        [],
-      ],
+      [{ type: "label", text: "Short" }, [EN_TAGS.upload, EN_TAGS.swipe], [], []],
       [
         { type: "label", text: "Medium" },
         [EN_TAGS.upload, EN_TAGS.ai, EN_TAGS.swipe],

@@ -15,10 +15,7 @@ function RichText({ text, className = "" }) {
   let lastIndex = 0;
   let match;
 
-  const combined = new RegExp(
-    `${MARKDOWN_LINK_PATTERN.source}|${URL_PATTERN.source}`,
-    "g",
-  );
+  const combined = new RegExp(`${MARKDOWN_LINK_PATTERN.source}|${URL_PATTERN.source}`, "g");
 
   while ((match = combined.exec(text)) !== null) {
     if (match.index > lastIndex) {
@@ -59,17 +56,21 @@ function RichText({ text, className = "" }) {
   }
 
   if (parts.length === 1 && typeof parts[0] === "string") {
-    return <span className={className}>{text.split("\n").map((line, i, arr) => (
-      <span key={i}>
-        {line}
-        {i < arr.length - 1 ? <br /> : null}
+    return (
+      <span className={className}>
+        {text.split("\n").map((line, i, arr) => (
+          <span key={i}>
+            {line}
+            {i < arr.length - 1 ? <br /> : null}
+          </span>
+        ))}
       </span>
-    ))}</span>;
+    );
   }
 
   return (
     <span className={className}>
-      {parts.map((part, i) => (
+      {parts.map((part, i) =>
         typeof part === "string"
           ? part.split("\n").map((line, j, arr) => (
               <span key={`${i}-${j}`}>
@@ -77,8 +78,8 @@ function RichText({ text, className = "" }) {
                 {j < arr.length - 1 ? <br /> : null}
               </span>
             ))
-          : part
-      ))}
+          : part,
+      )}
     </span>
   );
 }
@@ -155,9 +156,7 @@ function DocBlock({ block, lang }) {
       return (
         <TrainingThemeSidebar
           items={block.items}
-          renderContent={(child, key) => (
-            <DocBlock key={key} block={child} lang={lang} />
-          )}
+          renderContent={(child, key) => <DocBlock key={key} block={child} lang={lang} />}
         />
       );
     case "short_video":
@@ -173,7 +172,11 @@ function DocBlock({ block, lang }) {
     case "heading": {
       const level = block.level || 2;
       if (level === 1) {
-        return <h2 className="font-display text-2xl font-bold tracking-tight text-zinc-900">{block.text}</h2>;
+        return (
+          <h2 className="font-display text-2xl font-bold tracking-tight text-zinc-900">
+            {block.text}
+          </h2>
+        );
       }
       if (level === 3) {
         return <h4 className="text-base font-semibold text-zinc-900">{block.text}</h4>;
@@ -188,13 +191,17 @@ function DocBlock({ block, lang }) {
       );
     case "list": {
       const Tag = block.style === "numbered" ? "ol" : "ul";
-      const listClass = block.style === "numbered"
-        ? "list-decimal space-y-1.5 pl-5 text-zinc-700"
-        : "list-disc space-y-1.5 pl-5 text-zinc-700";
+      const listClass =
+        block.style === "numbered"
+          ? "list-decimal space-y-1.5 pl-5 text-zinc-700"
+          : "list-disc space-y-1.5 pl-5 text-zinc-700";
       return (
         <Tag className={listClass}>
           {(block.items || []).map((item, index) => (
-            <li key={typeof item === "string" ? item : item.text || index} className="leading-relaxed">
+            <li
+              key={typeof item === "string" ? item : item.text || index}
+              className="leading-relaxed"
+            >
               <ListItemContent item={item} />
             </li>
           ))}

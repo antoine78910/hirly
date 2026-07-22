@@ -29,7 +29,13 @@ const SALARY_STEP = 5_000;
 function SaveButton({ disabled, saving, onClick, testId }) {
   const { t } = useAppLocale();
   return (
-    <Button type="button" variant="brand" disabled={disabled || saving} onClick={onClick} data-testid={testId}>
+    <Button
+      type="button"
+      variant="brand"
+      disabled={disabled || saving}
+      onClick={onClick}
+      data-testid={testId}
+    >
       {saving ? t("common.loading") : t("common.save")}
     </Button>
   );
@@ -38,7 +44,9 @@ function SaveButton({ disabled, saving, onClick, testId }) {
 function FieldBlock({ label, htmlFor, children }) {
   return (
     <div className="space-y-2">
-      <Label htmlFor={htmlFor} className="shell-title text-sm font-medium">{label}</Label>
+      <Label htmlFor={htmlFor} className="shell-title text-sm font-medium">
+        {label}
+      </Label>
       {children}
     </div>
   );
@@ -100,28 +108,37 @@ export default function ProfilePersonalInfoTab({ profile, userEmail, onSaved }) 
     setAddressEditing(false);
   }, [baseline]);
 
-  const contactBaseline = useMemo(() => ({
-    firstName: baseline.firstName,
-    lastName: baseline.lastName,
-    phone: baseline.phone,
-    address: baseline.address,
-    addressData: baseline.addressData,
-  }), [baseline]);
+  const contactBaseline = useMemo(
+    () => ({
+      firstName: baseline.firstName,
+      lastName: baseline.lastName,
+      phone: baseline.phone,
+      address: baseline.address,
+      addressData: baseline.addressData,
+    }),
+    [baseline],
+  );
 
-  const salaryBaseline = useMemo(() => ({
-    salaryMin: baseline.salaryMin,
-    salaryMax: baseline.salaryMax,
-  }), [baseline]);
+  const salaryBaseline = useMemo(
+    () => ({
+      salaryMin: baseline.salaryMin,
+      salaryMax: baseline.salaryMax,
+    }),
+    [baseline],
+  );
 
-  const demographicsBaseline = useMemo(() => ({
-    dateOfBirth: baseline.dateOfBirth,
-    gender: baseline.gender,
-    ethnicity: baseline.ethnicity,
-    disabilityStatus: baseline.disabilityStatus,
-    sexualOrientation: baseline.sexualOrientation,
-    veteranStatus: baseline.veteranStatus,
-    citizenship: baseline.citizenship,
-  }), [baseline]);
+  const demographicsBaseline = useMemo(
+    () => ({
+      dateOfBirth: baseline.dateOfBirth,
+      gender: baseline.gender,
+      ethnicity: baseline.ethnicity,
+      disabilityStatus: baseline.disabilityStatus,
+      sexualOrientation: baseline.sexualOrientation,
+      veteranStatus: baseline.veteranStatus,
+      citizenship: baseline.citizenship,
+    }),
+    [baseline],
+  );
 
   const contactDirty = !snapshotsEqual(contact, contactBaseline);
   const salaryDirty = !snapshotsEqual(salary, salaryBaseline);
@@ -243,14 +260,14 @@ export default function ProfilePersonalInfoTab({ profile, userEmail, onSaved }) 
       <ProfileFormSection
         title={t("profile.personalInfo.contactTitle")}
         description={t("profile.personalInfo.contactDesc")}
-        footer={(
+        footer={
           <SaveButton
             disabled={!contactDirty}
             saving={savingContact}
             onClick={saveContact}
             testId="personal-info-save-contact"
           />
-        )}
+        }
       >
         <form id="basic-info-form" className="space-y-5" onSubmit={(e) => e.preventDefault()}>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -306,7 +323,9 @@ export default function ProfilePersonalInfoTab({ profile, userEmail, onSaved }) 
                 label=""
                 value={contact.address}
                 selectedLocation={contact.addressData}
-                onInputChange={(value) => setContact((s) => ({ ...s, address: value, addressData: null }))}
+                onInputChange={(value) =>
+                  setContact((s) => ({ ...s, address: value, addressData: null }))
+                }
                 onSelect={(loc) => {
                   setContact((s) => ({
                     ...s,
@@ -322,7 +341,9 @@ export default function ProfilePersonalInfoTab({ profile, userEmail, onSaved }) 
               />
             ) : (
               <div className="shell-inset flex flex-wrap items-center gap-2.5 rounded-md px-4 py-3">
-                <div className="shell-title min-w-0 flex-1 text-sm font-medium">{contact.address}</div>
+                <div className="shell-title min-w-0 flex-1 text-sm font-medium">
+                  {contact.address}
+                </div>
                 <div className="flex items-center gap-2">
                   <Button
                     type="button"
@@ -354,25 +375,33 @@ export default function ProfilePersonalInfoTab({ profile, userEmail, onSaved }) 
       <ProfileFormSection
         title={t("profile.personalInfo.salaryTitle")}
         description={t("profile.personalInfo.salaryDesc")}
-        footer={(
+        footer={
           <SaveButton
             disabled={!salaryDirty}
             saving={savingSalary}
             onClick={saveSalary}
             testId="personal-info-save-salary"
           />
-        )}
+        }
       >
-        <form id="salary-expectations-form" className="space-y-5" onSubmit={(e) => e.preventDefault()}>
+        <form
+          id="salary-expectations-form"
+          className="space-y-5"
+          onSubmit={(e) => e.preventDefault()}
+        >
           <div className="flex items-center justify-center gap-6 sm:gap-8">
             <div className="min-w-[120px] text-center sm:min-w-[140px]">
               <span className="text-sm shell-body">{t("profile.personalInfo.minimum")}</span>
-              <p className="text-2xl font-bold text-linkedin">{formatSalary(salary.salaryMin, lang)}</p>
+              <p className="text-2xl font-bold text-linkedin">
+                {formatSalary(salary.salaryMin, lang)}
+              </p>
             </div>
             <span className="text-zinc-400">—</span>
             <div className="min-w-[120px] text-center sm:min-w-[140px]">
               <span className="text-sm shell-body">{t("profile.personalInfo.maximum")}</span>
-              <p className="text-2xl font-bold text-linkedin">{formatSalary(salary.salaryMax, lang)}</p>
+              <p className="text-2xl font-bold text-linkedin">
+                {formatSalary(salary.salaryMax, lang)}
+              </p>
             </div>
           </div>
 
@@ -395,21 +424,23 @@ export default function ProfilePersonalInfoTab({ profile, userEmail, onSaved }) 
             <span>{formatMoney(SALARY_MAX, lang)}</span>
           </div>
 
-          <p className="shell-inset rounded-lg p-4 text-center text-sm text-zinc-600 dark:text-zinc-400">{salarySummary}</p>
+          <p className="shell-inset rounded-lg p-4 text-center text-sm text-zinc-600 dark:text-zinc-400">
+            {salarySummary}
+          </p>
         </form>
       </ProfileFormSection>
 
       <ProfileFormSection
         title={t("profile.personalInfo.demographicsTitle")}
         description={t("profile.personalInfo.demographicsDesc")}
-        footer={(
+        footer={
           <SaveButton
             disabled={!demographicsDirty}
             saving={savingDemographics}
             onClick={saveDemographics}
             testId="personal-info-save-demographics"
           />
-        )}
+        }
       >
         <form id="demographics-form" className="space-y-6" onSubmit={(e) => e.preventDefault()}>
           <FieldBlock label={t("profile.personalInfo.dateOfBirth")} htmlFor="dob">
@@ -427,13 +458,22 @@ export default function ProfilePersonalInfoTab({ profile, userEmail, onSaved }) 
           </FieldBlock>
 
           <FieldBlock label={t("profile.personalInfo.gender")} htmlFor="gender">
-            <Select value={demographics.gender || undefined} onValueChange={(value) => setDemographics((s) => ({ ...s, gender: value }))}>
-              <SelectTrigger id="gender" className="w-full sm:w-72" data-testid="personal-info-gender">
+            <Select
+              value={demographics.gender || undefined}
+              onValueChange={(value) => setDemographics((s) => ({ ...s, gender: value }))}
+            >
+              <SelectTrigger
+                id="gender"
+                className="w-full sm:w-72"
+                data-testid="personal-info-gender"
+              >
                 <SelectValue placeholder={t("profile.personalInfo.selectGender")} />
               </SelectTrigger>
               <SelectContent>
                 {genderOptions.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -467,28 +507,45 @@ export default function ProfilePersonalInfoTab({ profile, userEmail, onSaved }) 
               value={demographics.disabilityStatus || undefined}
               onValueChange={(value) => setDemographics((s) => ({ ...s, disabilityStatus: value }))}
             >
-              <SelectTrigger id="disabilityStatus" className="w-full sm:w-72" data-testid="personal-info-disability">
+              <SelectTrigger
+                id="disabilityStatus"
+                className="w-full sm:w-72"
+                data-testid="personal-info-disability"
+              >
                 <SelectValue placeholder={t("profile.personalInfo.selectStatus")} />
               </SelectTrigger>
               <SelectContent>
                 {disabilityOptions.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </FieldBlock>
 
-          <FieldBlock label={t("profile.personalInfo.sexualOrientation")} htmlFor="sexualOrientation">
+          <FieldBlock
+            label={t("profile.personalInfo.sexualOrientation")}
+            htmlFor="sexualOrientation"
+          >
             <Select
               value={demographics.sexualOrientation || undefined}
-              onValueChange={(value) => setDemographics((s) => ({ ...s, sexualOrientation: value }))}
+              onValueChange={(value) =>
+                setDemographics((s) => ({ ...s, sexualOrientation: value }))
+              }
             >
-              <SelectTrigger id="sexualOrientation" className="w-full sm:w-72" data-testid="personal-info-orientation">
+              <SelectTrigger
+                id="sexualOrientation"
+                className="w-full sm:w-72"
+                data-testid="personal-info-orientation"
+              >
                 <SelectValue placeholder={t("profile.personalInfo.selectOrientation")} />
               </SelectTrigger>
               <SelectContent>
                 {sexualOrientationOptions.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -499,12 +556,18 @@ export default function ProfilePersonalInfoTab({ profile, userEmail, onSaved }) 
               value={demographics.veteranStatus || undefined}
               onValueChange={(value) => setDemographics((s) => ({ ...s, veteranStatus: value }))}
             >
-              <SelectTrigger id="veteranStatus" className="w-full sm:w-72" data-testid="personal-info-veteran">
+              <SelectTrigger
+                id="veteranStatus"
+                className="w-full sm:w-72"
+                data-testid="personal-info-veteran"
+              >
                 <SelectValue placeholder={t("profile.personalInfo.selectStatus")} />
               </SelectTrigger>
               <SelectContent>
                 {veteranOptions.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -512,7 +575,9 @@ export default function ProfilePersonalInfoTab({ profile, userEmail, onSaved }) 
 
           <div className="space-y-3">
             <div className="flex items-center justify-between gap-3">
-              <Label className="shell-title text-sm font-medium">{t("profile.personalInfo.citizenshipStatus")}</Label>
+              <Label className="shell-title text-sm font-medium">
+                {t("profile.personalInfo.citizenshipStatus")}
+              </Label>
               <Button
                 type="button"
                 variant="outline"
@@ -542,7 +607,9 @@ export default function ProfilePersonalInfoTab({ profile, userEmail, onSaved }) 
                 </SelectTrigger>
                 <SelectContent>
                   {citizenshipStatusOptions.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -557,7 +624,9 @@ export default function ProfilePersonalInfoTab({ profile, userEmail, onSaved }) 
                   >
                     <span className="shell-title font-medium">{entry.country}</span>
                     <div className="flex items-center gap-2">
-                      <span className="text-zinc-600 dark:text-zinc-400">{labelForStoredOption(entry.status, citizenshipStatusOptions)}</span>
+                      <span className="text-zinc-600 dark:text-zinc-400">
+                        {labelForStoredOption(entry.status, citizenshipStatusOptions)}
+                      </span>
                       <Button
                         type="button"
                         variant="outline"
@@ -577,8 +646,12 @@ export default function ProfilePersonalInfoTab({ profile, userEmail, onSaved }) 
                   <Globe className="h-5 w-5" />
                 </div>
                 <div>
-                  <p className="shell-title text-base font-medium">{t("profile.personalInfo.noCitizenship")}</p>
-                  <p className="mt-1 text-sm shell-body">{t("profile.personalInfo.noCitizenshipDesc")}</p>
+                  <p className="shell-title text-base font-medium">
+                    {t("profile.personalInfo.noCitizenship")}
+                  </p>
+                  <p className="mt-1 text-sm shell-body">
+                    {t("profile.personalInfo.noCitizenshipDesc")}
+                  </p>
                 </div>
               </div>
             )}

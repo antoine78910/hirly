@@ -20,8 +20,9 @@ describe("training locale routes", () => {
   test("marks untranslated DE/ES/IT content as unavailable rather than falling back", () => {
     for (const locale of ["de", "es", "it"]) {
       expect(hasTrainingContent(locale)).toBe(false);
-      expect(replaceTrainingLocale(`/${locale}/training/course-1`, "?tab=overview", locale))
-        .toBe(`/${locale}/training/course-1?tab=overview`);
+      expect(replaceTrainingLocale(`/${locale}/training/course-1`, "?tab=overview", locale)).toBe(
+        `/${locale}/training/course-1?tab=overview`,
+      );
     }
     expect(hasTrainingContent("en")).toBe(true);
     expect(hasTrainingContent("fr")).toBe(true);

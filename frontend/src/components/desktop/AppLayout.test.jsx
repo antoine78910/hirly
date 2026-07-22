@@ -5,10 +5,14 @@ import AppLayout from "./AppLayout";
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
-jest.mock("react-router-dom", () => ({
-  Outlet: () => <main>App route</main>,
-  useLocation: () => ({ pathname: "/swipe" }),
-}), { virtual: true });
+jest.mock(
+  "react-router-dom",
+  () => ({
+    Outlet: () => <main>App route</main>,
+    useLocation: () => ({ pathname: "/swipe" }),
+  }),
+  { virtual: true },
+);
 
 jest.mock("../../hooks/useIsDesktop", () => ({
   useIsDesktop: () => false,

@@ -36,11 +36,7 @@ export const taskStatusSchema = z.enum([
   "failed",
   "cancelled",
 ]);
-export const authorizationStatusSchema = z.enum([
-  "unverified",
-  "authorized",
-  "blocked",
-]);
+export const authorizationStatusSchema = z.enum(["unverified", "authorized", "blocked"]);
 export const writerRuntimeSchema = z.enum(["none", "python", "typescript"]);
 export const sourceRunModeSchema = z.enum([
   "incremental",
@@ -63,11 +59,7 @@ export const sourceLifecycleStateSchema = z.enum([
   "expired",
   "blocked",
 ]);
-export const sourceTrialEnvironmentSchema = z.enum([
-  "development",
-  "test",
-  "staging",
-]);
+export const sourceTrialEnvironmentSchema = z.enum(["development", "test", "staging"]);
 export const sourceTrialStatusSchema = z.enum([
   "completed",
   "budget_exhausted",
@@ -201,7 +193,11 @@ export const providerSearchRequestSchema = z
     provider: providerSchema,
     query: z.string().trim().min(1).max(256).nullable().default(null),
     location: z.string().trim().min(1).max(256).nullable().default(null),
-    countryCode: z.string().regex(/^[A-Z]{2}$/).nullable().default(null),
+    countryCode: z
+      .string()
+      .regex(/^[A-Z]{2}$/)
+      .nullable()
+      .default(null),
     cursor: z.string().min(1).max(512).nullable().default(null),
     pageSize: z.number().int().positive().max(150).default(50),
     maxPages: z.number().int().positive().max(20).default(5),
@@ -225,9 +221,7 @@ export const sourceCheckpointSchema = z
   })
   .catchall(z.unknown());
 
-const countryKillSwitchesSchema = z
-  .record(z.string().regex(/^[A-Z]{2}$/), z.boolean())
-  .default({});
+const countryKillSwitchesSchema = z.record(z.string().regex(/^[A-Z]{2}$/), z.boolean()).default({});
 
 export const sourceFetchRequestSchema = z
   .object({
@@ -248,7 +242,10 @@ export const sourceRegistryEntrySchema = z
     provider: providerSchema,
     sourceKey: z.string().trim().min(1).max(512),
     tenantKey: z.string().trim().min(1).max(512).nullable(),
-    countryCodes: z.array(z.string().regex(/^[A-Z]{2}$/)).min(1).max(250),
+    countryCodes: z
+      .array(z.string().regex(/^[A-Z]{2}$/))
+      .min(1)
+      .max(250),
     accessType: sourceAccessTypeSchema,
     policyId: z.uuid().nullable(),
     enabled: z.boolean(),
@@ -277,8 +274,7 @@ const httpsBaseUrlSchema = z.url().superRefine((value, context) => {
   ) {
     context.addIssue({
       code: "custom",
-      message:
-        "base URL must use HTTPS without credentials, query parameters, or fragments",
+      message: "base URL must use HTTPS without credentials, query parameters, or fragments",
     });
   }
 });
@@ -313,13 +309,7 @@ export const careerSourceCandidateSchema = careerSourceCandidateRegistrationSche
     transportEnabled: z.boolean(),
     incrementalEnabled: z.boolean(),
     backfillEnabled: z.boolean(),
-    discoveryState: z.enum([
-      "candidate",
-      "detected",
-      "validated",
-      "rejected",
-      "approved",
-    ]),
+    discoveryState: z.enum(["candidate", "detected", "validated", "rejected", "approved"]),
   })
   .strict();
 
@@ -330,9 +320,7 @@ export const sourcePolicyStateSchema = z
     commercialUseAllowed: z.boolean(),
     redisplayAllowed: z.boolean(),
     fullTextRetentionAllowed: z.boolean(),
-    enabledEnvironments: z
-      .array(z.enum(["development", "test", "staging", "production"]))
-      .min(1),
+    enabledEnvironments: z.array(z.enum(["development", "test", "staging", "production"])).min(1),
     permittedAccessMethods: z.array(sourceAccessTypeSchema).min(1),
     expiresAt: z.iso.datetime({ offset: true }).nullable(),
   })
@@ -365,20 +353,15 @@ export const providerRegistrySchema = z
   .superRefine((value, context) => {
     if (
       value.enabled &&
-      (value.authorizationStatus !== "authorized" ||
-        value.writerRuntime !== "typescript")
+      (value.authorizationStatus !== "authorized" || value.writerRuntime !== "typescript")
     ) {
       context.addIssue({
         code: "custom",
-        message:
-          "enabled providers require authorized status and TypeScript writer ownership",
+        message: "enabled providers require authorized status and TypeScript writer ownership",
         path: ["enabled"],
       });
     }
-    if (
-      value.enabled &&
-      (!value.authorizationEvidenceRef || !value.authorizationReviewedAt)
-    ) {
+    if (value.enabled && (!value.authorizationEvidenceRef || !value.authorizationReviewedAt)) {
       context.addIssue({
         code: "custom",
         message: "enabled providers require reviewed authorization evidence",
@@ -423,9 +406,7 @@ export const enqueueRunSchema = z
         path: ["triggerSource"],
       });
     }
-    if (
-      (value.kind === "provider_ingestion") !== Boolean(value.provider)
-    ) {
+    if ((value.kind === "provider_ingestion") !== Boolean(value.provider)) {
       context.addIssue({
         code: "custom",
         message:
@@ -434,9 +415,7 @@ export const enqueueRunSchema = z
       });
     }
     const expectedTaskType =
-      value.kind === "provider_ingestion"
-        ? "provider.fetch_page"
-        : "inventory.maintenance";
+      value.kind === "provider_ingestion" ? "provider.fetch_page" : "inventory.maintenance";
     value.tasks.forEach((task, index) => {
       if (task.taskType !== expectedTaskType) {
         context.addIssue({
@@ -486,7 +465,11 @@ export const canonicalJobSchema = z
     remote: z.boolean().nullable().optional(),
     salaryMin: z.number().nonnegative().nullable().optional(),
     salaryMax: z.number().nonnegative().nullable().optional(),
-    currency: z.string().regex(/^[A-Z]{3}$/).nullable().optional(),
+    currency: z
+      .string()
+      .regex(/^[A-Z]{3}$/)
+      .nullable()
+      .optional(),
     postedAt: z.iso.datetime({ offset: true }).nullable().optional(),
     importedAt: z.iso.datetime({ offset: true }).nullable().optional(),
     lastSeenAt: z.iso.datetime({ offset: true }).nullable().optional(),
@@ -519,11 +502,7 @@ export const canonicalJobSchema = z
   })
   .strict()
   .superRefine((value, context) => {
-    if (
-      value.salaryMin != null &&
-      value.salaryMax != null &&
-      value.salaryMin > value.salaryMax
-    ) {
+    if (value.salaryMin != null && value.salaryMax != null && value.salaryMin > value.salaryMax) {
       context.addIssue({
         code: "custom",
         message: "salary minimum cannot exceed salary maximum",
@@ -613,9 +592,7 @@ export const sproutSourceRuntimeSchema = z
     countryCode: z.string().regex(/^[A-Z]{2}$/),
     policyId: z.uuid(),
     endpoint: httpsBaseUrlSchema,
-    credentialRef: z
-      .string()
-      .regex(/^secret:\/\/[a-z0-9][a-z0-9/_-]{2,127}$/),
+    credentialRef: z.string().regex(/^secret:\/\/[a-z0-9][a-z0-9/_-]{2,127}$/),
     approvedPageSize: z.number().int().positive().max(500),
     checkpoint: sourceCheckpointSchema,
     policyEvidenceRef: z.string().trim().min(1).max(2_048),
@@ -657,9 +634,7 @@ export type Provider = z.infer<typeof providerSchema>;
 export type SourceRunMode = z.infer<typeof sourceRunModeSchema>;
 export type SourceAccessType = z.infer<typeof sourceAccessTypeSchema>;
 export type SourceLifecycleState = z.infer<typeof sourceLifecycleStateSchema>;
-export type SourceTrialEnvironment = z.infer<
-  typeof sourceTrialEnvironmentSchema
->;
+export type SourceTrialEnvironment = z.infer<typeof sourceTrialEnvironmentSchema>;
 export type SourceTrialStatus = z.infer<typeof sourceTrialStatusSchema>;
 export type SourceTrialBudget = z.infer<typeof sourceTrialBudgetSchema>;
 export type SourceTrialManifest = z.infer<typeof sourceTrialManifestSchema>;
@@ -670,25 +645,19 @@ export type SourceRegistryEntry = z.infer<typeof sourceRegistryEntrySchema>;
 export type CareerSourceCandidateRegistration = z.infer<
   typeof careerSourceCandidateRegistrationSchema
 >;
-export type CareerSourceCandidate = z.infer<
-  typeof careerSourceCandidateSchema
->;
+export type CareerSourceCandidate = z.infer<typeof careerSourceCandidateSchema>;
 export type SourcePolicyState = z.infer<typeof sourcePolicyStateSchema>;
 export type SourceRuntimePolicy = z.infer<typeof sourceRuntimePolicySchema>;
 export type RateLimitConfig = z.infer<typeof rateLimitConfigSchema>;
 export type AuthorizationStatus = z.infer<typeof authorizationStatusSchema>;
 export type ProviderRegistry = z.infer<typeof providerRegistrySchema>;
 export type ProviderSearchRequest = z.infer<typeof providerSearchRequestSchema>;
-export type RawProviderJobEnvelope = z.infer<
-  typeof rawProviderJobEnvelopeSchema
->;
+export type RawProviderJobEnvelope = z.infer<typeof rawProviderJobEnvelopeSchema>;
 export type EnqueueRun = z.infer<typeof enqueueRunSchema>;
 export type RunView = z.infer<typeof runViewSchema>;
 export type CanonicalJob = z.infer<typeof canonicalJobSchema>;
 export type SourcePageCommit = z.infer<typeof sourcePageCommitSchema>;
-export type SourcePageCommitResult = z.infer<
-  typeof sourcePageCommitResultSchema
->;
+export type SourcePageCommitResult = z.infer<typeof sourcePageCommitResultSchema>;
 export type SproutSourceRuntime = z.infer<typeof sproutSourceRuntimeSchema>;
 export type ValidationResult = z.infer<typeof validationResultSchema>;
 export type StableErrorCode = z.infer<typeof stableErrorCodeSchema>;

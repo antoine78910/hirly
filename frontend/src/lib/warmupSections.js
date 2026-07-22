@@ -1,11 +1,7 @@
 /** Warm Up module sub-chapters. */
 
 import { WARM_UP_PLAYBOOK_EN, WARM_UP_PLAYBOOK_FR } from "./warmUpPlaybook";
-import {
-  WARM_UP_POSTS_EN,
-  WARM_UP_POSTS_FR,
-  warmUpPostsToBlocks,
-} from "./warmUpPostsData";
+import { WARM_UP_POSTS_EN, WARM_UP_POSTS_FR, warmUpPostsToBlocks } from "./warmUpPostsData";
 
 export const WARM_UP_SECTIONS_EN = [
   {

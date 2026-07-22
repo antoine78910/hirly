@@ -25,9 +25,7 @@ function allowedPostHogHost(hostname: string): boolean {
   }
 }
 
-export function validatedAdminPostHogUrl(
-  value: string | undefined,
-): string | null {
+export function validatedAdminPostHogUrl(value: string | undefined): string | null {
   if (!value?.trim()) return null;
   try {
     const url = new URL(value);
@@ -54,12 +52,8 @@ export function adminPostHogMigrationEnabled(): boolean {
   return flagEnabled(process.env.REACT_APP_ADMIN_POSTHOG_ANALYTICS_ENABLED);
 }
 
-export default function AdminAnalyticsBoundary({
-  children,
-}: AdminAnalyticsBoundaryProps) {
-  const dashboardUrl = validatedAdminPostHogUrl(
-    process.env.REACT_APP_POSTHOG_ADMIN_DASHBOARD_URL,
-  );
+export default function AdminAnalyticsBoundary({ children }: AdminAnalyticsBoundaryProps) {
+  const dashboardUrl = validatedAdminPostHogUrl(process.env.REACT_APP_POSTHOG_ADMIN_DASHBOARD_URL);
   if (!adminPostHogMigrationEnabled() || !dashboardUrl) {
     return <>{children}</>;
   }
@@ -80,8 +74,8 @@ export default function AdminAnalyticsBoundary({
                 Open role-restricted PostHog analytics
               </h2>
               <p className="mt-2 max-w-3xl text-sm text-zinc-600">
-                Product funnels, engagement, retention, and revenue analysis are
-                available in the role-restricted PostHog workspace.
+                Product funnels, engagement, retention, and revenue analysis are available in the
+                role-restricted PostHog workspace.
               </p>
               <a
                 className="mt-5 inline-flex items-center gap-2 rounded-lg bg-linkedin px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
@@ -93,8 +87,8 @@ export default function AdminAnalyticsBoundary({
                 <ExternalLink className="h-4 w-4" />
               </a>
               <p className="mt-3 text-xs text-zinc-500">
-                Access is enforced by PostHog workspace membership. Hirly does not
-                embed or proxy this dashboard and sends no personal API key.
+                Access is enforced by PostHog workspace membership. Hirly does not embed or proxy
+                this dashboard and sends no personal API key.
               </p>
             </div>
           </div>
@@ -110,8 +104,8 @@ export default function AdminAnalyticsBoundary({
                 Operational admin remains in Hirly
               </h2>
               <p className="mt-2 text-sm text-zinc-600">
-                User details, billing and account controls, fulfillment repair,
-                attention queues, and canonical database writers are unchanged.
+                User details, billing and account controls, fulfillment repair, attention queues,
+                and canonical database writers are unchanged.
               </p>
               <div className="mt-4 flex flex-wrap gap-3">
                 {[

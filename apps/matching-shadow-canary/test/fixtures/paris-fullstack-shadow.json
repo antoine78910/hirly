@@ -13,9 +13,7 @@
     "canaryEnabled": true,
     "rollbackRequested": false,
     "sampleRateBasisPoints": 10000,
-    "selectors": [
-      { "cohort": "paid", "countryCode": "FR", "roleFamilyId": "fullstack" }
-    ],
+    "selectors": [{ "cohort": "paid", "countryCode": "FR", "roleFamilyId": "fullstack" }],
     "requiredSupplyGates": ["paris-52km-fullstack"]
   },
   "thresholds": {

@@ -11,28 +11,33 @@ import {
 const asJson = (value: unknown): postgres.JSONValue =>
   JSON.parse(JSON.stringify(value)) as postgres.JSONValue;
 
-const titleTokens = (value: string | null): string[] =>
-  [...new Set((value ?? "")
-    .normalize("NFKD")
-    .replace(/\p{Diacritic}/gu, "")
-    .toLowerCase()
-    .split(/[^a-z0-9+#.-]+/)
-    .filter((token) => token.length >= 2))];
+const titleTokens = (value: string | null): string[] => [
+  ...new Set(
+    (value ?? "")
+      .normalize("NFKD")
+      .replace(/\p{Diacritic}/gu, "")
+      .toLowerCase()
+      .split(/[^a-z0-9+#.-]+/)
+      .filter((token) => token.length >= 2),
+  ),
+];
 
 export class PostgresPaidCohortCoverageStore implements PaidCohortCoverageStore {
   constructor(private readonly sql: Database) {}
 
   async loadCurrentCandidates(freshnessCutoff: string): Promise<CoverageCandidate[]> {
-    const rows = await this.sql<{
-      canonical_group_digest: string;
-      provider: string;
-      title: string | null;
-      country_code: string | null;
-      fresh_at: Date;
-      actionable: boolean;
-      route_known: boolean;
-      direct_employer: boolean;
-    }[]>`
+    const rows = await this.sql<
+      {
+        canonical_group_digest: string;
+        provider: string;
+        title: string | null;
+        country_code: string | null;
+        fresh_at: Date;
+        actionable: boolean;
+        route_known: boolean;
+        direct_employer: boolean;
+      }[]
+    >`
       SELECT
         encode(digest(
           coalesce(
@@ -97,16 +102,18 @@ export class PostgresPaidCohortCoverageStore implements PaidCohortCoverageStore 
     const generated = new Date(generatedAt);
     const verified: TrialSourceBinding[] = [];
     for (const binding of bindings) {
-      const [run] = await this.sql<{
-        id: string;
-        source_id: string;
-        provider: string;
-        tenant_key: string;
-        terminal_status: string | null;
-        terminal_at: Date | null;
-        future_pages: string;
-        future_candidates: string;
-      }[]>`
+      const [run] = await this.sql<
+        {
+          id: string;
+          source_id: string;
+          provider: string;
+          tenant_key: string;
+          terminal_status: string | null;
+          terminal_at: Date | null;
+          future_pages: string;
+          future_candidates: string;
+        }[]
+      >`
         SELECT
           run.id,
           run.source_id,
@@ -129,15 +136,15 @@ export class PostgresPaidCohortCoverageStore implements PaidCohortCoverageStore 
         WHERE run.id = ${binding.trialRunId}::uuid
       `;
       if (
-        !run
-        || run.source_id !== binding.sourceId
-        || run.provider !== binding.provider
-        || run.tenant_key !== binding.tenantKey
-        || run.terminal_status !== "completed"
-        || run.terminal_at === null
-        || run.terminal_at > generated
-        || Number(run.future_pages) !== 0
-        || Number(run.future_candidates) !== 0
+        !run ||
+        run.source_id !== binding.sourceId ||
+        run.provider !== binding.provider ||
+        run.tenant_key !== binding.tenantKey ||
+        run.terminal_status !== "completed" ||
+        run.terminal_at === null ||
+        run.terminal_at > generated ||
+        Number(run.future_pages) !== 0 ||
+        Number(run.future_candidates) !== 0
       ) {
         throw new Error(
           `PAID_COHORT_COVERAGE_REFUSED: unverified trial binding ${binding.trialRunId}`,
@@ -148,18 +155,20 @@ export class PostgresPaidCohortCoverageStore implements PaidCohortCoverageStore 
 
     const candidates: CoverageCandidate[] = [];
     for (const binding of verified) {
-      const rows = await this.sql<{
-        canonical_group_digest: string;
-        source_id: string;
-        provider: string;
-        tenant_key: string;
-        title: string | null;
-        country_code: string | null;
-        fresh_at: Date;
-        actionable: boolean;
-        route_known: boolean;
-        direct_employer: boolean;
-      }[]>`
+      const rows = await this.sql<
+        {
+          canonical_group_digest: string;
+          source_id: string;
+          provider: string;
+          tenant_key: string;
+          title: string | null;
+          country_code: string | null;
+          fresh_at: Date;
+          actionable: boolean;
+          route_known: boolean;
+          direct_employer: boolean;
+        }[]
+      >`
         SELECT
           encode(digest(
             coalesce(
@@ -208,34 +217,36 @@ export class PostgresPaidCohortCoverageStore implements PaidCohortCoverageStore 
         WHERE candidate.run_id = ${binding.trialRunId}::uuid
           AND candidate.created_at <= ${generated}
       `;
-      candidates.push(...rows.map((row) => ({
-        canonicalGroupDigest: row.canonical_group_digest,
-        sourceId: row.source_id,
-        provider: row.provider,
-        tenantKey: row.tenant_key,
-        titleTokens: titleTokens(row.title),
-        countryCode: row.country_code,
-        freshAt: row.fresh_at.toISOString(),
-        actionable: row.actionable,
-        routeKnown: row.route_known,
-        directEmployer: row.direct_employer,
-      })));
+      candidates.push(
+        ...rows.map((row) => ({
+          canonicalGroupDigest: row.canonical_group_digest,
+          sourceId: row.source_id,
+          provider: row.provider,
+          tenantKey: row.tenant_key,
+          titleTokens: titleTokens(row.title),
+          countryCode: row.country_code,
+          freshAt: row.fresh_at.toISOString(),
+          actionable: row.actionable,
+          routeKnown: row.route_known,
+          directEmployer: row.direct_employer,
+        })),
+      );
     }
     return candidates;
   }
 
-  async persistEvidence(
-    evidence: CoverageEvidence,
-  ): Promise<"persisted" | "idempotent"> {
+  async persistEvidence(evidence: CoverageEvidence): Promise<"persisted" | "idempotent"> {
     return this.sql.begin(async (transaction) => {
-      const [run] = await transaction<{
-        kind: string;
-        provider: string | null;
-        status: string;
-        requested_at: Date;
-        started_at: Date | null;
-        summary: Record<string, unknown>;
-      }[]>`
+      const [run] = await transaction<
+        {
+          kind: string;
+          provider: string | null;
+          status: string;
+          requested_at: Date;
+          started_at: Date | null;
+          summary: Record<string, unknown>;
+        }[]
+      >`
         SELECT kind, provider, status, requested_at, started_at, summary
         FROM public.worker_runs
         WHERE id = ${evidence.coverageRunId}::uuid
@@ -246,17 +257,18 @@ export class PostgresPaidCohortCoverageStore implements PaidCohortCoverageStore 
       }
       if (run.status === "succeeded") {
         if (
-          run.summary?.evidenceDigest === evidence.evidenceDigest
-          && run.summary?.cohortDigest === evidence.cohortDigest
-        ) return "idempotent";
+          run.summary?.evidenceDigest === evidence.evidenceDigest &&
+          run.summary?.cohortDigest === evidence.cohortDigest
+        )
+          return "idempotent";
         throw new Error("PAID_COHORT_COVERAGE_REFUSED: completed run evidence mismatch");
       }
       const generated = new Date(evidence.generatedAt);
       if (
-        run.status !== "running"
-        || run.started_at === null
-        || run.requested_at > generated
-        || run.started_at > generated
+        run.status !== "running" ||
+        run.started_at === null ||
+        run.requested_at > generated ||
+        run.started_at > generated
       ) {
         throw new Error("PAID_COHORT_COVERAGE_REFUSED: coverage run is not writable");
       }
@@ -325,8 +337,9 @@ export class PostgresPaidCohortCoverageStore implements PaidCohortCoverageStore 
 export function assertCoverageStoreHasNoCanonicalWrites(): void {
   const source = `${PostgresPaidCohortCoverageStore.prototype.persistEvidence}`;
   if (
-    /\b(insert\s+into|update|delete\s+from)\s+public\.(jobs|job_occurrences|canonical_jobs)\b/i
-      .test(source)
+    /\b(insert\s+into|update|delete\s+from)\s+public\.(jobs|job_occurrences|canonical_jobs)\b/i.test(
+      source,
+    )
   ) {
     throw new Error("coverage store contains a canonical inventory mutation");
   }

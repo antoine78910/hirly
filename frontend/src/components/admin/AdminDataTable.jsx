@@ -7,7 +7,15 @@ import {
   getSortedRowModel,
   useReactTable,
 } from "@tanstack/react-table";
-import { ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight, Loader2, Search } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
+  ChevronLeft,
+  ChevronRight,
+  Loader2,
+  Search,
+} from "lucide-react";
 
 /** Substring match (case-insensitive) across every global-filterable column. Mirrors the
  * ad-hoc `haystack.includes(query)` search pattern every admin page used to hand-roll. */
@@ -32,7 +40,9 @@ function ColumnFilter({ column }) {
       >
         <option value="">All</option>
         {(meta.filterOptions || []).map((option) => (
-          <option key={option.value} value={option.value}>{option.label}</option>
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
         ))}
       </select>
     );
@@ -113,7 +123,9 @@ export default function AdminDataTable({
       </div>
 
       {error ? (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">{error}</div>
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+          {error}
+        </div>
       ) : null}
 
       <div className="max-w-full overflow-x-auto rounded-lg border border-zinc-200 bg-white shadow-sm">
@@ -156,7 +168,11 @@ export default function AdminDataTable({
           </thead>
           <tbody className="divide-y divide-zinc-100">
             {loading ? (
-              <tr><td className="px-4 py-8 text-center text-zinc-500" colSpan={columnCount}><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>
+              <tr>
+                <td className="px-4 py-8 text-center text-zinc-500" colSpan={columnCount}>
+                  <Loader2 className="mx-auto h-5 w-5 animate-spin" />
+                </td>
+              </tr>
             ) : table.getRowModel().rows.length ? (
               table.getRowModel().rows.map((row) => (
                 <tr key={row.id} className="hover:bg-zinc-50">
@@ -168,7 +184,11 @@ export default function AdminDataTable({
                 </tr>
               ))
             ) : (
-              <tr><td className="px-4 py-8 text-center text-zinc-500" colSpan={columnCount}>{emptyMessage}</td></tr>
+              <tr>
+                <td className="px-4 py-8 text-center text-zinc-500" colSpan={columnCount}>
+                  {emptyMessage}
+                </td>
+              </tr>
             )}
           </tbody>
         </table>
@@ -184,12 +204,16 @@ export default function AdminDataTable({
               className="rounded border border-zinc-200 bg-white px-2 py-1 text-xs text-zinc-600 outline-none focus:ring-1 focus:ring-violet-300"
             >
               {pageSizeOptions.map((size) => (
-                <option key={size} value={size}>{size}</option>
+                <option key={size} value={size}>
+                  {size}
+                </option>
               ))}
             </select>
           </div>
           <div className="flex items-center gap-3 text-xs text-zinc-500">
-            <span>Page {pageCount ? pagination.pageIndex + 1 : 0} of {pageCount}</span>
+            <span>
+              Page {pageCount ? pagination.pageIndex + 1 : 0} of {pageCount}
+            </span>
             <div className="flex items-center gap-1">
               <button
                 type="button"

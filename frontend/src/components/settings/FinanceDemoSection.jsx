@@ -25,7 +25,9 @@ export default function FinanceDemoSection({ variant = "desktop" }) {
     <>
       <div
         className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl border ${
-          dark ? "border-zinc-800 bg-zinc-900 text-zinc-300" : "border-zinc-200 bg-zinc-50 text-zinc-600"
+          dark
+            ? "border-zinc-800 bg-zinc-900 text-zinc-300"
+            : "border-zinc-200 bg-zinc-50 text-zinc-600"
         }`}
       >
         <Landmark className="h-4 w-4" strokeWidth={1.9} />
@@ -64,7 +66,9 @@ export default function FinanceDemoSection({ variant = "desktop" }) {
   return (
     <section className="mt-10" data-testid="settings-finance-demo-desktop">
       <div className="mb-4">
-        <h2 className={`text-[11px] font-semibold uppercase tracking-[0.16em] ${dark ? "text-zinc-500" : "text-zinc-400"}`}>
+        <h2
+          className={`text-[11px] font-semibold uppercase tracking-[0.16em] ${dark ? "text-zinc-500" : "text-zinc-400"}`}
+        >
           {t("demoSettings.sectionTitle")}
         </h2>
         <p className={`mt-2 text-sm leading-relaxed ${dark ? "text-zinc-500" : "text-zinc-500"}`}>
@@ -76,7 +80,9 @@ export default function FinanceDemoSection({ variant = "desktop" }) {
           dark ? "border-zinc-800 bg-zinc-950" : "border-zinc-200 bg-white"
         }`}
       >
-        <div className={`flex items-center gap-4 px-5 py-5 sm:px-6 ${dark ? "hover:bg-white/[0.02]" : "hover:bg-zinc-50/80"}`}>
+        <div
+          className={`flex items-center gap-4 px-5 py-5 sm:px-6 ${dark ? "hover:bg-white/[0.02]" : "hover:bg-zinc-50/80"}`}
+        >
           {row}
         </div>
       </div>

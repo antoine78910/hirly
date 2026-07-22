@@ -45,7 +45,9 @@ const PREVIEW_THEMES = {
 
 const Section = ({ label, children, theme, style }) => (
   <section className="mt-4 first:mt-0" style={style}>
-    <h3 className={`pb-1 text-[10px] font-bold uppercase tracking-[0.14em] border-b mb-2.5 ${theme.sectionLabel}`}>
+    <h3
+      className={`pb-1 text-[10px] font-bold uppercase tracking-[0.14em] border-b mb-2.5 ${theme.sectionLabel}`}
+    >
       {label}
     </h3>
     {children}
@@ -74,19 +76,34 @@ function ProfessionalColumns({ contact, resume, accentColor }) {
         <ProSection label="Contact" accentColor={accentColor} style={{ marginTop: 0 }}>
           {contact.location ? (
             <div className="mb-3">
-              <p className="mb-0.5 text-[9px] font-bold uppercase tracking-wide" style={{ color: accentColor }}>Address</p>
+              <p
+                className="mb-0.5 text-[9px] font-bold uppercase tracking-wide"
+                style={{ color: accentColor }}
+              >
+                Address
+              </p>
               <p>{contact.location}</p>
             </div>
           ) : null}
           {contact.phone ? (
             <div className="mb-3">
-              <p className="mb-0.5 text-[9px] font-bold uppercase tracking-wide" style={{ color: accentColor }}>Phone</p>
+              <p
+                className="mb-0.5 text-[9px] font-bold uppercase tracking-wide"
+                style={{ color: accentColor }}
+              >
+                Phone
+              </p>
               <p>{contact.phone}</p>
             </div>
           ) : null}
           {contact.email ? (
             <div className="mb-3">
-              <p className="mb-0.5 text-[9px] font-bold uppercase tracking-wide" style={{ color: accentColor }}>Email</p>
+              <p
+                className="mb-0.5 text-[9px] font-bold uppercase tracking-wide"
+                style={{ color: accentColor }}
+              >
+                Email
+              </p>
               <p className="break-all">{contact.email}</p>
             </div>
           ) : null}
@@ -97,7 +114,10 @@ function ProfessionalColumns({ contact, resume, accentColor }) {
             <ul className="space-y-2">
               {socialLinks.map((link) => (
                 <li key={link.label} className="flex items-start gap-2">
-                  <span className="mt-1.5 inline-block h-1.5 w-1.5 shrink-0" style={{ backgroundColor: accentColor }} />
+                  <span
+                    className="mt-1.5 inline-block h-1.5 w-1.5 shrink-0"
+                    style={{ backgroundColor: accentColor }}
+                  />
                   <span className="break-all">{link.value}</span>
                 </li>
               ))}
@@ -110,7 +130,10 @@ function ProfessionalColumns({ contact, resume, accentColor }) {
             <ul className="space-y-2">
               {resume.skills.map((skill) => (
                 <li key={skill} className="flex items-start gap-2">
-                  <span className="mt-1.5 inline-block h-1.5 w-1.5 shrink-0" style={{ backgroundColor: accentColor }} />
+                  <span
+                    className="mt-1.5 inline-block h-1.5 w-1.5 shrink-0"
+                    style={{ backgroundColor: accentColor }}
+                  />
                   <span>{skill}</span>
                 </li>
               ))}
@@ -140,7 +163,11 @@ function ProfessionalColumns({ contact, resume, accentColor }) {
         ) : null}
 
         {resume.education?.length ? (
-          <ProSection label="Education" accentColor={accentColor} style={{ marginTop: resume.summary ? undefined : 0 }}>
+          <ProSection
+            label="Education"
+            accentColor={accentColor}
+            style={{ marginTop: resume.summary ? undefined : 0 }}
+          >
             <ul className="space-y-4">
               {resume.education.map((entry, index) => (
                 <li key={`${entry.degree}-${index}`}>
@@ -247,7 +274,9 @@ function ProfessionalPhotoPreview({ contact, resume }) {
 function ProfessionalPlainPreview({ contact, resume }) {
   const name = (contact.name || "Your Name").trim();
   const accent = PRO_CV_COLORS_PLAIN.accent;
-  const contactLine = [contact.email, contact.phone, contact.location].filter(Boolean).join("   ·   ");
+  const contactLine = [contact.email, contact.phone, contact.location]
+    .filter(Boolean)
+    .join("   ·   ");
 
   return (
     <div
@@ -294,7 +323,10 @@ function HirlyDefaultCVPreview({ contact, resume, job }) {
   const languageColumns = [languages.slice(0, half), languages.slice(half)];
 
   return (
-    <div className="flex aspect-[210/297] w-full min-h-[680px] flex-col overflow-hidden bg-white px-8 py-8 text-zinc-900" data-testid="cv-preview">
+    <div
+      className="flex aspect-[210/297] w-full min-h-[680px] flex-col overflow-hidden bg-white px-8 py-8 text-zinc-900"
+      data-testid="cv-preview"
+    >
       <div className="flex items-start justify-between gap-6">
         <div className="flex items-center gap-4">
           {photoUrl ? (
@@ -306,22 +338,36 @@ function HirlyDefaultCVPreview({ contact, resume, job }) {
             />
           ) : null}
           <div>
-            <h2 className="font-display text-[1.5rem] font-bold leading-tight tracking-tight text-zinc-900">{name}</h2>
+            <h2 className="font-display text-[1.5rem] font-bold leading-tight tracking-tight text-zinc-900">
+              {name}
+            </h2>
             {job?.title ? <p className="mt-0.5 text-sm italic text-zinc-500">{job.title}</p> : null}
           </div>
         </div>
         <div className="shrink-0 space-y-1 text-right text-[11px] leading-relaxed text-zinc-600">
           {contact.phone ? (
-            <p className="flex items-center justify-end gap-1.5"><Phone className="h-3 w-3" />{contact.phone}</p>
+            <p className="flex items-center justify-end gap-1.5">
+              <Phone className="h-3 w-3" />
+              {contact.phone}
+            </p>
           ) : null}
           {contact.email ? (
-            <p className="flex items-center justify-end gap-1.5 break-all"><Mail className="h-3 w-3 shrink-0" />{contact.email}</p>
+            <p className="flex items-center justify-end gap-1.5 break-all">
+              <Mail className="h-3 w-3 shrink-0" />
+              {contact.email}
+            </p>
           ) : null}
           {contact.linkedin ? (
-            <p className="flex items-center justify-end gap-1.5 break-all"><Linkedin className="h-3 w-3 shrink-0" />{contact.linkedin}</p>
+            <p className="flex items-center justify-end gap-1.5 break-all">
+              <Linkedin className="h-3 w-3 shrink-0" />
+              {contact.linkedin}
+            </p>
           ) : null}
           {contact.location ? (
-            <p className="flex items-center justify-end gap-1.5"><MapPin className="h-3 w-3" />{contact.location}</p>
+            <p className="flex items-center justify-end gap-1.5">
+              <MapPin className="h-3 w-3" />
+              {contact.location}
+            </p>
           ) : null}
         </div>
       </div>
@@ -335,7 +381,9 @@ function HirlyDefaultCVPreview({ contact, resume, job }) {
                   <p className="font-semibold text-[13px] text-zinc-900">{entry.role}</p>
                   <p className="shrink-0 text-[11px] text-zinc-500">{entry.duration}</p>
                 </div>
-                <p className="text-[11px] text-zinc-500">{[entry.company, entry.location].filter(Boolean).join(" — ")}</p>
+                <p className="text-[11px] text-zinc-500">
+                  {[entry.company, entry.location].filter(Boolean).join(" — ")}
+                </p>
                 {entry.highlights?.length > 0 && (
                   <ul className="mt-1.5 space-y-1">
                     {entry.highlights.map((highlight, hi) => (
@@ -388,12 +436,25 @@ function HirlyDefaultCVPreview({ contact, resume, job }) {
   );
 }
 
-export default function CVPreview({ contact = {}, resume = {}, job, template = "modern", theme = "dark" }) {
+export default function CVPreview({
+  contact = {},
+  resume = {},
+  job,
+  template = "modern",
+  theme = "dark",
+}) {
   const resolvedTemplate = resolveCvDisplayTemplate(template);
   const palette = PREVIEW_THEMES[theme] || PREVIEW_THEMES.dark;
   const name = (contact.name || "Your Name").trim();
-  const contactLine = [contact.email, contact.phone, contact.location, contact.linkedin, contact.website]
-    .filter(Boolean).join("  •  ");
+  const contactLine = [
+    contact.email,
+    contact.phone,
+    contact.location,
+    contact.linkedin,
+    contact.website,
+  ]
+    .filter(Boolean)
+    .join("  •  ");
 
   if (resolvedTemplate === HIRLY_DEFAULT_CV_TEMPLATE) {
     return (
@@ -436,13 +497,20 @@ export default function CVPreview({ contact = {}, resume = {}, job, template = "
         </div>
       ) : template === "classic" ? (
         <div className="px-8 pt-7 text-center">
-          <h2 className={`font-display font-bold text-3xl tracking-tight ${palette.titleClassic}`} style={{ fontFamily: "Georgia, serif" }}>{name}</h2>
+          <h2
+            className={`font-display font-bold text-3xl tracking-tight ${palette.titleClassic}`}
+            style={{ fontFamily: "Georgia, serif" }}
+          >
+            {name}
+          </h2>
           <p className={`text-xs mt-1 ${palette.muted}`}>{contactLine}</p>
           <div className={`mt-4 border-t ${palette.dividerClassic}`} />
         </div>
       ) : (
         <div className="px-6 pt-6">
-          <h2 className={`font-display font-black text-2xl tracking-tight ${palette.title}`}>{name}</h2>
+          <h2 className={`font-display font-black text-2xl tracking-tight ${palette.title}`}>
+            {name}
+          </h2>
           <p className={`text-xs mt-1 ${palette.muted}`}>{contactLine}</p>
           {template !== "minimal" && <div className={`mt-3 border-t ${palette.divider}`} />}
         </div>
@@ -457,12 +525,17 @@ export default function CVPreview({ contact = {}, resume = {}, job, template = "
 
         {resume.skills?.length > 0 && (
           <Section label="Skills" theme={palette}>
-            <p className={`text-sm leading-relaxed ${palette.body}`}>{resume.skills.join("  ·  ")}</p>
+            <p className={`text-sm leading-relaxed ${palette.body}`}>
+              {resume.skills.join("  ·  ")}
+            </p>
           </Section>
         )}
 
         {resume.highlights?.length > 0 && (
-          <Section label={resume.experience?.length ? "Key highlights" : "Highlights"} theme={palette}>
+          <Section
+            label={resume.experience?.length ? "Key highlights" : "Highlights"}
+            theme={palette}
+          >
             <ul className="space-y-1.5">
               {resume.highlights.map((item, index) => (
                 <li key={index} className={`text-sm leading-relaxed flex gap-2 ${palette.body}`}>
@@ -483,11 +556,16 @@ export default function CVPreview({ contact = {}, resume = {}, job, template = "
                     <p className={`font-semibold text-[15px] ${palette.role}`}>{e.role}</p>
                     <p className={`text-xs shrink-0 ${palette.muted}`}>{e.duration}</p>
                   </div>
-                  <p className={`text-xs ${palette.muted}`}>{[e.company, e.location].filter(Boolean).join(" — ")}</p>
+                  <p className={`text-xs ${palette.muted}`}>
+                    {[e.company, e.location].filter(Boolean).join(" — ")}
+                  </p>
                   {e.highlights?.length > 0 && (
                     <ul className="mt-2 space-y-1.5">
                       {e.highlights.map((h, j) => (
-                        <li key={j} className={`text-sm leading-relaxed flex gap-2 ${palette.body}`}>
+                        <li
+                          key={j}
+                          className={`text-sm leading-relaxed flex gap-2 ${palette.body}`}
+                        >
                           <span className={palette.bullet}>•</span> <span>{h}</span>
                         </li>
                       ))}

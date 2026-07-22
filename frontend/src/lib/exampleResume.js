@@ -18,12 +18,7 @@ export const EXAMPLE_RESUME = {
     phone: "(555) 555-5555",
     location: "Los Angeles, CA, 90001",
   },
-  skills: [
-    "Customer Service",
-    "Inventory Management",
-    "Cash Handling",
-    "Team Collaboration",
-  ],
+  skills: ["Customer Service", "Inventory Management", "Cash Handling", "Team Collaboration"],
   experience: [
     {
       role: "Entry-Level Server",

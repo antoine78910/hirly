@@ -20,17 +20,13 @@ export default function PostHogLifecycle() {
   };
 
   useEffect(() => {
-    const nextUserId =
-      typeof user?.analytics_user_id === "string"
-        ? user.analytics_user_id
-        : null;
+    const nextUserId = typeof user?.analytics_user_id === "string" ? user.analytics_user_id : null;
     if (nextUserId) {
       identifyPostHogUser(nextUserId, {
         email: user?.email,
         name: user?.name,
       });
-    }
-    else resetPostHog();
+    } else resetPostHog();
   }, [user?.analytics_user_id, user?.email, user?.name]);
 
   useEffect(() => {

@@ -3,8 +3,23 @@ import { motion, useMotionValue, useTransform, AnimatePresence, animate } from "
 import { useNavigate, useLocation } from "react-router-dom";
 import { api } from "../lib/api";
 import {
-  Zap, Undo2, History, SlidersHorizontal, Flag, Share2, MapPin, Calendar,
-  Heart, X, Loader2, Info, DollarSign, Briefcase, FileText, Star, Bell,
+  Zap,
+  Undo2,
+  History,
+  SlidersHorizontal,
+  Flag,
+  Share2,
+  MapPin,
+  Calendar,
+  Heart,
+  X,
+  Loader2,
+  Info,
+  DollarSign,
+  Briefcase,
+  FileText,
+  Star,
+  Bell,
 } from "lucide-react";
 import { toast } from "sonner";
 import Logo from "../components/Logo";
@@ -26,7 +41,11 @@ import { dismissDemoWelcome, shouldOpenDemoWelcome } from "../lib/demoWelcome";
 import DemoWelcomeModal from "../components/demo/DemoWelcomeModal";
 import { TUTORIAL_BYPASS_AUTH } from "../lib/dev";
 import { DEMO_SETTINGS_CHANGED, isFinanceDemoEnabled } from "../lib/demoSettings";
-import { getFinanceDemoFeedData, performFinanceDemoSwipe, performFinanceDemoUndo } from "../lib/financeDemoApi";
+import {
+  getFinanceDemoFeedData,
+  performFinanceDemoSwipe,
+  performFinanceDemoUndo,
+} from "../lib/financeDemoApi";
 import { getFinanceDemoSearchTarget } from "../lib/financeDemoJobs";
 import { shouldShowSwipeAdminAtsBadge, filterPersonalSwipeFeedJobs } from "../lib/adminSwipeUi";
 import { ensureTutorialSession } from "../lib/tutorialSession";
@@ -45,18 +64,19 @@ import { useAppLocale } from "../context/AppLocaleContext";
 import DesktopCreditsPill from "../components/desktop/DesktopCreditsPill";
 import { BILLING_UPDATED, notifyBillingPatch } from "../lib/billingEvents";
 import { claimFriendReferralReward } from "../lib/friendReferral";
-import {
-  formatPostedDate,
-  getSwipeSuccessCopy,
-  getSwipeErrorMessage,
-} from "../lib/appUi";
+import { formatPostedDate, getSwipeSuccessCopy, getSwipeErrorMessage } from "../lib/appUi";
 import {
   isMissingPhoneFeedError,
   isMissingResumeFeedError,
   profileHasPhone,
   profileHasResume,
 } from "../lib/profileReadiness";
-import { getJobBadgeItems, getJobDisplayContent, getJobDisplayTitle, formatJobSalaryLabel } from "../lib/jobDisplayUtils";
+import {
+  getJobBadgeItems,
+  getJobDisplayContent,
+  getJobDisplayTitle,
+  formatJobSalaryLabel,
+} from "../lib/jobDisplayUtils";
 import JobRomeProfile from "../components/swipe/JobRomeProfile";
 import JobOfferDetails from "../components/swipe/JobOfferDetails";
 import JobCardHighlights, { JobCardMatchBadge } from "../components/swipe/JobCardHighlights";
@@ -90,9 +110,8 @@ const DEFAULT_SEARCH_RADIUS = "50km";
 const FEED_BATCH_SIZE = 12;
 const FILTERS_STORAGE_KEY = "swiipr.jobs.filters.v2";
 
-const isFinanceDemoFeedResponse = (data) => (
-  Boolean(data?.finance_demo || data?.feed_mode === "finance_demo")
-);
+const isFinanceDemoFeedResponse = (data) =>
+  Boolean(data?.finance_demo || data?.feed_mode === "finance_demo");
 
 const readPersistedFilters = () => {
   if (typeof window === "undefined") return null;
@@ -155,7 +174,10 @@ const compactCityLabel = (value) => {
 };
 
 const buildLocalFeedGuard = ({ params, response }) => {
-  if (response?.filters_applied?.explicit_local_intent || response?.request_trace?.explicit_local_intent) {
+  if (
+    response?.filters_applied?.explicit_local_intent ||
+    response?.request_trace?.explicit_local_intent
+  ) {
     return null;
   }
   const radius = params.get("search_radius") || DEFAULT_SEARCH_RADIUS;
@@ -163,14 +185,17 @@ const buildLocalFeedGuard = ({ params, response }) => {
   let selectedLocations = [];
   try {
     const parsed = JSON.parse(params.get("locations_json") || "[]");
-    if (Array.isArray(parsed)) selectedLocations = parsed.filter((item) => item && typeof item === "object");
+    if (Array.isArray(parsed))
+      selectedLocations = parsed.filter((item) => item && typeof item === "object");
   } catch (_) {
     selectedLocations = [];
   }
   if (!selectedLocations.length) return null;
 
   const intelligence = response?.filters_applied?.location_intelligence || {};
-  const expandedPlaces = Array.isArray(intelligence.expanded_places) ? intelligence.expanded_places : [];
+  const expandedPlaces = Array.isArray(intelligence.expanded_places)
+    ? intelligence.expanded_places
+    : [];
   const backendCityTerms = (response?.filters_applied?.selected_city_terms || [])
     .map((term) => normalizeSearchText(term))
     .filter(Boolean);
@@ -187,30 +212,40 @@ const buildLocalFeedGuard = ({ params, response }) => {
       const normalized = normalizeSearchText(value);
       if (normalized) cityTerms.add(normalized);
     });
-    const code = String(place?.country_code || "").toLowerCase().trim();
+    const code = String(place?.country_code || "")
+      .toLowerCase()
+      .trim();
     if (code) countryCodes.add(code);
   });
-  const workLocations = params.getAll("work_location").map((item) => String(item || "").toLowerCase());
+  const workLocations = params
+    .getAll("work_location")
+    .map((item) => String(item || "").toLowerCase());
   const remoteExplicit = workLocations.includes("remote");
 
   return (job) => {
     const remote = job?.remote === true || normalizeSearchText(job?.location).includes("remote");
     if (remote && remoteExplicit) return true;
     const data = job?.data && typeof job.data === "object" ? job.data : {};
-    const text = normalizeSearchText([
-      job?.city,
-      job?.region,
-      job?.location,
-      job?.country,
-      job?.country_code,
-      // Some providers store location pieces under `data.*` rather than top-level fields.
-      data?.location,
-      data?.job_city,
-      data?.job_state,
-      data?.job_country,
-      data?.job_location,
-    ].filter(Boolean).join(" "));
-    const countryCode = String(job?.country_code || "").toLowerCase().trim();
+    const text = normalizeSearchText(
+      [
+        job?.city,
+        job?.region,
+        job?.location,
+        job?.country,
+        job?.country_code,
+        // Some providers store location pieces under `data.*` rather than top-level fields.
+        data?.location,
+        data?.job_city,
+        data?.job_state,
+        data?.job_country,
+        data?.job_location,
+      ]
+        .filter(Boolean)
+        .join(" "),
+    );
+    const countryCode = String(job?.country_code || "")
+      .toLowerCase()
+      .trim();
     if (!text && !countryCode) return false;
     if (countryCode && countryCodes.size && !countryCodes.has(countryCode)) return false;
     for (const term of cityTerms) {
@@ -311,7 +346,9 @@ function JobCardBadges({ badges, compact = false }) {
         <span
           key={badge.label}
           className={`inline-flex shrink-0 items-center rounded-full bg-sprout-surface-2 font-medium text-zinc-100 ${
-            compact ? "px-2.5 py-1 text-[11px] sm:px-3 sm:py-1.5 sm:text-[13px]" : "px-3 py-1.5 text-[13px]"
+            compact
+              ? "px-2.5 py-1 text-[11px] sm:px-3 sm:py-1.5 sm:text-[13px]"
+              : "px-3 py-1.5 text-[13px]"
           }`}
         >
           {badge.label}
@@ -335,12 +372,17 @@ function MobileDetailSection({ title, bullets, body, t }) {
         ) : null}
       </h3>
       {body ? (
-        <p className="line-clamp-6 whitespace-pre-wrap text-sm leading-relaxed text-sprout-muted">{body}</p>
+        <p className="line-clamp-6 whitespace-pre-wrap text-sm leading-relaxed text-sprout-muted">
+          {body}
+        </p>
       ) : null}
       {bullets?.length ? (
         <ul className="space-y-2">
           {bullets.map((bullet, index) => (
-            <li key={`${title}-${index}`} className="flex items-start gap-2 text-sm leading-relaxed text-sprout-muted">
+            <li
+              key={`${title}-${index}`}
+              className="flex items-start gap-2 text-sm leading-relaxed text-sprout-muted"
+            >
               <span className="mt-1.5 text-[8px] text-sprout-mint">●</span>
               <span className="line-clamp-2">{bullet}</span>
             </li>
@@ -351,7 +393,15 @@ function MobileDetailSection({ title, bullets, body, t }) {
   );
 }
 
-function CardFront({ job, onReport, onShare, actionsEnabled, t, lang, pointerEventsDisabled = false }) {
+function CardFront({
+  job,
+  onReport,
+  onShare,
+  actionsEnabled,
+  t,
+  lang,
+  pointerEventsDisabled = false,
+}) {
   const { snippet, about } = getJobDisplayContent(job);
   const badges = getJobBadgeItems(job, { lang });
   const title = getJobDisplayTitle(job, { lang });
@@ -361,7 +411,9 @@ function CardFront({ job, onReport, onShare, actionsEnabled, t, lang, pointerEve
   const previewText = snippet || (about ? about.split(/\n+/).find(Boolean) : "");
 
   return (
-    <div className={`backface-hidden absolute inset-0 flex flex-col overflow-hidden rounded-[28px] border border-sprout-border bg-sprout-surface ${pointerEventsDisabled ? "pointer-events-none" : ""}`}>
+    <div
+      className={`backface-hidden absolute inset-0 flex flex-col overflow-hidden rounded-[28px] border border-sprout-border bg-sprout-surface ${pointerEventsDisabled ? "pointer-events-none" : ""}`}
+    >
       <div className="flex min-h-0 flex-1 flex-col px-4 pb-2 pt-3 sm:px-6 sm:pb-3 sm:pt-5">
         <div className="flex shrink-0 items-start justify-between gap-2">
           <div className="pointer-events-auto flex items-center gap-2">
@@ -472,69 +524,69 @@ function CardBack({ job, t, lang, onFlipBack }) {
           >
             {title}
           </h2>
-          <p className="mt-0.5 truncate text-sm font-semibold text-white sm:text-base">{job.company}</p>
+          <p className="mt-0.5 truncate text-sm font-semibold text-white sm:text-base">
+            {job.company}
+          </p>
         </div>
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col">
-      <div
-        className="app-scroll no-scrollbar min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-4 py-3 pb-2 touch-pan-y sm:px-6 sm:py-4"
-        data-testid="swipe-card-scroll"
-      >
-        <JobCardMeta
-          location={location}
-          salaryLabel={salaryLabel}
-          postedLabel={formatPostedDate(t, job.posted_at) || t("swipe.postedRecently")}
-          compact
-        />
+        <div
+          className="app-scroll no-scrollbar min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-4 py-3 pb-2 touch-pan-y sm:px-6 sm:py-4"
+          data-testid="swipe-card-scroll"
+        >
+          <JobCardMeta
+            location={location}
+            salaryLabel={salaryLabel}
+            postedLabel={formatPostedDate(t, job.posted_at) || t("swipe.postedRecently")}
+            compact
+          />
 
-        <JobCardBadges badges={badges} compact />
+          <JobCardBadges badges={badges} compact />
 
-        <div className="border-t border-sprout-border" />
+          <div className="border-t border-sprout-border" />
 
-        <div className="hidden sm:block">
-          <JobOfferDetails job={job} t={t} lang={lang} compact />
+          <div className="hidden sm:block">
+            <JobOfferDetails job={job} t={t} lang={lang} compact />
+          </div>
+          <div className="sm:hidden">
+            <JobCardHighlights job={job} t={t} lang={lang} max={4} compact />
+          </div>
+
+          <div className="space-y-3">
+            {about ? <MobileDetailSection title="About This Role" body={about} t={t} /> : null}
+            {detailSections.map((section) => (
+              <MobileDetailSection
+                key={section.title}
+                title={section.title}
+                bullets={section.bullets}
+                t={t}
+              />
+            ))}
+            <JobRomeProfile job={job} t={t} enabled />
+          </div>
         </div>
-        <div className="sm:hidden">
-          <JobCardHighlights job={job} t={t} lang={lang} max={4} compact />
-        </div>
 
-        <div className="space-y-3">
-          {about ? (
-            <MobileDetailSection title="About This Role" body={about} t={t} />
-          ) : null}
-          {detailSections.map((section) => (
-            <MobileDetailSection
-              key={section.title}
-              title={section.title}
-              bullets={section.bullets}
-              t={t}
-            />
-          ))}
-          <JobRomeProfile job={job} t={t} enabled />
-        </div>
-      </div>
-
-      <button
-        type="button"
-        className="flex w-full shrink-0 items-center justify-between border-t border-sprout-border px-6 py-3 text-[13px] text-sprout-muted"
-        onPointerDown={(event) => event.stopPropagation()}
-        onClick={(event) => {
-          event.stopPropagation();
-          suppressCardTap();
-          onFlipBack?.();
-        }}
-        aria-label={t("swipe.tapToFlipBack")}
-      >
-        <span className="flex items-center gap-1.5 font-display font-bold text-white">
-          <Logo size={18} />
-          {BRAND.NAME}
-        </span>
-        <span className="flex items-center gap-1.5">
-          {t("swipe.tapToFlipBack")}
-          <Info className="h-4 w-4" />
-        </span>
-      </button>
+        <button
+          type="button"
+          className="flex w-full shrink-0 items-center justify-between border-t border-sprout-border px-6 py-3 text-[13px] text-sprout-muted"
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={(event) => {
+            event.stopPropagation();
+            suppressCardTap();
+            onFlipBack?.();
+          }}
+          aria-label={t("swipe.tapToFlipBack")}
+        >
+          <span className="flex items-center gap-1.5 font-display font-bold text-white">
+            <Logo size={18} />
+            {BRAND.NAME}
+          </span>
+          <span className="flex items-center gap-1.5">
+            {t("swipe.tapToFlipBack")}
+            <Info className="h-4 w-4" />
+          </span>
+        </button>
       </div>
     </div>
   );
@@ -556,7 +608,19 @@ function AdminAtsBadge({ job }) {
 
 const CARD_BUTTON_SWIPE_X = 520;
 
-function Card({ job, onSwipe, onReport, onShare, isTop, index, t, lang, showAdminAtsBadge, pendingSwipe, onSwipeRequestComplete }) {
+function Card({
+  job,
+  onSwipe,
+  onReport,
+  onShare,
+  isTop,
+  index,
+  t,
+  lang,
+  showAdminAtsBadge,
+  pendingSwipe,
+  onSwipeRequestComplete,
+}) {
   const x = useMotionValue(0);
   const y = useMotionValue(0);
   const rotate = useTransform(x, [-260, 0, 260], [-14, 0, 14]);
@@ -726,14 +790,12 @@ function Card({ job, onSwipe, onReport, onShare, isTop, index, t, lang, showAdmi
           pointerEventsDisabled={flipped}
         />
         {showBack ? (
-          <CardBack
-            job={job}
-            t={t}
-            lang={lang}
-            onFlipBack={flipToFront}
-          />
+          <CardBack job={job} t={t} lang={lang} onFlipBack={flipToFront} />
         ) : (
-          <div className="backface-hidden rotate-y-180 absolute inset-0 rounded-[28px] border border-sprout-border bg-sprout-surface" aria-hidden="true" />
+          <div
+            className="backface-hidden rotate-y-180 absolute inset-0 rounded-[28px] border border-sprout-border bg-sprout-surface"
+            aria-hidden="true"
+          />
         )}
       </motion.div>
       {showAdminAtsBadge ? <AdminAtsBadge job={job} /> : null}
@@ -772,19 +834,26 @@ const trackApplicationOutcome = (data, job) => {
   const submission = data?.submission_status;
   if (submission === "prepared" || submission === "ready") trackEvent("application_prepared", base);
   if (submission === "action_required") trackEvent("application_action_required", base);
-  if (submission === "blocked" || submission === "blocked_captcha") trackEvent("application_blocked", base);
-  if (submission === "prepare_failed" || submission === "failed") trackEvent("application_prepare_failed", base);
+  if (submission === "blocked" || submission === "blocked_captcha")
+    trackEvent("application_blocked", base);
+  if (submission === "prepare_failed" || submission === "failed")
+    trackEvent("application_prepare_failed", base);
   if (submission === "submitted") trackEvent("application_submitted", base);
 };
 
 function SkeletonCard() {
   return (
-    <div className="absolute inset-0 bg-sprout-surface border border-sprout-border rounded-[28px] p-6 overflow-hidden" data-testid="skeleton-card">
+    <div
+      className="absolute inset-0 bg-sprout-surface border border-sprout-border rounded-[28px] p-6 overflow-hidden"
+      data-testid="skeleton-card"
+    >
       <div className="flex items-center justify-between">
         <div className="h-5 w-16 shimmer-light rounded-full" />
         <div className="h-6 w-10 shimmer-light rounded-full" />
       </div>
-      <div className="mt-6 flex justify-center"><div className="h-16 w-20 shimmer-light rounded-2xl" /></div>
+      <div className="mt-6 flex justify-center">
+        <div className="h-16 w-20 shimmer-light rounded-2xl" />
+      </div>
       <div className="mt-5 mx-auto h-6 w-32 shimmer-light rounded" />
       <div className="mt-2 mx-auto h-4 w-3/4 shimmer-light rounded" />
       <div className="mt-1 mx-auto h-4 w-1/2 shimmer-light rounded" />
@@ -817,17 +886,21 @@ export default function Swipe() {
   const [appliedToday, setAppliedToday] = useState(0);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [unreadNotifications, setUnreadNotifications] = useState(0);
-  const [target, setTarget] = useState(() => getSwipeFeedCacheSnapshot().target || { role: "", location: "" });
-  const [targetLocationData, setTargetLocationData] = useState(() => getSwipeFeedCacheSnapshot().targetLocationData);
+  const [target, setTarget] = useState(
+    () => getSwipeFeedCacheSnapshot().target || { role: "", location: "" },
+  );
+  const [targetLocationData, setTargetLocationData] = useState(
+    () => getSwipeFeedCacheSnapshot().targetLocationData,
+  );
   const [targetSaving, setTargetSaving] = useState(false);
   const [targetSheetOpen, setTargetSheetOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [desktopFiltersOpen, setDesktopFiltersOpen] = useState(false);
-  const [filters, setFilters] = useState(() => (
+  const [filters, setFilters] = useState(() =>
     getSwipeFeedCacheSnapshot().filters
       ? mergeFilters(getSwipeFeedCacheSnapshot().filters)
-      : mergeFilters(readPersistedFilters())
-  ));
+      : mergeFilters(readPersistedFilters()),
+  );
   const [totalCount, setTotalCount] = useState(null);
   const [feedMeta, setFeedMeta] = useState(() => getSwipeFeedCacheSnapshot().meta);
   const [feedError, setFeedError] = useState("");
@@ -995,10 +1068,9 @@ export default function Swipe() {
         api.get("/swipes/history?direction=left&limit=500"),
         api.get("/swipes/history?direction=right&limit=500"),
       ]);
-      const ids = [
-        ...(leftRes.data?.swipes || []),
-        ...(rightRes.data?.swipes || []),
-      ].map((row) => row?.job_id).filter(Boolean);
+      const ids = [...(leftRes.data?.swipes || []), ...(rightRes.data?.swipes || [])]
+        .map((row) => row?.job_id)
+        .filter(Boolean);
       seedSwipedJobIds(ids, userId);
     } catch (_) {
       /* offline / demo */
@@ -1006,7 +1078,10 @@ export default function Swipe() {
   }, []);
 
   const buildFeedParams = (f) => {
-    const params = new URLSearchParams({ limit: String(FEED_BATCH_SIZE), search_radius: DEFAULT_SEARCH_RADIUS });
+    const params = new URLSearchParams({
+      limit: String(FEED_BATCH_SIZE),
+      search_radius: DEFAULT_SEARCH_RADIUS,
+    });
     const activeTarget = targetRef.current;
     if (activeTarget) {
       const role = (activeTarget.role || "").trim();
@@ -1015,7 +1090,8 @@ export default function Swipe() {
     if (f == null) return params;
     const merged = mergeFilters(f);
     if (merged.minSalary) params.set("min_salary", String(merged.minSalary));
-    if (merged.postedDate && merged.postedDate !== "any") params.set("posted_within", merged.postedDate);
+    if (merged.postedDate && merged.postedDate !== "any")
+      params.set("posted_within", merged.postedDate);
     merged.workLocations?.forEach((v) => params.append("work_location", v));
     merged.jobTypes?.forEach((v) => params.append("job_type", v));
     merged.experience?.forEach((v) => params.append("experience", v));
@@ -1046,138 +1122,60 @@ export default function Swipe() {
     return params;
   };
 
-  const loadFeed = useCallback(async (replace = false, f = filtersRef.current, reason = "unspecified") => {
-    // Low-stack prefetches consume the committed Feed V2 cursor. Never repeat
-    // the first page after the server has declared this query terminal.
-    if (!replace && nextCursorRef.current === null) return;
-    // Appends are single-flight. A second low-stack event must coalesce with
-    // the request already claiming this cursor instead of aborting it.
-    if (!replace && fetchingRef.current) return;
-    if (replace && feedAbortRef.current) {
-      feedAbortRef.current.abort();
-      feedAbortRef.current = null;
-    }
-    if (replace) {
-      feedQueryEpochRef.current += 1;
-      nextCursorRef.current = null;
-      inFlightCursorRef.current = null;
-      setNextCursor(null);
-    }
-    const requestEpoch = feedQueryEpochRef.current;
-    const requestedCursor = replace ? null : nextCursorRef.current;
-    const requestFence = feedRequestFenceRef.current.next();
-    const controller = new AbortController();
-    feedAbortRef.current = controller;
-    inFlightCursorRef.current = requestedCursor;
-    pendingFiltersRef.current = undefined;
-    // Keep `stackPrefetch` (UI) limited to restoring-from-stack only: it controls
-    // whether we show/clear the loading skeleton.
-    const stackPrefetch = !replace && jobsRef.current.length > 0;
-    // Only restore-from-navigation should skip the loading skeleton. Any explicit
-    // target/filter change must clear the stack and show a fresh search.
-    const silentRefresh = replace && jobsRef.current.length > 0 && reason === "initial_navigation";
-    const isUserSearchChange = (
-      reason.startsWith("target_")
-      || reason.startsWith("filters_")
-      || reason === "demo_settings_changed"
-      || reason === "initial_finance_demo"
-    );
-    fetchingRef.current = true;
-    if (isUserSearchChange && replace) {
-      clearSwipeFeedCache();
-      jobsRef.current = [];
-    }
-    if (!stackPrefetch && !silentRefresh) {
-      setLoading(true);
-      if (replace) setJobs([]);
-    }
-    // Use the same in-flight marker for replacement and append requests. This
-    // lets the runway effect run exactly once after an initial low-card page
-    // commits, rather than racing the still-active replacement request.
-    setNextPageLoading(true);
-    setFeedError("");
-    const params = sanitizeSwipeFeedParams(buildFeedParams(f));
-    if (requestedCursor) params.set("cursor", requestedCursor);
-    let requestUrl = `/jobs/feed?${params.toString()}`;
-    setLastFeedDebug({
-      reason,
-      forceRefresh: replace,
-      filters: f || null,
-      filtersRef: filtersRef.current || null,
-      requestUrl,
-      requestParams: Object.fromEntries(params.entries()),
-      requestParamEntries: Array.from(params.entries()),
-      response: null,
-    });
-    const requestFeed = async (url = requestUrl) => {
-      if (isFinanceDemoEnabled()) {
-        const demoData = getFinanceDemoFeedData({
-          filters: f == null ? null : mergeFilters(f),
-          searchRole: targetRef.current?.role?.trim() || "",
-          limit: Number(params.get("limit") || 5),
-        });
-        if (demoData) return demoData;
+  const loadFeed = useCallback(
+    async (replace = false, f = filtersRef.current, reason = "unspecified") => {
+      // Low-stack prefetches consume the committed Feed V2 cursor. Never repeat
+      // the first page after the server has declared this query terminal.
+      if (!replace && nextCursorRef.current === null) return;
+      // Appends are single-flight. A second low-stack event must coalesce with
+      // the request already claiming this cursor instead of aborting it.
+      if (!replace && fetchingRef.current) return;
+      if (replace && feedAbortRef.current) {
+        feedAbortRef.current.abort();
+        feedAbortRef.current = null;
       }
-      const { data } = await api.get(url, {
-        timeout: 45000,
-        signal: controller.signal,
-      });
-      return data;
-    };
-    try {
-      let data;
-      try {
-        data = await requestFeed();
-      } catch (firstError) {
-        if (controller.signal.aborted || firstError?.code === "ERR_CANCELED") throw firstError;
-        if (!isFinanceDemoEnabled() && TUTORIAL_BYPASS_AUTH && firstError?.response?.status === 401) {
-          await ensureTutorialSession();
-          data = await requestFeed();
-        } else {
-          throw firstError;
-        }
+      if (replace) {
+        feedQueryEpochRef.current += 1;
+        nextCursorRef.current = null;
+        inFlightCursorRef.current = null;
+        setNextCursor(null);
       }
-      if (!requestFence.isCurrent()) return;
-      const financeFeed = isFinanceDemoFeedResponse(data);
-      const receivedNextCursor = data?.nextCursor ?? data?.next_cursor ?? null;
-      let localFeedGuard = financeFeed ? null : buildLocalFeedGuard({ params, response: data });
-      let responseJobs = Array.isArray(data?.jobs) ? data.jobs : [];
-      const jobsAfterLocalGuard = localFeedGuard ? responseJobs.filter(localFeedGuard) : responseJobs;
-      const jobsAfterActionFilter = financeFeed ? jobsAfterLocalGuard : filterOutSwipedJobs(jobsAfterLocalGuard);
-      let safeJobs = filterPersonalSwipeFeedJobs(user?.email, jobsAfterActionFilter);
-      let outsideLocationHiddenCount = responseJobs.length - safeJobs.length;
-      if (outsideLocationHiddenCount > 0) {
-        data = {
-          ...(data || {}),
-          jobs: safeJobs,
-          total: safeJobs.length,
-          feed_summary: {
-            ...(data?.feed_summary || {}),
-            frontend_outside_location_hidden_count:
-              Number(data?.feed_summary?.frontend_outside_location_hidden_count || 0) + outsideLocationHiddenCount,
-          },
-        };
+      const requestEpoch = feedQueryEpochRef.current;
+      const requestedCursor = replace ? null : nextCursorRef.current;
+      const requestFence = feedRequestFenceRef.current.next();
+      const controller = new AbortController();
+      feedAbortRef.current = controller;
+      inFlightCursorRef.current = requestedCursor;
+      pendingFiltersRef.current = undefined;
+      // Keep `stackPrefetch` (UI) limited to restoring-from-stack only: it controls
+      // whether we show/clear the loading skeleton.
+      const stackPrefetch = !replace && jobsRef.current.length > 0;
+      // Only restore-from-navigation should skip the loading skeleton. Any explicit
+      // target/filter change must clear the stack and show a fresh search.
+      const silentRefresh =
+        replace && jobsRef.current.length > 0 && reason === "initial_navigation";
+      const isUserSearchChange =
+        reason.startsWith("target_") ||
+        reason.startsWith("filters_") ||
+        reason === "demo_settings_changed" ||
+        reason === "initial_finance_demo";
+      fetchingRef.current = true;
+      if (isUserSearchChange && replace) {
+        clearSwipeFeedCache();
+        jobsRef.current = [];
       }
-      const upstreamEmptyReason = data?.emptyReason ?? data?.empty_reason?.code ?? data?.empty_reason;
-      const derivedEmptyReason = deriveFinalCursorActionedReason({
-        nextCursor: receivedNextCursor,
-        upstreamEmptyReason,
-        jobsBeforeActionFilter: jobsAfterLocalGuard.length,
-        jobsAfterActionFilter: jobsAfterActionFilter.length,
-      });
-      if (derivedEmptyReason) {
-        data = {
-          ...(data || {}),
-          emptyReason: derivedEmptyReason,
-          empty_reason: derivedEmptyReason,
-        };
+      if (!stackPrefetch && !silentRefresh) {
+        setLoading(true);
+        if (replace) setJobs([]);
       }
-      console.group("[FeedDebug] response");
-      console.log("jobs count", safeJobs.length);
-      console.log("feed_summary", data?.feed_summary);
-      console.log("request_trace", data?.request_trace);
-      console.log("first jobs", safeJobs.slice(0, 5));
-      console.groupEnd();
+      // Use the same in-flight marker for replacement and append requests. This
+      // lets the runway effect run exactly once after an initial low-card page
+      // commits, rather than racing the still-active replacement request.
+      setNextPageLoading(true);
+      setFeedError("");
+      const params = sanitizeSwipeFeedParams(buildFeedParams(f));
+      if (requestedCursor) params.set("cursor", requestedCursor);
+      let requestUrl = `/jobs/feed?${params.toString()}`;
       setLastFeedDebug({
         reason,
         forceRefresh: replace,
@@ -1186,97 +1184,196 @@ export default function Swipe() {
         requestUrl,
         requestParams: Object.fromEntries(params.entries()),
         requestParamEntries: Array.from(params.entries()),
-        response: {
-          jobsCount: safeJobs.length,
-          feedSummary: data?.feed_summary || null,
-          requestTrace: data?.request_trace || null,
-          firstJobs: safeJobs.slice(0, 5).map((job) => ({
-            title: job.title,
-            company: job.company,
-            location: job.location,
-            application_mode: job.application_mode,
-            can_auto_apply: job.can_auto_apply,
-            provider: job.provider,
-          })),
-        },
+        response: null,
       });
-      setTotalCount(typeof data.total === "number" ? data.total : null);
-      setFeedMeta(data || null);
-      if (TUTORIAL_BYPASS_AUTH) {
-        safeJobs.forEach((job) => cacheJobForDemo(job));
-        seedTutorialShowcaseIfEmpty(safeJobs);
-      }
-      // Single-flight append means jobsRef is the authoritative current stack
-      // here, including swipes that happened while this page was in transit.
-      const base = replace
-        ? []
-        : (financeFeed
-          ? jobsRef.current
-          : filterOutSwipedJobs(localFeedGuard ? jobsRef.current.filter(localFeedGuard) : jobsRef.current));
-      const seen = new Set(base.map((j) => j.job_id));
-      const merged = [...base];
-      safeJobs.forEach((j) => { if (!seen.has(j.job_id)) merged.push(j); });
-      const visible = financeFeed ? merged : filterOutSwipedJobs(merged);
-      const filtered = filterPersonalSwipeFeedJobs(user?.email, visible);
-      // Commit the visible stack before cursor/loading state changes so the
-      // final-card render cannot observe a stale empty ref.
-      jobsRef.current = filtered;
-      setJobs(filtered);
-      preloadCompanyLogos(filtered.slice(0, 6));
-      writeSwipeFeedCache({
-        jobs: filtered,
-        meta: data,
-        target: targetRef.current,
-        targetLocationData: targetLocationDataRef.current,
-        filters: filtersRef.current,
-        cacheKey: buildSwipeFeedCacheKey({
-          userId: user?.user_id,
+      const requestFeed = async (url = requestUrl) => {
+        if (isFinanceDemoEnabled()) {
+          const demoData = getFinanceDemoFeedData({
+            filters: f == null ? null : mergeFilters(f),
+            searchRole: targetRef.current?.role?.trim() || "",
+            limit: Number(params.get("limit") || 5),
+          });
+          if (demoData) return demoData;
+        }
+        const { data } = await api.get(url, {
+          timeout: 45000,
+          signal: controller.signal,
+        });
+        return data;
+      };
+      try {
+        let data;
+        try {
+          data = await requestFeed();
+        } catch (firstError) {
+          if (controller.signal.aborted || firstError?.code === "ERR_CANCELED") throw firstError;
+          if (
+            !isFinanceDemoEnabled() &&
+            TUTORIAL_BYPASS_AUTH &&
+            firstError?.response?.status === 401
+          ) {
+            await ensureTutorialSession();
+            data = await requestFeed();
+          } else {
+            throw firstError;
+          }
+        }
+        if (!requestFence.isCurrent()) return;
+        const financeFeed = isFinanceDemoFeedResponse(data);
+        const receivedNextCursor = data?.nextCursor ?? data?.next_cursor ?? null;
+        let localFeedGuard = financeFeed ? null : buildLocalFeedGuard({ params, response: data });
+        let responseJobs = Array.isArray(data?.jobs) ? data.jobs : [];
+        const jobsAfterLocalGuard = localFeedGuard
+          ? responseJobs.filter(localFeedGuard)
+          : responseJobs;
+        const jobsAfterActionFilter = financeFeed
+          ? jobsAfterLocalGuard
+          : filterOutSwipedJobs(jobsAfterLocalGuard);
+        let safeJobs = filterPersonalSwipeFeedJobs(user?.email, jobsAfterActionFilter);
+        let outsideLocationHiddenCount = responseJobs.length - safeJobs.length;
+        if (outsideLocationHiddenCount > 0) {
+          data = {
+            ...(data || {}),
+            jobs: safeJobs,
+            total: safeJobs.length,
+            feed_summary: {
+              ...(data?.feed_summary || {}),
+              frontend_outside_location_hidden_count:
+                Number(data?.feed_summary?.frontend_outside_location_hidden_count || 0) +
+                outsideLocationHiddenCount,
+            },
+          };
+        }
+        const upstreamEmptyReason =
+          data?.emptyReason ?? data?.empty_reason?.code ?? data?.empty_reason;
+        const derivedEmptyReason = deriveFinalCursorActionedReason({
+          nextCursor: receivedNextCursor,
+          upstreamEmptyReason,
+          jobsBeforeActionFilter: jobsAfterLocalGuard.length,
+          jobsAfterActionFilter: jobsAfterActionFilter.length,
+        });
+        if (derivedEmptyReason) {
+          data = {
+            ...(data || {}),
+            emptyReason: derivedEmptyReason,
+            empty_reason: derivedEmptyReason,
+          };
+        }
+        console.group("[FeedDebug] response");
+        console.log("jobs count", safeJobs.length);
+        console.log("feed_summary", data?.feed_summary);
+        console.log("request_trace", data?.request_trace);
+        console.log("first jobs", safeJobs.slice(0, 5));
+        console.groupEnd();
+        setLastFeedDebug({
+          reason,
+          forceRefresh: replace,
+          filters: f || null,
+          filtersRef: filtersRef.current || null,
+          requestUrl,
+          requestParams: Object.fromEntries(params.entries()),
+          requestParamEntries: Array.from(params.entries()),
+          response: {
+            jobsCount: safeJobs.length,
+            feedSummary: data?.feed_summary || null,
+            requestTrace: data?.request_trace || null,
+            firstJobs: safeJobs.slice(0, 5).map((job) => ({
+              title: job.title,
+              company: job.company,
+              location: job.location,
+              application_mode: job.application_mode,
+              can_auto_apply: job.can_auto_apply,
+              provider: job.provider,
+            })),
+          },
+        });
+        setTotalCount(typeof data.total === "number" ? data.total : null);
+        setFeedMeta(data || null);
+        if (TUTORIAL_BYPASS_AUTH) {
+          safeJobs.forEach((job) => cacheJobForDemo(job));
+          seedTutorialShowcaseIfEmpty(safeJobs);
+        }
+        // Single-flight append means jobsRef is the authoritative current stack
+        // here, including swipes that happened while this page was in transit.
+        const base = replace
+          ? []
+          : financeFeed
+            ? jobsRef.current
+            : filterOutSwipedJobs(
+                localFeedGuard ? jobsRef.current.filter(localFeedGuard) : jobsRef.current,
+              );
+        const seen = new Set(base.map((j) => j.job_id));
+        const merged = [...base];
+        safeJobs.forEach((j) => {
+          if (!seen.has(j.job_id)) merged.push(j);
+        });
+        const visible = financeFeed ? merged : filterOutSwipedJobs(merged);
+        const filtered = filterPersonalSwipeFeedJobs(user?.email, visible);
+        // Commit the visible stack before cursor/loading state changes so the
+        // final-card render cannot observe a stale empty ref.
+        jobsRef.current = filtered;
+        setJobs(filtered);
+        preloadCompanyLogos(filtered.slice(0, 6));
+        writeSwipeFeedCache({
+          jobs: filtered,
+          meta: data,
           target: targetRef.current,
           targetLocationData: targetLocationDataRef.current,
           filters: filtersRef.current,
-        }),
-        userId: user?.user_id,
-      });
-      nextCursorRef.current = receivedNextCursor;
-      setNextCursor(receivedNextCursor);
-      // Client-side swipe filtering can consume a complete server page. Keep
-      // advancing through committed cursors before allowing a terminal state.
-      if (!filtered.length && receivedNextCursor) {
-        window.setTimeout(() => {
-          if (feedQueryEpochRef.current === requestEpoch && nextCursorRef.current === receivedNextCursor) {
-            loadFeed(false, f, "filtered_page_continue");
-          }
-        }, 0);
+          cacheKey: buildSwipeFeedCacheKey({
+            userId: user?.user_id,
+            target: targetRef.current,
+            targetLocationData: targetLocationDataRef.current,
+            filters: filtersRef.current,
+          }),
+          userId: user?.user_id,
+        });
+        nextCursorRef.current = receivedNextCursor;
+        setNextCursor(receivedNextCursor);
+        // Client-side swipe filtering can consume a complete server page. Keep
+        // advancing through committed cursors before allowing a terminal state.
+        if (!filtered.length && receivedNextCursor) {
+          window.setTimeout(() => {
+            if (
+              feedQueryEpochRef.current === requestEpoch &&
+              nextCursorRef.current === receivedNextCursor
+            ) {
+              loadFeed(false, f, "filtered_page_continue");
+            }
+          }, 0);
+        }
+      } catch (e) {
+        if (controller.signal.aborted || e?.code === "ERR_CANCELED") return;
+        if (!requestFence.isCurrent()) return;
+        const rawDetail = e?.response?.data?.detail;
+        const detail =
+          e?.code === "ECONNABORTED"
+            ? t("swipe.feedTimeout")
+            : typeof rawDetail === "string"
+              ? rawDetail
+              : rawDetail?.message || rawDetail?.detail || t("toasts.loadJobsError");
+        setFeedError(typeof detail === "string" ? detail : t("toasts.loadJobsError"));
+        setFeedMeta((prev) => ({
+          ...(prev || {}),
+          fallback_reason: typeof detail === "string" ? detail : t("toasts.loadJobsError"),
+        }));
+        if (replace) setJobs([]);
+        toast.error(typeof detail === "string" ? detail : t("toasts.loadJobsError"));
+      } finally {
+        if (requestFence.isCurrent()) {
+          // A prefetch can begin while a card is still visible, then become the
+          // only request after the user swipes that final card. In that case the
+          // empty stack must remain a loading state, not an empty-feed state.
+          if ((!stackPrefetch && !silentRefresh) || jobsRef.current.length === 0) setLoading(false);
+          fetchingRef.current = false;
+          setNextPageLoading(false);
+          if (inFlightCursorRef.current === requestedCursor) inFlightCursorRef.current = null;
+          if (feedAbortRef.current === controller) feedAbortRef.current = null;
+        }
       }
-    } catch (e) {
-      if (controller.signal.aborted || e?.code === "ERR_CANCELED") return;
-      if (!requestFence.isCurrent()) return;
-      const rawDetail = e?.response?.data?.detail;
-      const detail = e?.code === "ECONNABORTED"
-        ? t("swipe.feedTimeout")
-        : (typeof rawDetail === "string"
-          ? rawDetail
-          : rawDetail?.message || rawDetail?.detail || t("toasts.loadJobsError"));
-      setFeedError(typeof detail === "string" ? detail : t("toasts.loadJobsError"));
-      setFeedMeta((prev) => ({
-        ...(prev || {}),
-        fallback_reason: typeof detail === "string" ? detail : t("toasts.loadJobsError"),
-      }));
-      if (replace) setJobs([]);
-      toast.error(typeof detail === "string" ? detail : t("toasts.loadJobsError"));
-    } finally {
-      if (requestFence.isCurrent()) {
-        // A prefetch can begin while a card is still visible, then become the
-        // only request after the user swipes that final card. In that case the
-        // empty stack must remain a loading state, not an empty-feed state.
-        if ((!stackPrefetch && !silentRefresh) || jobsRef.current.length === 0) setLoading(false);
-        fetchingRef.current = false;
-        setNextPageLoading(false);
-        if (inFlightCursorRef.current === requestedCursor) inFlightCursorRef.current = null;
-        if (feedAbortRef.current === controller) feedAbortRef.current = null;
-      }
-    }
-  }, [t, user?.user_id, user?.email]);
+    },
+    [t, user?.user_id, user?.email],
+  );
 
   // Start the next cursor page as soon as the current visible stack reaches
   // its runway. This also covers a first page reduced by local dedupe/history
@@ -1285,11 +1382,14 @@ export default function Swipe() {
     // Do not turn a failed append into an unbounded client retry loop. The
     // committed cursor remains available for an explicit retry/refresh.
     if (nextPageLoading || feedError) return;
-    if (!shouldPrefetchSwipeFeedPage({
-      nextCursor,
-      remainingJobs: jobs.length,
-      inFlightCursor: inFlightCursorRef.current,
-    })) return;
+    if (
+      !shouldPrefetchSwipeFeedPage({
+        nextCursor,
+        remainingJobs: jobs.length,
+        inFlightCursor: inFlightCursorRef.current,
+      })
+    )
+      return;
     loadFeed(false, filtersRef.current, "low_stack_prefetch");
   }, [feedError, jobs.length, loadFeed, nextCursor, nextPageLoading]);
 
@@ -1318,77 +1418,93 @@ export default function Swipe() {
     return () => window.removeEventListener(DEMO_SETTINGS_CHANGED, onDemoSettings);
   }, [loadFeed, loadProfile, applyFinanceDemoTarget]);
 
-  const saveTargetSearch = useCallback(async ({ role, roles, sectorIds, industryIds, location, locationData }) => {
-    const selectedRoles = [...new Set([
-      ...(Array.isArray(roles) ? roles : []),
-      role,
-    ].map((value) => String(value || "").trim()).filter(Boolean))].slice(0, 3);
-    const trimmedRole = selectedRoles[0] || "";
-    if (!trimmedRole) {
-      toast.error(t("toasts.enterJobTitle") || (lang === "fr" ? "Saisissez un métier" : "Enter a job title"));
-      return false;
-    }
-    setTargetSaving(true);
-    try {
-      const trimmedLocation = (location || "").trim();
-      const normalizedLocationData = normalizeLocationData(trimmedLocation, locationData);
-      const locationLabel = normalizedLocationData?.location_label || trimmedLocation || "Anywhere";
+  const saveTargetSearch = useCallback(
+    async ({ role, roles, sectorIds, industryIds, location, locationData }) => {
+      const selectedRoles = [
+        ...new Set(
+          [...(Array.isArray(roles) ? roles : []), role]
+            .map((value) => String(value || "").trim())
+            .filter(Boolean),
+        ),
+      ].slice(0, 3);
+      const trimmedRole = selectedRoles[0] || "";
+      if (!trimmedRole) {
+        toast.error(
+          t("toasts.enterJobTitle") ||
+            (lang === "fr" ? "Saisissez un métier" : "Enter a job title"),
+        );
+        return false;
+      }
+      setTargetSaving(true);
+      try {
+        const trimmedLocation = (location || "").trim();
+        const normalizedLocationData = normalizeLocationData(trimmedLocation, locationData);
+        const locationLabel =
+          normalizedLocationData?.location_label || trimmedLocation || "Anywhere";
 
-      await saveTargetPreferences({
-        role: trimmedRole,
-        roles: selectedRoles,
-        sectorIds,
-        industryIds,
-        location: locationLabel,
-        locationData: normalizedLocationData,
-      });
+        await saveTargetPreferences({
+          role: trimmedRole,
+          roles: selectedRoles,
+          sectorIds,
+          industryIds,
+          location: locationLabel,
+          locationData: normalizedLocationData,
+        });
 
-      const nextTarget = { role: trimmedRole, location: locationLabel };
-      setTarget(nextTarget);
-      targetRef.current = nextTarget;
-      setTargetLocationData(normalizedLocationData);
-      targetLocationDataRef.current = normalizedLocationData;
-      setProfile((current) => current ? {
-        ...current,
-        target_role: trimmedRole,
-        target_roles: selectedRoles,
-        ...(Array.isArray(sectorIds) ? { sector_ids: sectorIds } : {}),
-        ...(Array.isArray(industryIds) ? { industry_ids: industryIds } : {}),
-        target_location: locationLabel,
-        target_location_data: normalizedLocationData,
-      } : current);
-      profileRef.current = profileRef.current ? {
-        ...profileRef.current,
-        target_role: trimmedRole,
-        target_roles: selectedRoles,
-        ...(Array.isArray(sectorIds) ? { sector_ids: sectorIds } : {}),
-        ...(Array.isArray(industryIds) ? { industry_ids: industryIds } : {}),
-        target_location: locationLabel,
-        target_location_data: normalizedLocationData,
-      } : profileRef.current;
+        const nextTarget = { role: trimmedRole, location: locationLabel };
+        setTarget(nextTarget);
+        targetRef.current = nextTarget;
+        setTargetLocationData(normalizedLocationData);
+        targetLocationDataRef.current = normalizedLocationData;
+        setProfile((current) =>
+          current
+            ? {
+                ...current,
+                target_role: trimmedRole,
+                target_roles: selectedRoles,
+                ...(Array.isArray(sectorIds) ? { sector_ids: sectorIds } : {}),
+                ...(Array.isArray(industryIds) ? { industry_ids: industryIds } : {}),
+                target_location: locationLabel,
+                target_location_data: normalizedLocationData,
+              }
+            : current,
+        );
+        profileRef.current = profileRef.current
+          ? {
+              ...profileRef.current,
+              target_role: trimmedRole,
+              target_roles: selectedRoles,
+              ...(Array.isArray(sectorIds) ? { sector_ids: sectorIds } : {}),
+              ...(Array.isArray(industryIds) ? { industry_ids: industryIds } : {}),
+              target_location: locationLabel,
+              target_location_data: normalizedLocationData,
+            }
+          : profileRef.current;
 
-      const nextFilters = filtersForTargetSearch(filtersRef.current);
-      filtersRef.current = nextFilters;
-      setFilters(nextFilters);
-      savePersistedFilters(nextFilters);
+        const nextFilters = filtersForTargetSearch(filtersRef.current);
+        filtersRef.current = nextFilters;
+        setFilters(nextFilters);
+        savePersistedFilters(nextFilters);
 
-      setJobs([]);
-      setTotalCount(null);
-      setFeedMeta(null);
-      nextCursorRef.current = null;
-      setNextCursor(null);
-      setFeedError("");
-      jobsRef.current = [];
-      await loadFeed(true, nextFilters, "target_search_save");
-      toast.success(t("toasts.searchUpdated"));
-      return true;
-    } catch (_) {
-      toast.error(t("toasts.searchSaveError"));
-      return false;
-    } finally {
-      setTargetSaving(false);
-    }
-  }, [lang, loadFeed, t]);
+        setJobs([]);
+        setTotalCount(null);
+        setFeedMeta(null);
+        nextCursorRef.current = null;
+        setNextCursor(null);
+        setFeedError("");
+        jobsRef.current = [];
+        await loadFeed(true, nextFilters, "target_search_save");
+        toast.success(t("toasts.searchUpdated"));
+        return true;
+      } catch (_) {
+        toast.error(t("toasts.searchSaveError"));
+        return false;
+      } finally {
+        setTargetSaving(false);
+      }
+    },
+    [lang, loadFeed, t],
+  );
 
   useEffect(() => {
     if (authLoading || !user?.user_id) return;
@@ -1398,7 +1514,8 @@ export default function Swipe() {
     const bootstrap = async () => {
       const isDemo = isDemoAccount;
 
-      api.get("/billing/status")
+      api
+        .get("/billing/status")
         .then(({ data }) => setBilling(data))
         .catch(() => setBilling({ is_premium: false }));
 
@@ -1459,7 +1576,17 @@ export default function Swipe() {
       loadFeed(true, mergedFilters, "initial_navigation");
     };
     bootstrap();
-  }, [authLoading, loadProfile, loadFeed, applyFinanceDemoTarget, syncSwipedJobsFromServer, user?.user_id, user?.email, isDemoAccount, isFinanceDemo]);
+  }, [
+    authLoading,
+    loadProfile,
+    loadFeed,
+    applyFinanceDemoTarget,
+    syncSwipedJobsFromServer,
+    user?.user_id,
+    user?.email,
+    isDemoAccount,
+    isFinanceDemo,
+  ]);
 
   useEffect(() => {
     const onBillingUpdated = (event) => {
@@ -1489,14 +1616,20 @@ export default function Swipe() {
         );
       } catch (err) {
         if (!cancelled) {
-          toast.error(err?.response?.data?.detail || (lang === "fr" ? "Lien de récompense invalide" : "Invalid reward link"));
+          toast.error(
+            err?.response?.data?.detail ||
+              (lang === "fr" ? "Lien de récompense invalide" : "Invalid reward link"),
+          );
         }
       } finally {
         if (!cancelled) {
           params.delete("friendReferral");
           params.delete("token");
           const nextSearch = params.toString();
-          navigate({ pathname: location.pathname, search: nextSearch ? `?${nextSearch}` : "" }, { replace: true });
+          navigate(
+            { pathname: location.pathname, search: nextSearch ? `?${nextSearch}` : "" },
+            { replace: true },
+          );
         }
       }
     })();
@@ -1550,7 +1683,8 @@ export default function Swipe() {
   const topJob = jobs[0];
   const creditsRemaining = Number(billing?.credits_remaining ?? 0);
   const isDemoUser = isDemoAccount;
-  const shouldGateApply = billing !== null && (!billing.is_premium || creditsRemaining <= 0) && !isDemoUser;
+  const shouldGateApply =
+    billing !== null && (!billing.is_premium || creditsRemaining <= 0) && !isDemoUser;
   const requiresProfileForApply = !isDemoUser && !isFinanceDemo;
 
   const resolveApplyGate = useCallback(() => {
@@ -1576,12 +1710,15 @@ export default function Swipe() {
     resolveApplyGate().action?.();
   }, [resolveApplyGate]);
 
-  const handleProfileReadinessUpdated = useCallback(async (nextProfile) => {
-    profileRef.current = nextProfile;
-    setProfile(nextProfile);
-    setFeedError("");
-    await loadFeed(true, filtersRef.current, "profile_readiness_updated");
-  }, [loadFeed]);
+  const handleProfileReadinessUpdated = useCallback(
+    async (nextProfile) => {
+      profileRef.current = nextProfile;
+      setProfile(nextProfile);
+      setFeedError("");
+      await loadFeed(true, filtersRef.current, "profile_readiness_updated");
+    },
+    [loadFeed],
+  );
 
   const feedSetupGate = useMemo(() => {
     if (isMissingResumeFeedError(feedError)) {
@@ -1608,15 +1745,16 @@ export default function Swipe() {
     feedMeta,
     feedError,
   });
-  const projectionLagCopy = lang === "fr"
-    ? {
-        title: "Mise à jour de votre feed",
-        body: "Vos offres sont en cours de projection. Elles apparaîtront automatiquement, sans actualisation.",
-      }
-    : {
-        title: "Updating your feed",
-        body: "Your jobs are being projected and will appear automatically without a manual refresh.",
-      };
+  const projectionLagCopy =
+    lang === "fr"
+      ? {
+          title: "Mise à jour de votre feed",
+          body: "Vos offres sont en cours de projection. Elles apparaîtront automatiquement, sans actualisation.",
+        }
+      : {
+          title: "Updating your feed",
+          body: "Your jobs are being projected and will appear automatically without a manual refresh.",
+        };
 
   useEffect(() => {
     if (!feedError || loading) return;
@@ -1629,7 +1767,17 @@ export default function Swipe() {
   }, []);
 
   useEffect(() => {
-    if (!["exhausted", "policy_hidden", "blocked", "no_inventory", "profile_not_ready", "legacy_empty"].includes(feedView.kind)) return;
+    if (
+      ![
+        "exhausted",
+        "policy_hidden",
+        "blocked",
+        "no_inventory",
+        "profile_not_ready",
+        "legacy_empty",
+      ].includes(feedView.kind)
+    )
+      return;
     // Cache keys encode candidate search criteria and are never analytics data.
     const impressionKey = feedView.kind;
     if (terminalImpressionsRef.current.has(impressionKey)) return;
@@ -1637,7 +1785,10 @@ export default function Swipe() {
     trackEvent("swipe_feed_terminal_state_viewed", {
       presentation_state: feedView.kind,
       empty_reason: feedView.emptyReason,
-      surface: typeof window !== "undefined" && window.matchMedia("(min-width: 768px)").matches ? "desktop" : "mobile",
+      surface:
+        typeof window !== "undefined" && window.matchMedia("(min-width: 768px)").matches
+          ? "desktop"
+          : "mobile",
     });
   }, [feedView, user?.user_id]);
 
@@ -1669,7 +1820,7 @@ export default function Swipe() {
     recordSwipedJobId(job.job_id, user?.user_id);
     jobsRef.current = jobs.slice(1);
     setJobs((prev) => prev.slice(1));
-    const direction = intent === "apply" ? "right" : "left";   // backend semantic
+    const direction = intent === "apply" ? "right" : "left"; // backend semantic
     if (intent === "apply") {
       trackEvent("application_generation_started", {
         job_id: job.job_id,
@@ -1731,18 +1882,21 @@ export default function Swipe() {
     }
   };
 
-  const requestSwipe = useCallback((intent) => {
-    if (intent === "apply") {
-      const gate = resolveApplyGate();
-      if (gate.blocked) {
-        gate.action?.();
-        return;
+  const requestSwipe = useCallback(
+    (intent) => {
+      if (intent === "apply") {
+        const gate = resolveApplyGate();
+        if (gate.blocked) {
+          gate.action?.();
+          return;
+        }
       }
-    }
-    if (!canStartSwipe({ hasJob: topJob, appLoading, pendingCardSwipe })) return;
-    suppressCardTap(400);
-    setPendingCardSwipe(intent);
-  }, [topJob, appLoading, pendingCardSwipe, resolveApplyGate]);
+      if (!canStartSwipe({ hasJob: topJob, appLoading, pendingCardSwipe })) return;
+      suppressCardTap(400);
+      setPendingCardSwipe(intent);
+    },
+    [topJob, appLoading, pendingCardSwipe, resolveApplyGate],
+  );
 
   const handleUndo = async () => {
     try {
@@ -1754,7 +1908,9 @@ export default function Swipe() {
         toast(t("toasts.undone"));
         loadFeed(true, filtersRef.current, "undo_refresh");
       }
-    } catch (e) { toast.error(t("toasts.nothingToUndo")); }
+    } catch (e) {
+      toast.error(t("toasts.nothingToUndo"));
+    }
   };
 
   const handleShareJob = async (job) => {
@@ -1767,16 +1923,19 @@ export default function Swipe() {
     }
   };
 
-  const dismissJob = useCallback((jobId) => {
-    recordSwipedJobId(jobId, user?.user_id);
-    jobsRef.current = jobs.filter((job) => job.job_id !== jobId);
-    setJobs((prev) => prev.filter((j) => j.job_id !== jobId));
-    if (isFinanceDemoEnabled()) {
-      performFinanceDemoSwipe({ job_id: jobId, direction: "left" });
-    } else {
-      api.post("/swipe", { job_id: jobId, direction: "left" }).catch(() => {});
-    }
-  }, [jobs.length, loadFeed, user?.user_id]);
+  const dismissJob = useCallback(
+    (jobId) => {
+      recordSwipedJobId(jobId, user?.user_id);
+      jobsRef.current = jobs.filter((job) => job.job_id !== jobId);
+      setJobs((prev) => prev.filter((j) => j.job_id !== jobId));
+      if (isFinanceDemoEnabled()) {
+        performFinanceDemoSwipe({ job_id: jobId, direction: "left" });
+      } else {
+        api.post("/swipe", { job_id: jobId, direction: "left" }).catch(() => {});
+      }
+    },
+    [jobs.length, loadFeed, user?.user_id],
+  );
 
   const handleReportSubmit = async (reason) => {
     if (!reportJob) return;
@@ -1828,7 +1987,8 @@ export default function Swipe() {
     handleApplyBlocked,
   ]);
 
-  const feedDebugEnabled = typeof window !== "undefined" && window.localStorage.getItem("feed_debug") === "true";
+  const feedDebugEnabled =
+    typeof window !== "undefined" && window.localStorage.getItem("feed_debug") === "true";
   const feedDebugPanelData = lastFeedDebug
     ? {
         reason: lastFeedDebug.reason,
@@ -1840,17 +2000,16 @@ export default function Swipe() {
         feedSummary: lastFeedDebug.response?.feedSummary ?? null,
         requestTrace: lastFeedDebug.response?.requestTrace ?? null,
         firstJobLocations: (lastFeedDebug.response?.firstJobs || []).map((job) => job.location),
-        firstJobApplicationModes: (lastFeedDebug.response?.firstJobs || []).map((job) => job.application_mode),
+        firstJobApplicationModes: (lastFeedDebug.response?.firstJobs || []).map(
+          (job) => job.application_mode,
+        ),
         firstJobs: lastFeedDebug.response?.firstJobs || [],
       }
     : null;
 
   return (
     <>
-      <div
-        className="hidden md:block"
-        data-feed-v2-rollout={feedV2RolloutObserved ? "on" : "off"}
-      >
+      <div className="hidden md:block" data-feed-v2-rollout={feedV2RolloutObserved ? "on" : "off"}>
         <DesktopSwipeFeed
           job={topJob}
           loading={loading}
@@ -1867,7 +2026,12 @@ export default function Swipe() {
           onTargetSave={saveTargetSearch}
           onTargetPreferencesOpen={() => setTargetSheetOpen(true)}
           onTargetLocationOpen={() => setTargetSheetOpen(true)}
-          onTerminalSuggestionClick={(actionId, presentationState) => trackEvent("swipe_feed_suggestion_clicked", { action_id: actionId, presentation_state: presentationState })}
+          onTerminalSuggestionClick={(actionId, presentationState) =>
+            trackEvent("swipe_feed_suggestion_clicked", {
+              action_id: actionId,
+              presentation_state: presentationState,
+            })
+          }
           targetLocationData={targetLocationData}
           targetSaving={targetSaving}
           onPass={() => handleSwipe("skip")}
@@ -1877,7 +2041,15 @@ export default function Swipe() {
           onRadiusChange={handleRadiusChange}
           shouldGateApply={shouldBlockApply()}
           onApplyBlocked={handleApplyBlocked}
-          interactionBlocked={targetSheetOpen || filtersOpen || desktopFiltersOpen || Boolean(reportJob) || upgradeOpen || resumeSheetOpen || phoneSheetOpen}
+          interactionBlocked={
+            targetSheetOpen ||
+            filtersOpen ||
+            desktopFiltersOpen ||
+            Boolean(reportJob) ||
+            upgradeOpen ||
+            resumeSheetOpen ||
+            phoneSheetOpen
+          }
           showAdminAtsBadge={showAdminAtsBadge}
         />
       </div>
@@ -1890,193 +2062,222 @@ export default function Swipe() {
           className="mx-auto flex w-full max-w-md shrink-0 items-center gap-1 px-safe pb-2 pt-safe sm:gap-2 sm:px-4"
           data-testid="swipe-header"
         >
-        <div className="flex shrink-0 items-center">
-          <DesktopCreditsPill compact forceOpenUpgrade />
-          <button
-            onClick={handleUndo}
-            className="grid h-8 w-8 place-items-center rounded-full hover:bg-sprout-surface sm:h-9 sm:w-9"
-            data-testid="undo-btn"
-            aria-label={t("swipe.undoSwipe")}
-          >
-            <Undo2 className="h-4 w-4 text-sprout-mint sm:h-5 sm:w-5" />
-          </button>
-        </div>
+          <div className="flex shrink-0 items-center">
+            <DesktopCreditsPill compact forceOpenUpgrade />
+            <button
+              onClick={handleUndo}
+              className="grid h-8 w-8 place-items-center rounded-full hover:bg-sprout-surface sm:h-9 sm:w-9"
+              data-testid="undo-btn"
+              aria-label={t("swipe.undoSwipe")}
+            >
+              <Undo2 className="h-4 w-4 text-sprout-mint sm:h-5 sm:w-5" />
+            </button>
+          </div>
 
-        <button
-          type="button"
-          onClick={() => setTargetSheetOpen(true)}
-          className="min-w-0 flex-1 rounded-full border border-sprout-border bg-sprout-surface px-3 py-1.5 text-center shadow-sm transition-colors hover:border-violet-400/40 hover:bg-sprout-surface-2 sm:px-4 sm:py-2"
-          data-testid="target-pill"
-          aria-label={t("swipe.editTarget")}
-        >
-          <p className="truncate text-xs font-semibold leading-tight text-sprout-text sm:text-sm">
-            {translateRoleLabel(target.role, lang) || t("swipe.setTargetRole")}
-          </p>
-          <p className="truncate text-[9px] leading-tight text-sprout-muted sm:text-[11px]">
-            <span className="sm:hidden">{translateLocationLabel(target.location, lang) || t("swipe.anywhere")}</span>
-            <span className="hidden sm:inline">
-              {translateLocationLabel(target.location, lang) || t("swipe.anywhere")} · {t("swipe.tapToEdit")}
-            </span>
-          </p>
-        </button>
-
-        <div className="flex shrink-0 items-center">
           <button
-            onClick={() => navigate("/history")}
-            className="grid h-8 w-8 place-items-center rounded-full hover:bg-sprout-surface sm:h-9 sm:w-9"
-            data-testid="history-btn"
-            aria-label={t("swipe.history")}
+            type="button"
+            onClick={() => setTargetSheetOpen(true)}
+            className="min-w-0 flex-1 rounded-full border border-sprout-border bg-sprout-surface px-3 py-1.5 text-center shadow-sm transition-colors hover:border-violet-400/40 hover:bg-sprout-surface-2 sm:px-4 sm:py-2"
+            data-testid="target-pill"
+            aria-label={t("swipe.editTarget")}
           >
-            <History className="h-4 w-4 text-sprout-mint sm:h-5 sm:w-5" />
-          </button>
-          <button
-            onClick={() => setFiltersOpen(true)}
-            className="relative grid h-8 w-8 place-items-center rounded-full hover:bg-sprout-surface sm:h-9 sm:w-9"
-            data-testid="filters-open-btn"
-            aria-label={t("swipe.openFilters")}
-          >
-            <SlidersHorizontal className="h-4 w-4 text-sprout-mint sm:h-5 sm:w-5" />
-            {hasActiveFilters(filters) && (
-              <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-sprout-bg bg-sprout-mint" />
-            )}
-          </button>
-          <button
-            onClick={() => setNotificationsOpen(true)}
-            className="relative grid h-8 w-8 place-items-center rounded-full hover:bg-sprout-surface sm:h-9 sm:w-9"
-            data-testid="mobile-notifications-bell"
-            aria-label={t("swipe.notifications")}
-          >
-            <Bell className="h-4 w-4 text-sprout-mint sm:h-5 sm:w-5" />
-            {unreadNotifications > 0 && (
-              <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold text-white">
-                {unreadNotifications > 99 ? "99+" : unreadNotifications}
+            <p className="truncate text-xs font-semibold leading-tight text-sprout-text sm:text-sm">
+              {translateRoleLabel(target.role, lang) || t("swipe.setTargetRole")}
+            </p>
+            <p className="truncate text-[9px] leading-tight text-sprout-muted sm:text-[11px]">
+              <span className="sm:hidden">
+                {translateLocationLabel(target.location, lang) || t("swipe.anywhere")}
               </span>
-            )}
+              <span className="hidden sm:inline">
+                {translateLocationLabel(target.location, lang) || t("swipe.anywhere")} ·{" "}
+                {t("swipe.tapToEdit")}
+              </span>
+            </p>
           </button>
-        </div>
+
+          <div className="flex shrink-0 items-center">
+            <button
+              onClick={() => navigate("/history")}
+              className="grid h-8 w-8 place-items-center rounded-full hover:bg-sprout-surface sm:h-9 sm:w-9"
+              data-testid="history-btn"
+              aria-label={t("swipe.history")}
+            >
+              <History className="h-4 w-4 text-sprout-mint sm:h-5 sm:w-5" />
+            </button>
+            <button
+              onClick={() => setFiltersOpen(true)}
+              className="relative grid h-8 w-8 place-items-center rounded-full hover:bg-sprout-surface sm:h-9 sm:w-9"
+              data-testid="filters-open-btn"
+              aria-label={t("swipe.openFilters")}
+            >
+              <SlidersHorizontal className="h-4 w-4 text-sprout-mint sm:h-5 sm:w-5" />
+              {hasActiveFilters(filters) && (
+                <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-sprout-bg bg-sprout-mint" />
+              )}
+            </button>
+            <button
+              onClick={() => setNotificationsOpen(true)}
+              className="relative grid h-8 w-8 place-items-center rounded-full hover:bg-sprout-surface sm:h-9 sm:w-9"
+              data-testid="mobile-notifications-bell"
+              aria-label={t("swipe.notifications")}
+            >
+              <Bell className="h-4 w-4 text-sprout-mint sm:h-5 sm:w-5" />
+              {unreadNotifications > 0 && (
+                <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold text-white">
+                  {unreadNotifications > 99 ? "99+" : unreadNotifications}
+                </span>
+              )}
+            </button>
+          </div>
         </header>
 
-      <NotificationsPanel
-        variant="sheet"
-        open={notificationsOpen}
-        onClose={() => setNotificationsOpen(false)}
-        onUnreadCountChange={setUnreadNotifications}
-      />
+        <NotificationsPanel
+          variant="sheet"
+          open={notificationsOpen}
+          onClose={() => setNotificationsOpen(false)}
+          onUnreadCountChange={setUnreadNotifications}
+        />
 
-      <div className="flex min-h-0 flex-1 flex-col px-4 pt-1">
-        <div className="relative mx-auto min-h-0 w-full max-w-md flex-1 overflow-hidden">
-          {["loading_initial", "loading_next_page"].includes(feedView.kind) && jobs.length === 0 && <SkeletonCard />}
+        <div className="flex min-h-0 flex-1 flex-col px-4 pt-1">
+          <div className="relative mx-auto min-h-0 w-full max-w-md flex-1 overflow-hidden">
+            {["loading_initial", "loading_next_page"].includes(feedView.kind) &&
+              jobs.length === 0 && <SkeletonCard />}
 
-          {feedView.kind === "projection_lag" && (
-            <motion.div
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="absolute inset-0 flex flex-col items-center justify-center px-6 text-center"
-              data-testid="feed-empty"
-            >
-              <div className="mb-4 grid h-16 w-16 place-items-center rounded-2xl bg-sprout-mint-soft">
-                <Zap className="h-7 w-7 text-sprout-mint" />
-              </div>
-              <h3 className="font-display text-2xl font-bold text-white">
-                {feedView.kind === "projection_lag"
-                  ? projectionLagCopy.title
-                  : t("swipe.couldNotLoad")}
-              </h3>
-              <p className="mt-2 max-w-xs text-sm text-sprout-muted">
-                {feedSetupGate?.body
-                  || (feedView.kind === "projection_lag"
-                    ? projectionLagCopy.body
-                    : feedFallbackMessage(t, feedMeta))}
-              </p>
-              {feedSetupGate?.action && (
-                <button
-                  onClick={feedSetupGate.action}
-                  className="mt-6 h-11 rounded-full bg-sprout-mint px-6 font-semibold text-white transition-opacity hover:opacity-90"
-                >
-                  {feedSetupGate.label}
-                </button>
-              )}
-            </motion.div>
-          )}
+            {feedView.kind === "projection_lag" && (
+              <motion.div
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="absolute inset-0 flex flex-col items-center justify-center px-6 text-center"
+                data-testid="feed-empty"
+              >
+                <div className="mb-4 grid h-16 w-16 place-items-center rounded-2xl bg-sprout-mint-soft">
+                  <Zap className="h-7 w-7 text-sprout-mint" />
+                </div>
+                <h3 className="font-display text-2xl font-bold text-white">
+                  {feedView.kind === "projection_lag"
+                    ? projectionLagCopy.title
+                    : t("swipe.couldNotLoad")}
+                </h3>
+                <p className="mt-2 max-w-xs text-sm text-sprout-muted">
+                  {feedSetupGate?.body ||
+                    (feedView.kind === "projection_lag"
+                      ? projectionLagCopy.body
+                      : feedFallbackMessage(t, feedMeta))}
+                </p>
+                {feedSetupGate?.action && (
+                  <button
+                    onClick={feedSetupGate.action}
+                    className="mt-6 h-11 rounded-full bg-sprout-mint px-6 font-semibold text-white transition-opacity hover:opacity-90"
+                  >
+                    {feedSetupGate.label}
+                  </button>
+                )}
+              </motion.div>
+            )}
 
-          {["exhausted", "policy_hidden", "blocked", "no_inventory", "profile_not_ready", "legacy_empty"].includes(feedView.kind) && (
-            <div className="absolute inset-0 flex items-center justify-center px-6">
-              <SwipeFeedTerminalState
-                state={feedView.kind}
-                targetLocationData={targetLocationData}
-                targetLocation={target.location}
-                filters={filters}
-                t={t}
-                onPreferences={() => setTargetSheetOpen(true)}
-                onLocation={() => setTargetSheetOpen(true)}
-                onRadius={() => setFiltersOpen(true)}
-                onFilters={() => setFiltersOpen(true)}
-                onSuggestionClick={(actionId) => trackEvent("swipe_feed_suggestion_clicked", { action_id: actionId, presentation_state: feedView.kind })}
-              />
-            </div>
-          )}
-
-          {feedView.kind === "error" && (
-            <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="absolute inset-0 flex flex-col items-center justify-center px-6 text-center" role="status">
-              <h2 className="font-display text-2xl font-bold text-white">{t("swipe.couldNotLoad")}</h2>
-              <p className="mt-2 max-w-xs text-sm text-sprout-muted">{feedError || feedFallbackMessage(t, feedMeta)}</p>
-            </motion.div>
-          )}
-
-          <AnimatePresence>
-            {jobs.slice(0, 3).reverse().map((j, i, arr) => {
-              const idx = arr.length - 1 - i;
-              return (
-                <Card
-                  key={j.job_id}
-                  job={j}
-                  onSwipe={handleSwipe}
-                  onReport={setReportJob}
-                  onShare={handleShareJob}
-                  isTop={idx === 0}
-                  index={idx}
+            {[
+              "exhausted",
+              "policy_hidden",
+              "blocked",
+              "no_inventory",
+              "profile_not_ready",
+              "legacy_empty",
+            ].includes(feedView.kind) && (
+              <div className="absolute inset-0 flex items-center justify-center px-6">
+                <SwipeFeedTerminalState
+                  state={feedView.kind}
+                  targetLocationData={targetLocationData}
+                  targetLocation={target.location}
+                  filters={filters}
                   t={t}
-                  lang={lang}
-                  showAdminAtsBadge={showAdminAtsBadge}
-                  pendingSwipe={idx === 0 ? pendingCardSwipe : null}
-                  onSwipeRequestComplete={() => setPendingCardSwipe(null)}
+                  onPreferences={() => setTargetSheetOpen(true)}
+                  onLocation={() => setTargetSheetOpen(true)}
+                  onRadius={() => setFiltersOpen(true)}
+                  onFilters={() => setFiltersOpen(true)}
+                  onSuggestionClick={(actionId) =>
+                    trackEvent("swipe_feed_suggestion_clicked", {
+                      action_id: actionId,
+                      presentation_state: feedView.kind,
+                    })
+                  }
                 />
-              );
-            })}
-          </AnimatePresence>
-        </div>
+              </div>
+            )}
 
-        {topJob ? (
-          <div className="mx-auto flex w-full max-w-md shrink-0 items-center justify-center gap-10 py-3 sm:gap-14 sm:py-4">
-            <motion.button
-              whileTap={{ scale: 0.9 }}
-              onPointerDown={() => suppressCardTap()}
-              onClick={() => requestSwipe("skip")}
-              disabled={!topJob || appLoading || Boolean(pendingCardSwipe)}
-              className="grid h-14 w-14 place-items-center rounded-full border-2 border-rose-500/70 bg-white shadow-[0_8px_24px_rgba(0,0,0,0.12)] transition-colors hover:border-rose-500"
-              aria-label={t("swipe.pass")}
-              data-testid="skip-btn"
-            >
-              <X className="h-6 w-6 text-rose-500" strokeWidth={2.5} />
-            </motion.button>
+            {feedView.kind === "error" && (
+              <motion.div
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="absolute inset-0 flex flex-col items-center justify-center px-6 text-center"
+                role="status"
+              >
+                <h2 className="font-display text-2xl font-bold text-white">
+                  {t("swipe.couldNotLoad")}
+                </h2>
+                <p className="mt-2 max-w-xs text-sm text-sprout-muted">
+                  {feedError || feedFallbackMessage(t, feedMeta)}
+                </p>
+              </motion.div>
+            )}
 
-            <motion.button
-              whileTap={{ scale: 0.9 }}
-              onPointerDown={() => suppressCardTap()}
-              onClick={() => requestSwipe("apply")}
-              disabled={!topJob || appLoading || Boolean(pendingCardSwipe)}
-              className="grid h-16 w-16 place-items-center rounded-full gradient-linkedin shadow-[0_8px_28px_rgba(124,58,237,0.45)] transition-opacity hover:opacity-90"
-              aria-label={t("swipe.apply")}
-              data-testid="apply-btn"
-            >
-              {appLoading
-                ? <Loader2 className="h-6 w-6 animate-spin text-white" />
-                : <Heart className="h-6 w-6 fill-white text-white" />
-              }
-            </motion.button>
+            <AnimatePresence>
+              {jobs
+                .slice(0, 3)
+                .reverse()
+                .map((j, i, arr) => {
+                  const idx = arr.length - 1 - i;
+                  return (
+                    <Card
+                      key={j.job_id}
+                      job={j}
+                      onSwipe={handleSwipe}
+                      onReport={setReportJob}
+                      onShare={handleShareJob}
+                      isTop={idx === 0}
+                      index={idx}
+                      t={t}
+                      lang={lang}
+                      showAdminAtsBadge={showAdminAtsBadge}
+                      pendingSwipe={idx === 0 ? pendingCardSwipe : null}
+                      onSwipeRequestComplete={() => setPendingCardSwipe(null)}
+                    />
+                  );
+                })}
+            </AnimatePresence>
           </div>
-        ) : null}
-      </div>
+
+          {topJob ? (
+            <div className="mx-auto flex w-full max-w-md shrink-0 items-center justify-center gap-10 py-3 sm:gap-14 sm:py-4">
+              <motion.button
+                whileTap={{ scale: 0.9 }}
+                onPointerDown={() => suppressCardTap()}
+                onClick={() => requestSwipe("skip")}
+                disabled={!topJob || appLoading || Boolean(pendingCardSwipe)}
+                className="grid h-14 w-14 place-items-center rounded-full border-2 border-rose-500/70 bg-white shadow-[0_8px_24px_rgba(0,0,0,0.12)] transition-colors hover:border-rose-500"
+                aria-label={t("swipe.pass")}
+                data-testid="skip-btn"
+              >
+                <X className="h-6 w-6 text-rose-500" strokeWidth={2.5} />
+              </motion.button>
+
+              <motion.button
+                whileTap={{ scale: 0.9 }}
+                onPointerDown={() => suppressCardTap()}
+                onClick={() => requestSwipe("apply")}
+                disabled={!topJob || appLoading || Boolean(pendingCardSwipe)}
+                className="grid h-16 w-16 place-items-center rounded-full gradient-linkedin shadow-[0_8px_28px_rgba(124,58,237,0.45)] transition-opacity hover:opacity-90"
+                aria-label={t("swipe.apply")}
+                data-testid="apply-btn"
+              >
+                {appLoading ? (
+                  <Loader2 className="h-6 w-6 animate-spin text-white" />
+                ) : (
+                  <Heart className="h-6 w-6 fill-white text-white" />
+                )}
+              </motion.button>
+            </div>
+          ) : null}
+        </div>
       </div>
 
       <TargetSearchSheet
@@ -2141,7 +2342,11 @@ export default function Swipe() {
           <details open>
             <summary className="cursor-pointer font-semibold">Feed debug</summary>
             <pre className="mt-2 whitespace-pre-wrap break-words">
-              {JSON.stringify(feedDebugPanelData || { message: "No feed request captured yet." }, null, 2)}
+              {JSON.stringify(
+                feedDebugPanelData || { message: "No feed request captured yet." },
+                null,
+                2,
+              )}
             </pre>
           </details>
         </div>

@@ -1,8 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import {
-  sourceRuntimePolicySchema,
-  type SourceRuntimePolicy,
-} from "@hirly/contracts";
+import { sourceRuntimePolicySchema, type SourceRuntimePolicy } from "@hirly/contracts";
 import {
   dataGouvProductionBlockReason,
   disabledSourceFlags,
@@ -64,9 +61,7 @@ function evidence(
   };
 }
 
-function runtimePolicy(
-  overrides: Partial<SourceRuntimePolicy> = {},
-): SourceRuntimePolicy {
+function runtimePolicy(overrides: Partial<SourceRuntimePolicy> = {}): SourceRuntimePolicy {
   return sourceRuntimePolicySchema.parse({
     providerEnabled: true,
     providerAuthorizationStatus: "authorized",
@@ -205,13 +200,7 @@ describe("data.gouv dataset qualification", () => {
     const qualified = qualifyDataGouvDataset(evidence());
     const now = new Date("2026-07-20T00:00:00.000Z");
     expect(
-      dataGouvProductionBlockReason(
-        qualified,
-        runtimePolicy(),
-        "FR",
-        "incremental",
-        now,
-      ),
+      dataGouvProductionBlockReason(qualified, runtimePolicy(), "FR", "incremental", now),
     ).toBeNull();
     expect(
       dataGouvProductionBlockReason(
@@ -275,15 +264,9 @@ describe("data.gouv dataset qualification", () => {
         now,
       ),
     ).toBe("source_disabled");
-    expect(
-      dataGouvProductionBlockReason(
-        qualified,
-        runtimePolicy(),
-        "FR",
-        "backfill",
-        now,
-      ),
-    ).toBe("mode_disabled");
+    expect(dataGouvProductionBlockReason(qualified, runtimePolicy(), "FR", "backfill", now)).toBe(
+      "mode_disabled",
+    );
     expect(
       dataGouvProductionBlockReason(
         qualified,

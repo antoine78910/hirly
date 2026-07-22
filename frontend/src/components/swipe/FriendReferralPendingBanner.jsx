@@ -35,7 +35,9 @@ export default function FriendReferralPendingBanner({
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold text-zinc-900">
-            {lang === "fr" ? "Invitez 3 amis pour débloquer l\u2019accès" : "Invite 3 friends to unlock access"}
+            {lang === "fr"
+              ? "Invitez 3 amis pour débloquer l\u2019accès"
+              : "Invite 3 friends to unlock access"}
           </p>
           <p className="mt-0.5 text-xs leading-relaxed text-zinc-600">
             {lang === "fr"
@@ -43,7 +45,9 @@ export default function FriendReferralPendingBanner({
               : `${usesCount}/${goal} friends signed up — share your code to unlock 1 free month and 40 applications.`}
           </p>
           <div className="mt-2 flex flex-wrap items-center gap-2">
-            <span className="font-display text-base font-black tracking-widest text-zinc-900">{code || "——"}</span>
+            <span className="font-display text-base font-black tracking-widest text-zinc-900">
+              {code || "——"}
+            </span>
             <button
               type="button"
               onClick={copyCode}
@@ -52,7 +56,9 @@ export default function FriendReferralPendingBanner({
                   ? "border-emerald-200 bg-emerald-50"
                   : "border-violet-200 bg-white text-zinc-700 hover:bg-violet-100"
               }`}
-              aria-label={copied ? (lang === "fr" ? "Copié" : "Copied") : (lang === "fr" ? "Copier" : "Copy")}
+              aria-label={
+                copied ? (lang === "fr" ? "Copié" : "Copied") : lang === "fr" ? "Copier" : "Copy"
+              }
               data-testid="friend-referral-banner-copy"
             >
               <Copy

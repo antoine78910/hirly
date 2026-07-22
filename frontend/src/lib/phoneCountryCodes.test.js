@@ -1,8 +1,4 @@
-import {
-  filterPhoneCountries,
-  getDefaultPhonePrefix,
-  getCountryLabel,
-} from "./phoneCountryCodes";
+import { filterPhoneCountries, getDefaultPhonePrefix, getCountryLabel } from "./phoneCountryCodes";
 
 describe("phoneCountryCodes", () => {
   it("returns locale defaults", () => {

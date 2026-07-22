@@ -67,8 +67,9 @@ describe("ATS inventory production shadow readiness", () => {
       { ...policy(), mode: "live" },
     ];
     for (const invalid of invalidPolicies) {
-      expect(() => approve("greenhouse", invalid as ReturnType<typeof policy>))
-        .toThrow(AtsShadowRefusal);
+      expect(() => approve("greenhouse", invalid as ReturnType<typeof policy>)).toThrow(
+        AtsShadowRefusal,
+      );
       try {
         approve("greenhouse", invalid as ReturnType<typeof policy>);
       } catch (error) {
@@ -84,16 +85,32 @@ describe("ATS inventory production shadow readiness", () => {
       return Response.json({ jobs: [] });
     };
     const greenhouse = createApprovedGreenhouseShadowTransport({
-      approvedTenantId: "vaulttec", countryCode: "FR", policy: policy(), now, fetch,
+      approvedTenantId: "vaulttec",
+      countryCode: "FR",
+      policy: policy(),
+      now,
+      fetch,
     });
     const recruitee = createApprovedRecruiteeShadowTransport({
-      approvedTenantId: "vaulttec", countryCode: "FR", policy: policy("recruitee"), now,
-      fetch: async () => { calls += 1; return Response.json({ offers: [] }); },
+      approvedTenantId: "vaulttec",
+      countryCode: "FR",
+      policy: policy("recruitee"),
+      now,
+      fetch: async () => {
+        calls += 1;
+        return Response.json({ offers: [] });
+      },
     });
     const nicoka = createApprovedNicokaShadowTransport({
-      approvedTenantId: "vaulttec", countryCode: "FR", policy: policy("nicoka"), now,
+      approvedTenantId: "vaulttec",
+      countryCode: "FR",
+      policy: policy("nicoka"),
+      now,
       environment: "production",
-      fetch: async () => { calls += 1; return Response.json({}); },
+      fetch: async () => {
+        calls += 1;
+        return Response.json({});
+      },
     });
     expect(calls).toBe(0);
     for (const transport of [greenhouse, recruitee, nicoka]) {
@@ -114,29 +131,60 @@ describe("ATS inventory production shadow readiness", () => {
 
   test("rejects mismatch before the injected fetch can run", () => {
     let calls = 0;
-    expect(() => createApprovedGreenhouseShadowTransport({
-      approvedTenantId: "other", countryCode: "FR", policy: policy(), now,
-      fetch: async () => { calls += 1; return Response.json({ jobs: [] }); },
-    })).toThrow(AtsShadowRefusal);
+    expect(() =>
+      createApprovedGreenhouseShadowTransport({
+        approvedTenantId: "other",
+        countryCode: "FR",
+        policy: policy(),
+        now,
+        fetch: async () => {
+          calls += 1;
+          return Response.json({ jobs: [] });
+        },
+      }),
+    ).toThrow(AtsShadowRefusal);
     expect(calls).toBe(0);
   });
 
   test("approved wrappers retain official GET hosts and omit credentials", async () => {
     const observed: Array<[string, RequestInit]> = [];
     const greenhouse = createApprovedGreenhouseShadowTransport({
-      approvedTenantId: "vaulttec", countryCode: "FR", policy: policy(), now,
-      fetch: async (url, init) => { observed.push([url, init]); return Response.json({ jobs: [], meta: { total: 0 } }); },
+      approvedTenantId: "vaulttec",
+      countryCode: "FR",
+      policy: policy(),
+      now,
+      fetch: async (url, init) => {
+        observed.push([url, init]);
+        return Response.json({ jobs: [], meta: { total: 0 } });
+      },
     });
     const recruitee = createApprovedRecruiteeShadowTransport({
-      approvedTenantId: "vaulttec", countryCode: "FR", policy: policy("recruitee"), now,
-      fetch: async (url, init) => { observed.push([url, init]); return Response.json({ offers: [] }); },
+      approvedTenantId: "vaulttec",
+      countryCode: "FR",
+      policy: policy("recruitee"),
+      now,
+      fetch: async (url, init) => {
+        observed.push([url, init]);
+        return Response.json({ offers: [] });
+      },
     });
     const nicoka = createApprovedNicokaShadowTransport({
-      approvedTenantId: "vaulttec", countryCode: "FR", policy: policy("nicoka"), now,
+      approvedTenantId: "vaulttec",
+      countryCode: "FR",
+      policy: policy("nicoka"),
+      now,
       environment: "production",
       fetch: async (url, init) => {
         observed.push([url, init]);
-        return Response.json({ queryUid: "complete", offset: 0, limit: 0, page: 1, pages: 1, total: 0, data: [] });
+        return Response.json({
+          queryUid: "complete",
+          offset: 0,
+          limit: 0,
+          page: 1,
+          pages: 1,
+          total: 0,
+          data: [],
+        });
       },
     });
     await greenhouse.fetch(new AbortController().signal);
@@ -155,8 +203,34 @@ describe("ATS inventory production shadow readiness", () => {
   test("reconciles two complete runs deterministically", () => {
     const digest = approve("nicoka").policyDigest;
     const scorecard = buildAtsRepeatedShadowScorecard([
-      { runId: "run-b", capturedAt: "2026-07-22T00:00:00.000+00:00", provider: "nicoka", tenantId: "vaulttec", countryCode: "FR", policyDigest: digest, complete: true, requestCount: 1, jobs: [{ externalId: "3", fingerprint: "c" }, { externalId: "2", fingerprint: "changed" }] },
-      { runId: "run-a", capturedAt: "2026-07-21T00:00:00.000+00:00", provider: "nicoka", tenantId: "vaulttec", countryCode: "fr", policyDigest: digest, complete: true, requestCount: 1, jobs: [{ externalId: "2", fingerprint: "b" }, { externalId: "1", fingerprint: "a" }] },
+      {
+        runId: "run-b",
+        capturedAt: "2026-07-22T00:00:00.000+00:00",
+        provider: "nicoka",
+        tenantId: "vaulttec",
+        countryCode: "FR",
+        policyDigest: digest,
+        complete: true,
+        requestCount: 1,
+        jobs: [
+          { externalId: "3", fingerprint: "c" },
+          { externalId: "2", fingerprint: "changed" },
+        ],
+      },
+      {
+        runId: "run-a",
+        capturedAt: "2026-07-21T00:00:00.000+00:00",
+        provider: "nicoka",
+        tenantId: "vaulttec",
+        countryCode: "fr",
+        policyDigest: digest,
+        complete: true,
+        requestCount: 1,
+        jobs: [
+          { externalId: "2", fingerprint: "b" },
+          { externalId: "1", fingerprint: "a" },
+        ],
+      },
     ]);
     expect(scorecard).toMatchObject({
       verdict: "complete_shadow_ready",
@@ -165,15 +239,57 @@ describe("ATS inventory production shadow readiness", () => {
       reconciliation: [{ additions: ["3"], updates: ["2"], removals: ["1"] }],
     });
     expect(scorecard.evidenceDigest).toMatch(/^[a-f0-9]{64}$/);
-    expect(buildAtsRepeatedShadowScorecard([...[
-      { runId: "run-b", capturedAt: "2026-07-22T00:00:00.000+00:00", provider: "nicoka", tenantId: "vaulttec", countryCode: "FR", policyDigest: digest, complete: true, requestCount: 1, jobs: [{ externalId: "3", fingerprint: "c" }, { externalId: "2", fingerprint: "changed" }] },
-      { runId: "run-a", capturedAt: "2026-07-21T00:00:00.000+00:00", provider: "nicoka", tenantId: "vaulttec", countryCode: "FR", policyDigest: digest, complete: true, requestCount: 1, jobs: [{ externalId: "2", fingerprint: "b" }, { externalId: "1", fingerprint: "a" }] },
-    ]].reverse()).evidenceDigest).toBe(scorecard.evidenceDigest);
+    expect(
+      buildAtsRepeatedShadowScorecard(
+        [
+          ...[
+            {
+              runId: "run-b",
+              capturedAt: "2026-07-22T00:00:00.000+00:00",
+              provider: "nicoka",
+              tenantId: "vaulttec",
+              countryCode: "FR",
+              policyDigest: digest,
+              complete: true,
+              requestCount: 1,
+              jobs: [
+                { externalId: "3", fingerprint: "c" },
+                { externalId: "2", fingerprint: "changed" },
+              ],
+            },
+            {
+              runId: "run-a",
+              capturedAt: "2026-07-21T00:00:00.000+00:00",
+              provider: "nicoka",
+              tenantId: "vaulttec",
+              countryCode: "FR",
+              policyDigest: digest,
+              complete: true,
+              requestCount: 1,
+              jobs: [
+                { externalId: "2", fingerprint: "b" },
+                { externalId: "1", fingerprint: "a" },
+              ],
+            },
+          ],
+        ].reverse(),
+      ).evidenceDigest,
+    ).toBe(scorecard.evidenceDigest);
   });
 
   test("rejects incomplete, drifting, or duplicate run evidence", () => {
     const digest = approve("greenhouse").policyDigest;
-    const base = { runId: "a", capturedAt: "2026-07-21T00:00:00.000+00:00", provider: "greenhouse", tenantId: "vaulttec", countryCode: "FR", policyDigest: digest, complete: true, requestCount: 1, jobs: [{ externalId: "1", fingerprint: "a" }] };
+    const base = {
+      runId: "a",
+      capturedAt: "2026-07-21T00:00:00.000+00:00",
+      provider: "greenhouse",
+      tenantId: "vaulttec",
+      countryCode: "FR",
+      policyDigest: digest,
+      complete: true,
+      requestCount: 1,
+      jobs: [{ externalId: "1", fingerprint: "a" }],
+    };
     const valid = { ...base, runId: "b", capturedAt: "2026-07-22T00:00:00.000+00:00" };
     const invalidSets = [
       [base],
@@ -182,35 +298,94 @@ describe("ATS inventory production shadow readiness", () => {
       [base, { ...valid, policyDigest: "b".repeat(64) }],
       [base, { ...valid, runId: "a" }],
       [base, { ...valid, capturedAt: base.capturedAt }],
-      [base, { ...valid, jobs: [{ externalId: "1", fingerprint: "a" }, { externalId: "1", fingerprint: "b" }] }],
+      [
+        base,
+        {
+          ...valid,
+          jobs: [
+            { externalId: "1", fingerprint: "a" },
+            { externalId: "1", fingerprint: "b" },
+          ],
+        },
+      ],
     ];
-    for (const runs of invalidSets) expect(() => buildAtsRepeatedShadowScorecard(runs)).toThrow(AtsShadowRefusal);
+    for (const runs of invalidSets)
+      expect(() => buildAtsRepeatedShadowScorecard(runs)).toThrow(AtsShadowRefusal);
   });
 
   test("permits Greenhouse but keeps Recruitee fail-closed for complete snapshots", () => {
     const greenhouseDigest = approve("greenhouse").policyDigest;
-    expect(buildAtsRepeatedShadowScorecard([
-      { runId: "a", capturedAt: "2026-07-21T00:00:00.000+00:00", provider: "greenhouse", tenantId: "vaulttec", countryCode: "FR", policyDigest: greenhouseDigest, complete: true, requestCount: 1, jobs: [{ externalId: "1", fingerprint: "a" }] },
-      { runId: "b", capturedAt: "2026-07-22T00:00:00.000+00:00", provider: "greenhouse", tenantId: "vaulttec", countryCode: "FR", policyDigest: greenhouseDigest, complete: true, requestCount: 1, jobs: [{ externalId: "1", fingerprint: "a" }] },
-    ])).toMatchObject({ provider: "greenhouse", verdict: "complete_shadow_ready" });
+    expect(
+      buildAtsRepeatedShadowScorecard([
+        {
+          runId: "a",
+          capturedAt: "2026-07-21T00:00:00.000+00:00",
+          provider: "greenhouse",
+          tenantId: "vaulttec",
+          countryCode: "FR",
+          policyDigest: greenhouseDigest,
+          complete: true,
+          requestCount: 1,
+          jobs: [{ externalId: "1", fingerprint: "a" }],
+        },
+        {
+          runId: "b",
+          capturedAt: "2026-07-22T00:00:00.000+00:00",
+          provider: "greenhouse",
+          tenantId: "vaulttec",
+          countryCode: "FR",
+          policyDigest: greenhouseDigest,
+          complete: true,
+          requestCount: 1,
+          jobs: [{ externalId: "1", fingerprint: "a" }],
+        },
+      ]),
+    ).toMatchObject({ provider: "greenhouse", verdict: "complete_shadow_ready" });
 
     const recruiteeDigest = approve("recruitee").policyDigest;
     const recruiteeRun = {
-      capturedAt: "2026-07-21T00:00:00.000+00:00", provider: "recruitee" as const,
-      tenantId: "vaulttec", countryCode: "FR", policyDigest: recruiteeDigest,
-      complete: true, requestCount: 1, jobs: [{ externalId: "1", fingerprint: "a" }],
+      capturedAt: "2026-07-21T00:00:00.000+00:00",
+      provider: "recruitee" as const,
+      tenantId: "vaulttec",
+      countryCode: "FR",
+      policyDigest: recruiteeDigest,
+      complete: true,
+      requestCount: 1,
+      jobs: [{ externalId: "1", fingerprint: "a" }],
     };
-    expect(() => buildAtsRepeatedShadowScorecard([
-      { ...recruiteeRun, runId: "a" },
-      { ...recruiteeRun, runId: "b", capturedAt: "2026-07-22T00:00:00.000+00:00" },
-    ])).toThrow("recruitee public transport cannot prove complete snapshots");
+    expect(() =>
+      buildAtsRepeatedShadowScorecard([
+        { ...recruiteeRun, runId: "a" },
+        { ...recruiteeRun, runId: "b", capturedAt: "2026-07-22T00:00:00.000+00:00" },
+      ]),
+    ).toThrow("recruitee public transport cannot prove complete snapshots");
   });
 
   test("complete empty snapshots can report removals without expiry mutation", () => {
     const digest = approve("nicoka").policyDigest;
     const scorecard = buildAtsRepeatedShadowScorecard([
-      { runId: "a", capturedAt: "2026-07-21T00:00:00.000+00:00", provider: "nicoka", tenantId: "vaulttec", countryCode: "FR", policyDigest: digest, complete: true, requestCount: 1, jobs: [{ externalId: "1", fingerprint: "a" }] },
-      { runId: "b", capturedAt: "2026-07-22T00:00:00.000+00:00", provider: "nicoka", tenantId: "vaulttec", countryCode: "FR", policyDigest: digest, complete: true, requestCount: 1, jobs: [] },
+      {
+        runId: "a",
+        capturedAt: "2026-07-21T00:00:00.000+00:00",
+        provider: "nicoka",
+        tenantId: "vaulttec",
+        countryCode: "FR",
+        policyDigest: digest,
+        complete: true,
+        requestCount: 1,
+        jobs: [{ externalId: "1", fingerprint: "a" }],
+      },
+      {
+        runId: "b",
+        capturedAt: "2026-07-22T00:00:00.000+00:00",
+        provider: "nicoka",
+        tenantId: "vaulttec",
+        countryCode: "FR",
+        policyDigest: digest,
+        complete: true,
+        requestCount: 1,
+        jobs: [],
+      },
     ]);
     expect(scorecard.reconciliation[0]?.removals).toEqual(["1"]);
     expect(expiryDispositionAfterShadowFailure()).toEqual({

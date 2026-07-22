@@ -15,8 +15,16 @@ export function startFeedV2(env: Record<string, string | undefined> = Bun.env) {
       port: config.port,
       fetch: createFeedV2Handler({
         config,
-        auth: { async verify() { throw new Error("feed_v2_disabled"); } },
-        service: { async read() { throw new Error("feed_v2_disabled"); } },
+        auth: {
+          async verify() {
+            throw new Error("feed_v2_disabled");
+          },
+        },
+        service: {
+          async read() {
+            throw new Error("feed_v2_disabled");
+          },
+        },
       }),
     });
   }

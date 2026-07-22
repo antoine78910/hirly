@@ -11,29 +11,23 @@ const boundedJsonValueSchema: z.ZodType<unknown> = z.lazy(() =>
     z.boolean(),
     z.null(),
     z.array(boundedJsonValueSchema).max(500),
-    z.record(z.string().max(256), boundedJsonValueSchema).superRefine(
-      (value, context) => {
-        if (Object.keys(value).length > 500) {
-          context.addIssue({
-            code: "custom",
-            message: "Sprout object exceeds the 500-key safety bound",
-          });
-        }
-      },
-    ),
+    z.record(z.string().max(256), boundedJsonValueSchema).superRefine((value, context) => {
+      if (Object.keys(value).length > 500) {
+        context.addIssue({
+          code: "custom",
+          message: "Sprout object exceeds the 500-key safety bound",
+        });
+      }
+    }),
   ]),
 );
 
 const optionalBoundedValue = boundedJsonValueSchema.nullable().optional();
-const sproutIdSchema = z.union([
-  z.string().trim().min(1).max(512),
-  z.number().int().nonnegative(),
-]).transform(String);
+const sproutIdSchema = z
+  .union([z.string().trim().min(1).max(512), z.number().int().nonnegative()])
+  .transform(String);
 const optionalSproutSourceIdSchema = z
-  .union([
-    z.string().trim().min(1).max(512),
-    z.number().int().nonnegative(),
-  ])
+  .union([z.string().trim().min(1).max(512), z.number().int().nonnegative()])
   .nullable()
   .optional();
 
@@ -66,22 +60,9 @@ export const sproutLocationSchema = z
   })
   .strict();
 
-export const sproutJobTypeSchema = z.enum([
-  "FULL_TIME",
-  "PART_TIME",
-  "INTERNSHIP",
-]);
-export const sproutExperienceLevelSchema = z.enum([
-  "ENTRY",
-  "MID",
-  "SENIOR",
-  "EXECUTIVE",
-]);
-export const sproutWorkLocationSchema = z.enum([
-  "IN_PERSON",
-  "HYBRID",
-  "REMOTE",
-]);
+export const sproutJobTypeSchema = z.enum(["FULL_TIME", "PART_TIME", "INTERNSHIP"]);
+export const sproutExperienceLevelSchema = z.enum(["ENTRY", "MID", "SENIOR", "EXECUTIVE"]);
+export const sproutWorkLocationSchema = z.enum(["IN_PERSON", "HYBRID", "REMOTE"]);
 export const sproutPostedDateSchema = z.enum(["any", "24h", "30d"]);
 
 /**
@@ -193,10 +174,7 @@ export class SproutResponseSchemaError extends Error {
   }
 }
 
-function schemaDiagnostics(
-  error: z.ZodError,
-  itemIndex: number | null,
-): SproutSchemaDiagnostic[] {
+function schemaDiagnostics(error: z.ZodError, itemIndex: number | null): SproutSchemaDiagnostic[] {
   return error.issues.slice(0, 5).map((issue) => ({
     itemIndex,
     code: issue.code,

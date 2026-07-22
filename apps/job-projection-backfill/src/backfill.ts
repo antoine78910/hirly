@@ -80,7 +80,8 @@ function denyKeys(values: string[]): Set<string> {
   const keys = new Set<string>();
   for (const value of values) {
     const [provider, countryCode, extra] = value.trim().split(":");
-    if (extra !== undefined || !provider || !countryCode) throw new Error("invalid_rollback_denylist");
+    if (extra !== undefined || !provider || !countryCode)
+      throw new Error("invalid_rollback_denylist");
     const normalizedProvider = provider.toLowerCase();
     const normalizedCountry = countryCode.toUpperCase();
     if (normalizedProvider !== "*" && !/^[a-z0-9_-]+$/.test(normalizedProvider)) {
@@ -97,13 +98,17 @@ function denyKeys(values: string[]): Set<string> {
 function denied(candidate: ProjectionBackfillCandidate, keys: Set<string>): boolean {
   const provider = candidate.provider.toLowerCase();
   const country = candidate.countryCode?.toUpperCase() ?? "*";
-  return keys.has(`${provider}:${country}`)
-    || keys.has(`${provider}:*`)
-    || keys.has(`*:${country}`)
-    || keys.has("*:*");
+  return (
+    keys.has(`${provider}:${country}`) ||
+    keys.has(`${provider}:*`) ||
+    keys.has(`*:${country}`) ||
+    keys.has("*:*")
+  );
 }
 
-function assertCheckpoint(checkpoint: ProjectionBackfillCheckpoint | null | undefined): string | null {
+function assertCheckpoint(
+  checkpoint: ProjectionBackfillCheckpoint | null | undefined,
+): string | null {
   if (!checkpoint) return null;
   if (checkpoint.schemaVersion !== JOB_PROJECTION_BACKFILL_CHECKPOINT_VERSION) {
     throw new Error("invalid_checkpoint_version");

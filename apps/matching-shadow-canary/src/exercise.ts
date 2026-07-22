@@ -101,14 +101,13 @@ function parityRatio(
   const legacyIds = new Set(legacy.results.map((result) => result.canonicalGroupId));
   const v2Ids = new Set(onlineV2.results.map((result) => result.canonicalGroupId));
   const eligibleDomainIds = new Set(
-    onlineV2Domain
-      .filter((record) => record.eligible)
-      .map((record) => record.canonicalGroupId),
+    onlineV2Domain.filter((record) => record.eligible).map((record) => record.canonicalGroupId),
   );
   const union = new Set([...legacyIds, ...v2Ids, ...eligibleDomainIds]);
   if (union.size === 0) return 1;
-  const intersection = [...legacyIds]
-    .filter((id) => v2Ids.has(id) && eligibleDomainIds.has(id)).length;
+  const intersection = [...legacyIds].filter(
+    (id) => v2Ids.has(id) && eligibleDomainIds.has(id),
+  ).length;
   return Number((intersection / union.size).toFixed(6));
 }
 
@@ -117,20 +116,33 @@ function sha256(value: unknown): string {
 }
 
 function assertFrozenInput(input: FrozenShadowCanaryInput): void {
-  if (input.schemaVersion !== SHADOW_CANARY_EVIDENCE_VERSION) throw new Error("unsupported shadow canary schema");
-  if (!Number.isFinite(Date.parse(input.observedAt))) throw new Error("observedAt must be an ISO timestamp");
-  if (!Number.isSafeInteger(input.requestCount) || input.requestCount <= 0) throw new Error("requestCount must be positive");
+  if (input.schemaVersion !== SHADOW_CANARY_EVIDENCE_VERSION)
+    throw new Error("unsupported shadow canary schema");
+  if (!Number.isFinite(Date.parse(input.observedAt)))
+    throw new Error("observedAt must be an ISO timestamp");
+  if (!Number.isSafeInteger(input.requestCount) || input.requestCount <= 0)
+    throw new Error("requestCount must be positive");
   for (const count of [input.legacyErrorCount, input.onlineV2ErrorCount]) {
-    if (!Number.isSafeInteger(count) || count < 0 || count > input.requestCount) throw new Error("error counts must be within requestCount");
+    if (!Number.isSafeInteger(count) || count < 0 || count > input.requestCount)
+      throw new Error("error counts must be within requestCount");
   }
-  for (const value of [input.thresholds.minimumEligibleSetParity, input.thresholds.maximumErrorRate]) {
-    if (!Number.isFinite(value) || value < 0 || value > 1) throw new Error("rate thresholds must be between zero and one");
+  for (const value of [
+    input.thresholds.minimumEligibleSetParity,
+    input.thresholds.maximumErrorRate,
+  ]) {
+    if (!Number.isFinite(value) || value < 0 || value > 1)
+      throw new Error("rate thresholds must be between zero and one");
   }
-  if (!Number.isFinite(input.thresholds.maximumLatencyDeltaMs) || input.thresholds.maximumLatencyDeltaMs < 0) {
+  if (
+    !Number.isFinite(input.thresholds.maximumLatencyDeltaMs) ||
+    input.thresholds.maximumLatencyDeltaMs < 0
+  ) {
     throw new Error("maximumLatencyDeltaMs must be non-negative");
   }
-  if (!Number.isSafeInteger(input.thresholds.minimumFreshVisibleCanonicalGroups)
-    || input.thresholds.minimumFreshVisibleCanonicalGroups < 0) {
+  if (
+    !Number.isSafeInteger(input.thresholds.minimumFreshVisibleCanonicalGroups) ||
+    input.thresholds.minimumFreshVisibleCanonicalGroups < 0
+  ) {
     throw new Error("minimumFreshVisibleCanonicalGroups must be a non-negative integer");
   }
   onlineMatchResponseSchema.parse(input.legacy);
@@ -138,15 +150,24 @@ function assertFrozenInput(input: FrozenShadowCanaryInput): void {
 }
 
 function applyBreach(input: FrozenShadowCanaryInput, breach: InjectedBreach) {
-  const onlineV2 = breach === "parity" ? { ...input.onlineV2, results: [], eligibleCount: 0 } : input.onlineV2;
+  const onlineV2 =
+    breach === "parity" ? { ...input.onlineV2, results: [], eligibleCount: 0 } : input.onlineV2;
   const onlineV2Domain = breach === "parity" ? [] : input.onlineV2Domain;
-  const onlineV2LatencyMs = breach === "latency"
-    ? input.legacyLatencyMs + input.thresholds.maximumLatencyDeltaMs + 1
-    : input.onlineV2LatencyMs;
+  const onlineV2LatencyMs =
+    breach === "latency"
+      ? input.legacyLatencyMs + input.thresholds.maximumLatencyDeltaMs + 1
+      : input.onlineV2LatencyMs;
   const onlineV2ErrorCount = breach === "error" ? input.requestCount : input.onlineV2ErrorCount;
-  const supplyGates = breach === "supply"
-    ? input.supplyGates.map((gate) => ({ ...gate, freshVisibleCanonicalGroups: Math.max(0, input.thresholds.minimumFreshVisibleCanonicalGroups - 1) }))
-    : input.supplyGates;
+  const supplyGates =
+    breach === "supply"
+      ? input.supplyGates.map((gate) => ({
+          ...gate,
+          freshVisibleCanonicalGroups: Math.max(
+            0,
+            input.thresholds.minimumFreshVisibleCanonicalGroups - 1,
+          ),
+        }))
+      : input.supplyGates;
   return { onlineV2, onlineV2Domain, onlineV2LatencyMs, onlineV2ErrorCount, supplyGates };
 }
 
@@ -168,45 +189,103 @@ export function executeFrozenShadowCanary(
     onlineV2LatencyMs: injected.onlineV2LatencyMs,
     queryPlan: input.queryPlan,
   };
-  const base = evaluateShadowCanary(controls, input.context, observation, injected.supplyGates, new Date(input.observedAt));
-  const baseline = evaluateShadowCanary(controls, input.context, {
-    legacy: input.legacy,
-    onlineV2: input.onlineV2,
-    onlineV2Domain: input.onlineV2Domain,
-    legacyLatencyMs: input.legacyLatencyMs,
-    onlineV2LatencyMs: input.onlineV2LatencyMs,
-    queryPlan: input.queryPlan,
-  }, input.supplyGates, new Date(input.observedAt));
+  const base = evaluateShadowCanary(
+    controls,
+    input.context,
+    observation,
+    injected.supplyGates,
+    new Date(input.observedAt),
+  );
+  const baseline = evaluateShadowCanary(
+    controls,
+    input.context,
+    {
+      legacy: input.legacy,
+      onlineV2: input.onlineV2,
+      onlineV2Domain: input.onlineV2Domain,
+      legacyLatencyMs: input.legacyLatencyMs,
+      onlineV2LatencyMs: input.onlineV2LatencyMs,
+      queryPlan: input.queryPlan,
+    },
+    input.supplyGates,
+    new Date(input.observedAt),
+  );
   port.exposeLegacy(input.legacy);
 
-  const selector = input.controls.selectors.find((candidate) => candidate.cohort === input.context.cohort
-    && candidate.countryCode === input.context.countryCode
-    && candidate.roleFamilyId === input.context.roleFamilyId);
-  const supply = injected.supplyGates.find((gate) => input.controls.requiredSupplyGates.includes(gate.gateId));
+  const selector = input.controls.selectors.find(
+    (candidate) =>
+      candidate.cohort === input.context.cohort &&
+      candidate.countryCode === input.context.countryCode &&
+      candidate.roleFamilyId === input.context.roleFamilyId,
+  );
+  const supply = injected.supplyGates.find((gate) =>
+    input.controls.requiredSupplyGates.includes(gate.gateId),
+  );
   const eligibleSetParity = parityRatio(input.legacy, injected.onlineV2, injected.onlineV2Domain);
   const latencyDeltaMs = injected.onlineV2LatencyMs - input.legacyLatencyMs;
   const legacyErrorRate = rate(input.legacyErrorCount, input.requestCount);
   const onlineV2ErrorRate = rate(injected.onlineV2ErrorCount, input.requestCount);
   const stages: ShadowCanaryEvidence["stages"] = [
     { stage: "rollout", passed: executionEnabled, observed: executionEnabled, required: true },
-    { stage: "cohort", passed: Boolean(selector), observed: input.context.cohort, required: input.controls.selectors[0]?.cohort ?? "none" },
-    { stage: "country", passed: Boolean(selector), observed: input.context.countryCode, required: input.controls.selectors[0]?.countryCode ?? "none" },
-    { stage: "role", passed: Boolean(selector), observed: input.context.roleFamilyId, required: input.controls.selectors[0]?.roleFamilyId ?? "none" },
-    { stage: "supply", passed: Boolean(supply && supply.freshVisibleCanonicalGroups >= input.thresholds.minimumFreshVisibleCanonicalGroups), observed: supply?.freshVisibleCanonicalGroups ?? 0, required: input.thresholds.minimumFreshVisibleCanonicalGroups },
-    { stage: "parity", passed: eligibleSetParity >= input.thresholds.minimumEligibleSetParity, observed: eligibleSetParity, required: input.thresholds.minimumEligibleSetParity },
-    { stage: "latency", passed: latencyDeltaMs <= input.thresholds.maximumLatencyDeltaMs, observed: latencyDeltaMs, required: input.thresholds.maximumLatencyDeltaMs },
-    { stage: "error", passed: onlineV2ErrorRate <= input.thresholds.maximumErrorRate, observed: onlineV2ErrorRate, required: input.thresholds.maximumErrorRate },
+    {
+      stage: "cohort",
+      passed: Boolean(selector),
+      observed: input.context.cohort,
+      required: input.controls.selectors[0]?.cohort ?? "none",
+    },
+    {
+      stage: "country",
+      passed: Boolean(selector),
+      observed: input.context.countryCode,
+      required: input.controls.selectors[0]?.countryCode ?? "none",
+    },
+    {
+      stage: "role",
+      passed: Boolean(selector),
+      observed: input.context.roleFamilyId,
+      required: input.controls.selectors[0]?.roleFamilyId ?? "none",
+    },
+    {
+      stage: "supply",
+      passed: Boolean(
+        supply &&
+          supply.freshVisibleCanonicalGroups >= input.thresholds.minimumFreshVisibleCanonicalGroups,
+      ),
+      observed: supply?.freshVisibleCanonicalGroups ?? 0,
+      required: input.thresholds.minimumFreshVisibleCanonicalGroups,
+    },
+    {
+      stage: "parity",
+      passed: eligibleSetParity >= input.thresholds.minimumEligibleSetParity,
+      observed: eligibleSetParity,
+      required: input.thresholds.minimumEligibleSetParity,
+    },
+    {
+      stage: "latency",
+      passed: latencyDeltaMs <= input.thresholds.maximumLatencyDeltaMs,
+      observed: latencyDeltaMs,
+      required: input.thresholds.maximumLatencyDeltaMs,
+    },
+    {
+      stage: "error",
+      passed: onlineV2ErrorRate <= input.thresholds.maximumErrorRate,
+      observed: onlineV2ErrorRate,
+      required: input.thresholds.maximumErrorRate,
+    },
   ];
   const firstFailed = stages.find((stage) => !stage.passed);
-  const thresholdFailure = firstFailed ? `${firstFailed.stage.toUpperCase()}_THRESHOLD_BREACH` : null;
+  const thresholdFailure = firstFailed
+    ? `${firstFailed.stage.toUpperCase()}_THRESHOLD_BREACH`
+    : null;
   const rollbackReason = base.rollbackReason ?? thresholdFailure ?? "OBSERVATION_ONLY";
-  const automaticRollback = baseline.canaryAuthorized && (base.rollbackReason !== null || thresholdFailure !== null);
+  const automaticRollback =
+    baseline.canaryAuthorized && (base.rollbackReason !== null || thresholdFailure !== null);
   const evidenceWithoutDigest = {
     schemaVersion: SHADOW_CANARY_EVIDENCE_VERSION,
     exerciseId: input.exerciseId,
     observedAt: new Date(input.observedAt).toISOString(),
     rolloutDefault: "disabled" as const,
-    executionMode: executionEnabled ? "frozen-shadow" as const : "disabled" as const,
+    executionMode: executionEnabled ? ("frozen-shadow" as const) : ("disabled" as const),
     injectedBreach,
     scope: {
       cohort: input.context.cohort,

@@ -14,13 +14,17 @@ const PLAN_ALIASES = {
 };
 
 export function canonicalPlanTier(plan) {
-  const normalized = String(plan || "").trim().toLowerCase();
+  const normalized = String(plan || "")
+    .trim()
+    .toLowerCase();
   if (!normalized) return null;
   return PLAN_ALIASES[normalized] || normalized;
 }
 
 export function planTierLabel(plan) {
-  const normalized = String(plan || "").trim().toLowerCase();
+  const normalized = String(plan || "")
+    .trim()
+    .toLowerCase();
   if (!normalized) return null;
   return PLAN_TIER_LABELS[normalized] || null;
 }

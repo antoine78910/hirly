@@ -11,14 +11,15 @@ jest.mock("../../context/AppLocaleContext", () => ({
   useAppLocale: () => ({
     lang: "fr",
     setLang: mockSetLang,
-    t: (key) => ({
-      "common.language": "Language",
-      "common.english": "English",
-      "common.french": "French",
-      "common.german": "German",
-      "common.spanish": "Spanish",
-      "common.italian": "Italian",
-    })[key],
+    t: (key) =>
+      ({
+        "common.language": "Language",
+        "common.english": "English",
+        "common.french": "French",
+        "common.german": "German",
+        "common.spanish": "Spanish",
+        "common.italian": "Italian",
+      })[key],
   }),
 }));
 

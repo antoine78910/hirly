@@ -9,7 +9,9 @@ const valueAfter = (name: string): string | undefined => {
 const baselinePath = valueAfter("--baseline");
 const snapshotsPath = valueAfter("--snapshots");
 if (!baselinePath || !snapshotsPath) {
-  console.error("Usage: bun run trial:scorecard --baseline <baseline.json> --snapshots <snapshots.json>");
+  console.error(
+    "Usage: bun run trial:scorecard --baseline <baseline.json> --snapshots <snapshots.json>",
+  );
   process.exit(2);
 }
 

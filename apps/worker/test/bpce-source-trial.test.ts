@@ -1,8 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type {
-  SourceTrialManifest,
-  SourceTrialResult,
-} from "@hirly/contracts";
+import type { SourceTrialManifest, SourceTrialResult } from "@hirly/contracts";
 import {
   BPCE_DATASET_ID,
   BPCE_RESOURCE_ID,
@@ -26,8 +23,7 @@ const rawRecord = {
   title: "Ingénieure plateforme",
   lastmodifieddate: "20/07/2026 4:10:08 PM",
   referencenumber: "BPCE-001",
-  apply_url:
-    "https://jobs.smartrecruiters.com/BPCE/744000123456789-ingenieure-plateforme",
+  apply_url: "https://jobs.smartrecruiters.com/BPCE/744000123456789-ingenieure-plateforme",
   url: "https://recrutement.bpce.fr/offre/ingenieure-plateforme",
   company: "BPCE",
   city: "Paris",
@@ -59,8 +55,7 @@ const resourceManifest = sealBpceTrialResourceManifest({
   attribution: {
     licenceName: "Licence Ouverte 2.0",
     attributionText: "Source: Groupe BPCE via data.gouv.fr",
-    sourceUrl:
-      "https://www.data.gouv.fr/datasets/groupe-bpce-offres-emploi-publiques",
+    sourceUrl: "https://www.data.gouv.fr/datasets/groupe-bpce-offres-emploi-publiques",
   },
   budgets: {
     maxRequests: 1,
@@ -110,9 +105,7 @@ describe("BPCE official-feed evidence-only trial", () => {
   test("strips recruiter PII before hashing, evidence serialization, and persistence", async () => {
     const sanitized = sanitizeBpceUpstreamSnapshot([rawRecord]);
     expect(JSON.stringify(sanitized)).not.toContain("Personne Confidentielle");
-    expect(JSON.stringify(sanitized)).not.toContain(
-      "recruteur-secret@example.com",
-    );
+    expect(JSON.stringify(sanitized)).not.toContain("recruteur-secret@example.com");
 
     const repository = new RecordingRepository();
     const preview = await persistBpceSourceTrial({
@@ -268,9 +261,7 @@ describe("BPCE official-feed evidence-only trial", () => {
         message: "record count",
       },
       {
-        response: jsonResponse(
-          JSON.stringify([{ ...rawRecord, title: "Titre modifié" }]),
-        ),
+        response: jsonResponse(JSON.stringify([{ ...rawRecord, title: "Titre modifié" }])),
         classification: "malformed",
         message: "digest",
       },
@@ -286,9 +277,7 @@ describe("BPCE official-feed evidence-only trial", () => {
         throw new Error("expected transport failure");
       } catch (error) {
         expect(error).toBeInstanceOf(AtsTrialTransportError);
-        expect((error as AtsTrialTransportError).classification).toBe(
-          item.classification,
-        );
+        expect((error as AtsTrialTransportError).classification).toBe(item.classification);
         expect((error as Error).message).toContain(item.message);
       }
     }
@@ -305,9 +294,9 @@ describe("BPCE official-feed evidence-only trial", () => {
       approvedManifestDigests: [fastTimeoutManifest.manifestDigest],
       fetch: async () => await new Promise<Response>(() => undefined),
     });
-    await expect(
-      transport.fetch(new AbortController().signal),
-    ).rejects.toMatchObject({ classification: "budget_exceeded" });
+    await expect(transport.fetch(new AbortController().signal)).rejects.toMatchObject({
+      classification: "budget_exceeded",
+    });
   });
 });
 
@@ -326,9 +315,7 @@ class RecordingRepository implements SourceTrialEvidenceRepository {
   async recordSourceTrialCandidate(input: unknown): Promise<void> {
     this.candidates.push(input);
   }
-  async recordSourceTrialScorecard(input: {
-    result: SourceTrialResult;
-  }): Promise<void> {
+  async recordSourceTrialScorecard(input: { result: SourceTrialResult }): Promise<void> {
     this.results.push(input.result);
   }
 }

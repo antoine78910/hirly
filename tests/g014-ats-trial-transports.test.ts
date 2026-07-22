@@ -8,10 +8,7 @@ import {
   createGreenhouseTrialTransport,
   greenhouseProvider,
 } from "../apps/worker/src/providers/greenhouse";
-import {
-  createLeverTrialTransport,
-  leverProvider,
-} from "../apps/worker/src/providers/lever";
+import { createLeverTrialTransport, leverProvider } from "../apps/worker/src/providers/lever";
 
 const greenhouseJob = {
   id: 127817,
@@ -87,12 +84,8 @@ describe("G014 bounded ATS trial transports", () => {
         return jsonResponse([leverJob]);
       },
     });
-    expect(await transport.fetch(new AbortController().signal)).toEqual([
-      leverJob,
-    ]);
-    expect(urls).toEqual([
-      "https://api.eu.lever.co/v0/postings/leverdemo?mode=json",
-    ]);
+    expect(await transport.fetch(new AbortController().signal)).toEqual([leverJob]);
+    expect(urls).toEqual(["https://api.eu.lever.co/v0/postings/leverdemo?mode=json"]);
     expect(transport.region).toBe("eu");
   });
 
@@ -104,9 +97,7 @@ describe("G014 bounded ATS trial transports", () => {
       "user:password",
       "tenant.name",
     ]) {
-      expect(() =>
-        createGreenhouseTrialTransport({ approvedTenantId }),
-      ).toThrow();
+      expect(() => createGreenhouseTrialTransport({ approvedTenantId })).toThrow();
     }
   });
 
@@ -127,9 +118,7 @@ describe("G014 bounded ATS trial transports", () => {
       throw new Error("expected transport failure");
     } catch (error) {
       expect(error).toBeInstanceOf(AtsTrialTransportError);
-      expect((error as AtsTrialTransportError).classification).toBe(
-        classification,
-      );
+      expect((error as AtsTrialTransportError).classification).toBe(classification);
       expect((error as AtsTrialTransportError).status).toBe(status);
     }
   });
@@ -139,30 +128,27 @@ describe("G014 bounded ATS trial transports", () => {
       approvedTenantId: "vaulttec",
       fetch: async () => new Response("{"),
     });
-    await expect(
-      malformed.fetch(new AbortController().signal),
-    ).rejects.toMatchObject({ classification: "malformed" });
+    await expect(malformed.fetch(new AbortController().signal)).rejects.toMatchObject({
+      classification: "malformed",
+    });
 
     const drifted = createGreenhouseTrialTransport({
       approvedTenantId: "vaulttec",
       fetch: async () => jsonResponse({ jobs: [{ id: 1 }] }),
     });
-    await expect(
-      drifted.fetch(new AbortController().signal),
-    ).rejects.toMatchObject({ classification: "malformed" });
+    await expect(drifted.fetch(new AbortController().signal)).rejects.toMatchObject({
+      classification: "malformed",
+    });
 
     const oversized = createGreenhouseTrialTransport({
       approvedTenantId: "vaulttec",
       budgets: { maxBytes: 8 },
       fetch: async () =>
-        jsonResponse(
-          { jobs: [greenhouseJob] },
-          { headers: { "content-length": "999" } },
-        ),
+        jsonResponse({ jobs: [greenhouseJob] }, { headers: { "content-length": "999" } }),
     });
-    await expect(
-      oversized.fetch(new AbortController().signal),
-    ).rejects.toMatchObject({ classification: "budget_exceeded" });
+    await expect(oversized.fetch(new AbortController().signal)).rejects.toMatchObject({
+      classification: "budget_exceeded",
+    });
   });
 
   test("enforces the total time budget even when an injected fetch ignores abort", async () => {
@@ -171,18 +157,16 @@ describe("G014 bounded ATS trial transports", () => {
       budgets: { timeoutMs: 5 },
       fetch: () => new Promise<Response>(() => {}),
     });
-    await expect(
-      transport.fetch(new AbortController().signal),
-    ).rejects.toMatchObject({ classification: "budget_exceeded" });
+    await expect(transport.fetch(new AbortController().signal)).rejects.toMatchObject({
+      classification: "budget_exceeded",
+    });
   });
 
   test("keeps production provider modules disabled and Ashby typed not-ready", () => {
     for (const provider of [greenhouseProvider, leverProvider]) {
       expect(provider.liveTransportReady).toBe(false);
       expect(provider.canonicalWriteReady).toBe(false);
-      expect(provider.transport.constructor.name).toBe(
-        "DisabledProviderTransport",
-      );
+      expect(provider.transport.constructor.name).toBe("DisabledProviderTransport");
     }
     expect(ashbyTrialReadiness).toEqual({
       provider: "ashby",

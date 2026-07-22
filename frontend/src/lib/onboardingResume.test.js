@@ -50,8 +50,12 @@ describe("onboardingResume", () => {
   });
 
   it("skips transient steps for logged-in users", () => {
-    expect(normalizeResumeStep("signup", { user: { user_id: "u1" }, profile: null })).toBe("jobSearch");
-    expect(normalizeResumeStep("upload", { user: { user_id: "u1" }, profile: { cv_text: "resume" } })).toBe("profileSetup");
+    expect(normalizeResumeStep("signup", { user: { user_id: "u1" }, profile: null })).toBe(
+      "jobSearch",
+    );
+    expect(
+      normalizeResumeStep("upload", { user: { user_id: "u1" }, profile: { cv_text: "resume" } }),
+    ).toBe("profileSetup");
   });
 
   it("forces contact phone only before the user has moved past that step", () => {

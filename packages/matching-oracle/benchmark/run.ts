@@ -47,18 +47,21 @@ const durations: number[] = [];
 
 for (let offset = 0; offset < iterations; offset += concurrency) {
   const batchSize = Math.min(concurrency, iterations - offset);
-  await Promise.all(Array.from({ length: batchSize }, async () => {
-    const started = performance.now();
-    const result = oracle.match(profile, [], { now });
-    if (result.coarseCandidateCount > 1_000 || result.results.length > 200) {
-      throw new Error("benchmark observed an unbounded match result");
-    }
-    durations.push(performance.now() - started);
-  }));
+  await Promise.all(
+    Array.from({ length: batchSize }, async () => {
+      const started = performance.now();
+      const result = oracle.match(profile, [], { now });
+      if (result.coarseCandidateCount > 1_000 || result.results.length > 200) {
+        throw new Error("benchmark observed an unbounded match result");
+      }
+      durations.push(performance.now() - started);
+    }),
+  );
 }
 
 durations.sort((a, b) => a - b);
-const percentile = (fraction: number): number => durations[Math.ceil(fraction * durations.length) - 1] ?? 0;
+const percentile = (fraction: number): number =>
+  durations[Math.ceil(fraction * durations.length) - 1] ?? 0;
 const report = {
   schemaVersion: 1,
   status: "LOCAL_CPU_ONLY",

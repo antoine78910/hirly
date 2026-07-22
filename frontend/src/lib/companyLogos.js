@@ -17,8 +17,16 @@ const COMPANIES = {
 
   // Finance demo — Paris banking & asset management
   "credit agricole": { domain: "ca-cib.com", display: "Crédit Agricole CIB" },
-  bnp: { domain: "group.bnpparibas.com", display: "BNP Paribas", localLogo: "/trust-logos/bnp-paribas.png" },
-  generale: { domain: "societegenerale.com", display: "Société Générale", localLogo: "/trust-logos/societe-generale.png" },
+  bnp: {
+    domain: "group.bnpparibas.com",
+    display: "BNP Paribas",
+    localLogo: "/trust-logos/bnp-paribas.png",
+  },
+  generale: {
+    domain: "societegenerale.com",
+    display: "Société Générale",
+    localLogo: "/trust-logos/societe-generale.png",
+  },
   natixis: { domain: "www.natixis.com", display: "Natixis", localLogo: "/trust-logos/natixis.png" },
   hsbc: { domain: "hsbc.fr", slug: "hsbc", display: "HSBC France" },
   boursorama: { domain: "boursorama.com", display: "Boursorama" },
@@ -33,11 +41,7 @@ const COMPANIES = {
 const COMPANY_KEYS = Object.keys(COMPANIES).sort((a, b) => b.length - a.length);
 
 function normalizeCompanyLabel(label) {
-  return String(label)
-    .trim()
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/\p{M}/gu, "");
+  return String(label).trim().toLowerCase().normalize("NFD").replace(/\p{M}/gu, "");
 }
 
 function getDisplayName(key) {

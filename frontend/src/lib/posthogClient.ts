@@ -1,4 +1,9 @@
-import posthog, { type CaptureResult, type PostHog, type PostHogConfig, type Properties } from "posthog-js";
+import posthog, {
+  type CaptureResult,
+  type PostHog,
+  type PostHogConfig,
+  type Properties,
+} from "posthog-js";
 
 import { resolveAnalyticsEvent } from "./analyticsRegistry";
 
@@ -28,24 +33,16 @@ export interface PostHogIdentityProfile {
   name?: unknown;
 }
 
-export const buildPostHogPersonProperties = (
-  profile: PostHogIdentityProfile = {},
-): Properties => {
+export const buildPostHogPersonProperties = (profile: PostHogIdentityProfile = {}): Properties => {
   const properties: Properties = {};
   if (typeof profile.email === "string") {
     const email = profile.email.trim().toLowerCase();
-    if (
-      email.length <= 254 &&
-      /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
-    ) {
+    if (email.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       properties.email = email;
     }
   }
   if (typeof profile.name === "string") {
-    const parts = profile.name
-      .trim()
-      .split(/\s+/)
-      .filter(Boolean);
+    const parts = profile.name.trim().split(/\s+/).filter(Boolean);
     const firstName = parts.shift()?.slice(0, 100);
     const lastName = parts.join(" ").slice(0, 100);
     if (firstName && !/[\u0000-\u001f\u007f]/.test(firstName)) {
@@ -72,7 +69,10 @@ const sanitizeIdentifyPersonSet = (value: unknown): Properties | null => {
 
 export const stripUrlSecrets = (value: string): string => {
   try {
-    const parsed = new URL(value, typeof window !== "undefined" ? window.location.origin : "https://invalid.local");
+    const parsed = new URL(
+      value,
+      typeof window !== "undefined" ? window.location.origin : "https://invalid.local",
+    );
     return `${parsed.origin === "https://invalid.local" ? "" : parsed.origin}${parsed.pathname}`;
   } catch {
     return value.split(/[?#]/, 1)[0];
@@ -114,10 +114,7 @@ export const sanitizeAnalyticsProperties = (
 export const sanitizePostHogEvent = (event: CaptureResult | null): CaptureResult | null => {
   if (!event) return null;
   if (event.event === "$snapshot") return isReplayEnabled() ? event : null;
-  if (
-    !ALLOWED_SYSTEM_EVENTS.has(event.event) &&
-    !resolveAnalyticsEvent(event.event)
-  ) {
+  if (!ALLOWED_SYSTEM_EVENTS.has(event.event) && !resolveAnalyticsEvent(event.event)) {
     return null;
   }
   const sdkProperties: Properties = {};
@@ -138,15 +135,24 @@ export const sanitizePostHogEvent = (event: CaptureResult | null): CaptureResult
     const personSet = sanitizeIdentifyPersonSet(event.properties?.$set);
     if (personSet) properties.$set = personSet;
   }
-  for (const key of ["$current_url", "$referrer", "$pathname", "current_url", "referrer", "url", "path"]) {
-    if (typeof properties[key] === "string") properties[key] = stripUrlSecrets(properties[key] as string);
+  for (const key of [
+    "$current_url",
+    "$referrer",
+    "$pathname",
+    "current_url",
+    "referrer",
+    "url",
+    "path",
+  ]) {
+    if (typeof properties[key] === "string")
+      properties[key] = stripUrlSecrets(properties[key] as string);
   }
   return { ...event, properties };
 };
 
 export const isReplayEnabled = (): boolean =>
-  process.env.REACT_APP_POSTHOG_REPLAY_ENABLED === "true"
-  && process.env.REACT_APP_POSTHOG_REPLAY_HOSTILE_QA_APPROVED === "true";
+  process.env.REACT_APP_POSTHOG_REPLAY_ENABLED === "true" &&
+  process.env.REACT_APP_POSTHOG_REPLAY_HOSTILE_QA_APPROVED === "true";
 
 export const buildPostHogConfig = (): Partial<PostHogConfig> => {
   const replayEnabled = isReplayEnabled();
@@ -231,18 +237,12 @@ export const capturePostHogPageview = (pathname: string): void => {
   });
 };
 
-export const identifyPostHogUser = (
-  userId: string,
-  profile: PostHogIdentityProfile = {},
-): void => {
+export const identifyPostHogUser = (userId: string, profile: PostHogIdentityProfile = {}): void => {
   if (!client) return;
   if (!isCanonicalAnalyticsUserId(userId)) return;
   const personProperties = buildPostHogPersonProperties(profile);
   const personPropertiesKey = JSON.stringify(personProperties);
-  if (
-    identifiedUserId === userId &&
-    identifiedPersonPropertiesKey === personPropertiesKey
-  ) {
+  if (identifiedUserId === userId && identifiedPersonPropertiesKey === personPropertiesKey) {
     return;
   }
   try {

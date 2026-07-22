@@ -7,22 +7,22 @@ import { blogPosts } from "../../lib/seo/blogPosts";
 const jsonLd = {
   "@context": "https://schema.org",
   "@type": "Blog",
-  "name": "Hirly Blog",
-  "description": "Conseils, méthodes et guides pour trouver un emploi plus vite avec l'IA.",
-  "url": "https://tryhirly.com/blog",
-  "publisher": {
+  name: "Hirly Blog",
+  description: "Conseils, méthodes et guides pour trouver un emploi plus vite avec l'IA.",
+  url: "https://tryhirly.com/blog",
+  publisher: {
     "@type": "Organization",
-    "name": "Hirly",
-    "url": "https://tryhirly.com",
+    name: "Hirly",
+    url: "https://tryhirly.com",
   },
 };
 
 const categoryColors = {
   "Recherche d'emploi": "bg-blue-50 text-blue-700",
-  "Outils": "bg-violet-50 text-violet-700",
-  "Productivité": "bg-emerald-50 text-emerald-700",
-  "Stratégie": "bg-amber-50 text-amber-700",
-  "Tendances": "bg-pink-50 text-pink-700",
+  Outils: "bg-violet-50 text-violet-700",
+  Productivité: "bg-emerald-50 text-emerald-700",
+  Stratégie: "bg-amber-50 text-amber-700",
+  Tendances: "bg-pink-50 text-pink-700",
 };
 
 export default function Blog() {
@@ -54,7 +54,9 @@ export default function Blog() {
         >
           <div className="gradient-linkedin-soft px-8 py-12 sm:px-12 sm:py-16">
             <div className="flex items-center gap-3 mb-4">
-              <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${categoryColors[featured.category] ?? "bg-zinc-100 text-zinc-600"}`}>
+              <span
+                className={`text-xs font-semibold px-2.5 py-1 rounded-full ${categoryColors[featured.category] ?? "bg-zinc-100 text-zinc-600"}`}
+              >
                 {featured.category}
               </span>
               <span className="flex items-center gap-1 text-xs text-zinc-400">
@@ -83,7 +85,9 @@ export default function Blog() {
               className="group flex flex-col rounded-2xl border border-zinc-200 bg-white p-6 hover:border-zinc-300 hover:shadow-sm transition-all duration-200"
             >
               <div className="flex items-center gap-2 mb-3">
-                <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${categoryColors[post.category] ?? "bg-zinc-100 text-zinc-600"}`}>
+                <span
+                  className={`text-xs font-semibold px-2.5 py-1 rounded-full ${categoryColors[post.category] ?? "bg-zinc-100 text-zinc-600"}`}
+                >
                   {post.category}
                 </span>
                 <span className="flex items-center gap-1 text-xs text-zinc-400">

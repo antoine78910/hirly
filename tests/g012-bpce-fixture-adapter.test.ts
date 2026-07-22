@@ -24,10 +24,7 @@ const fixturePolicyId = "00000000-0000-4000-8000-000000000021";
 async function fixture(): Promise<BpceOpenFeedFixture> {
   return bpceOpenFeedFixtureSchema.parse(
     JSON.parse(
-      await readFile(
-        new URL("./fixtures/g012/bpce-open-feed.json", import.meta.url),
-        "utf8",
-      ),
+      await readFile(new URL("./fixtures/g012/bpce-open-feed.json", import.meta.url), "utf8"),
     ),
   );
 }
@@ -36,8 +33,7 @@ function source(): SourceRegistryEntry {
   return {
     id: "00000000-0000-4000-8000-000000000022",
     provider: "data_gouv",
-    sourceKey:
-      "groupe-bpce-offres-emploi-publiques:bpce-resource-fixture-v1",
+    sourceKey: "groupe-bpce-offres-emploi-publiques:bpce-resource-fixture-v1",
     tenantKey: "groupe-bpce",
     countryCodes: ["FR"],
     accessType: "open_data",
@@ -75,10 +71,7 @@ async function rows(
 
 describe("G012 BPCE disabled fixture adapter", () => {
   test("is fixture-only, disabled, and policy-ineligible", async () => {
-    const adapter = new BpceFixtureSourceAdapter(
-      await fixture(),
-      fixturePolicyId,
-    );
+    const adapter = new BpceFixtureSourceAdapter(await fixture(), fixturePolicyId);
     expect(adapter).toMatchObject({
       provider: "data_gouv",
       access: "open_data",
@@ -100,10 +93,7 @@ describe("G012 BPCE disabled fixture adapter", () => {
   });
 
   test("normalizes stable identity, France, direct apply route, and provenance", async () => {
-    const adapter = createBpceFixtureSourceAdapter(
-      await fixture(),
-      fixturePolicyId,
-    );
+    const adapter = createBpceFixtureSourceAdapter(await fixture(), fixturePolicyId);
     const [raw] = await rows(adapter);
     const first = adapter.normalize(raw!, context());
     const repeated = adapter.normalize(raw!, context());
@@ -155,16 +145,15 @@ describe("G012 BPCE disabled fixture adapter", () => {
   });
 
   test("uses repeatable digest checkpoints and complete resource scopes", async () => {
-    const adapter = createBpceFixtureSourceAdapter(
-      await fixture(),
-      fixturePolicyId,
-    );
-    const firstIterator = adapter.discover({
-      source: source(),
-      mode: "full",
-      cursor: null,
-      signal: new AbortController().signal,
-    })[Symbol.asyncIterator]();
+    const adapter = createBpceFixtureSourceAdapter(await fixture(), fixturePolicyId);
+    const firstIterator = adapter
+      .discover({
+        source: source(),
+        mode: "full",
+        cursor: null,
+        signal: new AbortController().signal,
+      })
+      [Symbol.asyncIterator]();
     const first = await firstIterator.next();
     expect(first.value).toMatchObject({
       complete: false,
@@ -199,10 +188,7 @@ describe("G012 BPCE disabled fixture adapter", () => {
   });
 
   test("exposes attribution and conservative lifecycle evidence", async () => {
-    const adapter = createBpceFixtureSourceAdapter(
-      await fixture(),
-      fixturePolicyId,
-    );
+    const adapter = createBpceFixtureSourceAdapter(await fixture(), fixturePolicyId);
     const discovered = await rows(adapter);
     expect(adapter.attribution(discovered[0]!)).toEqual({
       policyId: fixturePolicyId,
@@ -211,21 +197,15 @@ describe("G012 BPCE disabled fixture adapter", () => {
         "Groupe BPCE — data.gouv.fr; production attribution wording remains subject to source-specific legal review.",
       sourceUrl: BPCE_DATASET_URL,
     });
-    expect(
-      adapter.validateActive(discovered[0]!, context().fetchedAt),
-    ).toMatchObject({
+    expect(adapter.validateActive(discovered[0]!, context().fetchedAt)).toMatchObject({
       state: "active",
       reason: expect.stringContaining("complete successful resource scope"),
     });
-    expect(
-      adapter.validateActive(discovered[1]!, context().fetchedAt),
-    ).toMatchObject({
+    expect(adapter.validateActive(discovered[1]!, context().fetchedAt)).toMatchObject({
       state: "expired",
       reason: expect.stringContaining("explicit"),
     });
-    expect(
-      adapter.validateActive(discovered[0]!, context().fetchedAt).state,
-    ).not.toBe("removed");
+    expect(adapter.validateActive(discovered[0]!, context().fetchedAt).state).not.toBe("removed");
   });
 
   test("rejects malformed URLs and source identity collisions", async () => {

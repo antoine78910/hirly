@@ -37,12 +37,13 @@ function parseArgs(argv: string[]): {
 
 const root = resolve(import.meta.dir, "../../..");
 const args = parseArgs(Bun.argv.slice(2));
-const manifestValue = JSON.parse(
-  await readFile(resolve(root, args.manifest), "utf8"),
-) as FranceTravailCensusManifestInput | FranceTravailCensusManifest;
-const manifest = "manifestDigest" in manifestValue
-  ? manifestValue
-  : freezeFranceTravailCensusManifest(manifestValue);
+const manifestValue = JSON.parse(await readFile(resolve(root, args.manifest), "utf8")) as
+  | FranceTravailCensusManifestInput
+  | FranceTravailCensusManifest;
+const manifest =
+  "manifestDigest" in manifestValue
+    ? manifestValue
+    : freezeFranceTravailCensusManifest(manifestValue);
 const outputPath = resolve(root, args.output);
 
 try {
@@ -52,22 +53,26 @@ try {
   });
   await mkdir(dirname(outputPath), { recursive: true });
   await writeFile(outputPath, `${JSON.stringify(result, null, 2)}\n`);
-  console.log(JSON.stringify({
-    status: result.partitions.every((partition) => partition.status === "complete")
-      ? "COMPLETE"
-      : "PARTIAL",
-    manifestDigest: result.manifestDigest,
-    output: args.output,
-    partitions: result.partitions.length,
-  }));
+  console.log(
+    JSON.stringify({
+      status: result.partitions.every((partition) => partition.status === "complete")
+        ? "COMPLETE"
+        : "PARTIAL",
+      manifestDigest: result.manifestDigest,
+      output: args.output,
+      partitions: result.partitions.length,
+    }),
+  );
 } catch (error) {
   if (error instanceof ExternalDependencyBlockedError) {
-    console.error(JSON.stringify({
-      status: "BLOCKED_EXTERNAL",
-      reason: error.message,
-      unblockProcedure:
-        "export FRANCE_TRAVAIL_ACCESS_TOKEN for the official API, then rerun the census command",
-    }));
+    console.error(
+      JSON.stringify({
+        status: "BLOCKED_EXTERNAL",
+        reason: error.message,
+        unblockProcedure:
+          "export FRANCE_TRAVAIL_ACCESS_TOKEN for the official API, then rerun the census command",
+      }),
+    );
     process.exitCode = 2;
   } else {
     throw error;

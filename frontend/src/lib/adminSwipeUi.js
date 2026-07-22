@@ -1,9 +1,9 @@
-const SWIPE_ATS_OVERLAY_HIDDEN_EMAILS = new Set([
-  "anto.delbos@gmail.com",
-]);
+const SWIPE_ATS_OVERLAY_HIDDEN_EMAILS = new Set(["anto.delbos@gmail.com"]);
 
 function normalizeEmail(email) {
-  return String(email || "").trim().toLowerCase();
+  return String(email || "")
+    .trim()
+    .toLowerCase();
 }
 
 export function isSwipeAtsOverlayHiddenForEmail(email) {
@@ -24,7 +24,9 @@ export function filterPersonalSwipeFeedJobs(email, jobs) {
   if (!isSwipeAtsOverlayHiddenForEmail(email)) return jobs || [];
   const hiddenAts = new Set(["smartrecruiters", "greenhouse"]);
   return (jobs || []).filter((job) => {
-    const ats = String(job?.ats_provider || job?.provider || "").trim().toLowerCase();
+    const ats = String(job?.ats_provider || job?.provider || "")
+      .trim()
+      .toLowerCase();
     return !hiddenAts.has(ats);
   });
 }

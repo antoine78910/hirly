@@ -9,15 +9,8 @@ import {
   type SourceTrialManifest,
   type SourceTrialResult,
 } from "@hirly/contracts";
-import {
-  FixtureOnlyDataGouvSourceAdapter,
-  type DataGouvRawJob,
-} from "@hirly/ingestion/data-gouv";
-import {
-  sanitizeSourceDocument,
-  toCanonicalJob,
-  type SourceContext,
-} from "@hirly/ingestion";
+import { FixtureOnlyDataGouvSourceAdapter, type DataGouvRawJob } from "@hirly/ingestion/data-gouv";
+import { sanitizeSourceDocument, toCanonicalJob, type SourceContext } from "@hirly/ingestion";
 import {
   AtsTrialTransportError,
   fetchBoundedAtsJson,
@@ -106,49 +99,44 @@ const dataGouvTrialResourceManifestBaseSchema = z
 
 function validateResourceManifestBinding(
   value: z.output<typeof dataGouvTrialResourceManifestBaseSchema>,
-  context: z.core.$RefinementCtx<
-    z.output<typeof dataGouvTrialResourceManifestBaseSchema>
-  >,
+  context: z.core.$RefinementCtx<z.output<typeof dataGouvTrialResourceManifestBaseSchema>>,
 ): void {
-    if (
-      value.qualification.datasetId !== value.datasetId ||
-      value.qualification.resourceId !== value.resourceId
-    ) {
-      context.addIssue({
-        code: "custom",
-        message: "data.gouv qualification must bind the exact trial resource",
-        path: ["qualification"],
-      });
-    }
-    if (new Set(value.countryCodes).size !== value.countryCodes.length) {
-      context.addIssue({
-        code: "custom",
-        message: "data.gouv trial country codes must be unique",
-        path: ["countryCodes"],
-      });
-    }
+  if (
+    value.qualification.datasetId !== value.datasetId ||
+    value.qualification.resourceId !== value.resourceId
+  ) {
+    context.addIssue({
+      code: "custom",
+      message: "data.gouv qualification must bind the exact trial resource",
+      path: ["qualification"],
+    });
+  }
+  if (new Set(value.countryCodes).size !== value.countryCodes.length) {
+    context.addIssue({
+      code: "custom",
+      message: "data.gouv trial country codes must be unique",
+      path: ["countryCodes"],
+    });
+  }
 }
 
 const dataGouvTrialResourceManifestInputSchema =
-  dataGouvTrialResourceManifestBaseSchema.superRefine(
-    validateResourceManifestBinding,
-  );
+  dataGouvTrialResourceManifestBaseSchema.superRefine(validateResourceManifestBinding);
 
-const dataGouvTrialResourceManifestSchema =
-  dataGouvTrialResourceManifestBaseSchema
-    .extend({ manifestDigest: sha256Schema })
-    .strict()
-    .superRefine((value, context) => {
-      validateResourceManifestBinding(value, context);
-      const { manifestDigest: _manifestDigest, ...unsigned } = value;
-      if (sha256(stableJson(unsigned)) !== value.manifestDigest) {
-        context.addIssue({
-          code: "custom",
-          message: "data.gouv trial resource manifest digest mismatch",
-          path: ["manifestDigest"],
-        });
-      }
-    });
+const dataGouvTrialResourceManifestSchema = dataGouvTrialResourceManifestBaseSchema
+  .extend({ manifestDigest: sha256Schema })
+  .strict()
+  .superRefine((value, context) => {
+    validateResourceManifestBinding(value, context);
+    const { manifestDigest: _manifestDigest, ...unsigned } = value;
+    if (sha256(stableJson(unsigned)) !== value.manifestDigest) {
+      context.addIssue({
+        code: "custom",
+        message: "data.gouv trial resource manifest digest mismatch",
+        path: ["manifestDigest"],
+      });
+    }
+  });
 
 const dataGouvRawJobSchema = z
   .object({
@@ -182,12 +170,8 @@ const dataGouvTrialSnapshotSchema = z
 export type DataGouvTrialResourceManifestInput = z.input<
   typeof dataGouvTrialResourceManifestInputSchema
 >;
-export type DataGouvTrialResourceManifest = z.output<
-  typeof dataGouvTrialResourceManifestSchema
->;
-export type DataGouvTrialSnapshot = z.output<
-  typeof dataGouvTrialSnapshotSchema
->;
+export type DataGouvTrialResourceManifest = z.output<typeof dataGouvTrialResourceManifestSchema>;
+export type DataGouvTrialSnapshot = z.output<typeof dataGouvTrialSnapshotSchema>;
 
 export interface DataGouvTrialCandidate {
   candidateKey: string;
@@ -235,8 +219,7 @@ export const cspDataGouvTrialReadiness = Object.freeze({
     "freshness_expiry_and_duplicate_gates_unproven",
     "production_attribution_and_lifecycle_gates_unproven",
   ]),
-  policyArtifact:
-    "artifacts/job-ingestion/source-policy/g016-official-access-2026-07-20.json",
+  policyArtifact: "artifacts/job-ingestion/source-policy/g016-official-access-2026-07-20.json",
   transportModule: "./csp-source-trial",
 } as const);
 
@@ -252,9 +235,7 @@ export function sealDataGouvTrialResourceManifest(
   );
 }
 
-export function parseDataGouvTrialResourceManifest(
-  input: unknown,
-): DataGouvTrialResourceManifest {
+export function parseDataGouvTrialResourceManifest(input: unknown): DataGouvTrialResourceManifest {
   return deepFreeze(dataGouvTrialResourceManifestSchema.parse(input));
 }
 
@@ -332,9 +313,7 @@ export async function previewDataGouvSourceTrial(input: {
   const now = input.now?.() ?? new Date();
   assertTrialBinding(manifest, input.resourceManifest, now);
   const transport = createQualifiedDataGouvTrialTransport(input);
-  const snapshot = await transport.fetch(
-    input.signal ?? new AbortController().signal,
-  );
+  const snapshot = await transport.fetch(input.signal ?? new AbortController().signal);
   if (snapshot.rows.length > manifest.budget.maxCandidates) {
     throw new Error("trial_budget_exceeded:maxCandidates");
   }
@@ -519,10 +498,7 @@ function assertTrialBinding(
   }
   const requestedAt = new Date(manifest.requestedAt);
   const expiresAt = new Date(manifest.expiresAt);
-  if (
-    requestedAt.getTime() > now.getTime() ||
-    expiresAt.getTime() <= now.getTime()
-  ) {
+  if (requestedAt.getTime() > now.getTime() || expiresAt.getTime() <= now.getTime()) {
     throw new Error("trial_policy_window_invalid");
   }
 }
@@ -574,10 +550,7 @@ function classifyFailure(
   }
   if (error instanceof AtsTrialTransportError) {
     return {
-      status:
-        error.classification === "budget_exceeded"
-          ? "budget_exhausted"
-          : "failed",
+      status: error.classification === "budget_exceeded" ? "budget_exhausted" : "failed",
       stopReason: error.classification,
     };
   }
@@ -585,9 +558,7 @@ function classifyFailure(
   if (message.startsWith("trial_budget_exceeded:")) {
     return {
       status: "budget_exhausted",
-      stopReason: sourceTrialBudgetStopReasonSchema.parse(
-        message.slice("trial_".length),
-      ),
+      stopReason: sourceTrialBudgetStopReasonSchema.parse(message.slice("trial_".length)),
     };
   }
   if (message === "trial_policy_window_invalid") {

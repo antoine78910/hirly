@@ -23,10 +23,7 @@ import {
   leverRawJobSchema,
   type LeverRawJob,
 } from "../apps/worker/src/providers/lever";
-import {
-  assertProviderTransportActive,
-  getProviderModule,
-} from "../apps/worker/src/providers";
+import { assertProviderTransportActive, getProviderModule } from "../apps/worker/src/providers";
 
 const fixturePolicyId = "00000000-0000-4000-8000-000000000011";
 
@@ -42,14 +39,9 @@ interface AtsFixture<RawJob> {
   raw: RawJob[];
 }
 
-async function fixture<RawJob>(
-  name: "greenhouse" | "lever",
-): Promise<AtsFixture<RawJob>> {
+async function fixture<RawJob>(name: "greenhouse" | "lever"): Promise<AtsFixture<RawJob>> {
   return JSON.parse(
-    await readFile(
-      new URL(`./fixtures/g011/${name}.json`, import.meta.url),
-      "utf8",
-    ),
+    await readFile(new URL(`./fixtures/g011/${name}.json`, import.meta.url), "utf8"),
   ) as AtsFixture<RawJob>;
 }
 
@@ -136,10 +128,7 @@ describe("G011 disabled ATS fixture connectors", () => {
     });
     const rows = data.raw.map((raw) => greenhouseRawJobSchema.parse(raw));
     const entry = source("greenhouse", data.tenantKey, data.countryCodes);
-    const adapter = createGreenhouseFixtureSourceAdapter(
-      rows,
-      fixturePolicyId,
-    );
+    const adapter = createGreenhouseFixtureSourceAdapter(rows, fixturePolicyId);
     const result = await pages(adapter, entry);
     expect(result).toHaveLength(2);
     expect(result[0]).toMatchObject({
@@ -156,8 +145,7 @@ describe("G011 disabled ATS fixture connectors", () => {
     const occurrence = adapter.normalize(rows[0], context(entry));
     expect(occurrence).toMatchObject({
       externalId: "vaulttec:127817",
-      canonicalApplyUrl:
-        "https://boards.greenhouse.io/vaulttec/jobs/127817",
+      canonicalApplyUrl: "https://boards.greenhouse.io/vaulttec/jobs/127817",
       atsPostingId: "127817",
       job: {
         countryCode: "US",
@@ -167,13 +155,8 @@ describe("G011 disabled ATS fixture connectors", () => {
         },
       },
     });
-    const canonical = toCanonicalJob(
-      occurrence.job,
-      new Date("2026-07-20T00:00:00.000Z"),
-    );
-    expect(canonical.jobId).toBe(
-      stableJobId("greenhouse", "vaulttec:127817"),
-    );
+    const canonical = toCanonicalJob(occurrence.job, new Date("2026-07-20T00:00:00.000Z"));
+    expect(canonical.jobId).toBe(stableJobId("greenhouse", "vaulttec:127817"));
     expect(adapter.attribution(rows[0])).toMatchObject({
       policyId: fixturePolicyId,
       licenceName: null,
@@ -213,10 +196,8 @@ describe("G011 disabled ATS fixture connectors", () => {
     const occurrence = adapter.normalize(rows[0], context(entry));
     expect(occurrence).toMatchObject({
       externalId: "leverdemo:posting-001",
-      canonicalSourceUrl:
-        "https://jobs.lever.co/leverdemo/posting-001",
-      canonicalApplyUrl:
-        "https://jobs.lever.co/leverdemo/posting-001/apply",
+      canonicalSourceUrl: "https://jobs.lever.co/leverdemo/posting-001",
+      canonicalApplyUrl: "https://jobs.lever.co/leverdemo/posting-001/apply",
       atsPostingId: "posting-001",
       job: {
         countryCode: "US",
@@ -235,10 +216,7 @@ describe("G011 disabled ATS fixture connectors", () => {
   test("rejects hostile and cross-tenant Greenhouse canonical URLs", async () => {
     const data = await fixture<GreenhouseRawJob>("greenhouse");
     const entry = source("greenhouse", data.tenantKey, data.countryCodes);
-    const adapter = createGreenhouseFixtureSourceAdapter(
-      data.raw,
-      fixturePolicyId,
-    );
+    const adapter = createGreenhouseFixtureSourceAdapter(data.raw, fixturePolicyId);
     for (const absolute_url of [
       "http://boards.greenhouse.io/vaulttec/jobs/127817",
       "https://user:password@boards.greenhouse.io/vaulttec/jobs/127817",
@@ -246,22 +224,16 @@ describe("G011 disabled ATS fixture connectors", () => {
       "https://boards.greenhouse.io/other/jobs/127817",
       "https://boards.greenhouse.io/vaulttec/jobs/other",
     ]) {
-      expect(() =>
-        adapter.normalize(
-          { ...data.raw[0], absolute_url },
-          context(entry),
-        ),
-      ).toThrow(IngestionError);
+      expect(() => adapter.normalize({ ...data.raw[0], absolute_url }, context(entry))).toThrow(
+        IngestionError,
+      );
     }
   });
 
   test("rejects hostile, cross-region and cross-tenant Lever routes", async () => {
     const data = await fixture<LeverRawJob>("lever");
     const entry = source("lever", data.tenantKey, data.countryCodes);
-    const adapter = createLeverFixtureSourceAdapter(
-      data.raw,
-      fixturePolicyId,
-    );
+    const adapter = createLeverFixtureSourceAdapter(data.raw, fixturePolicyId);
     const original = data.raw[0];
     const attacks: LeverRawJob[] = [
       {
@@ -270,13 +242,11 @@ describe("G011 disabled ATS fixture connectors", () => {
       },
       {
         ...original,
-        applyUrl:
-          "https://user:password@jobs.lever.co/leverdemo/posting-001/apply",
+        applyUrl: "https://user:password@jobs.lever.co/leverdemo/posting-001/apply",
       },
       {
         ...original,
-        hostedUrl:
-          "https://jobs.lever.co.evil.example/leverdemo/posting-001",
+        hostedUrl: "https://jobs.lever.co.evil.example/leverdemo/posting-001",
       },
       {
         ...original,
@@ -284,14 +254,11 @@ describe("G011 disabled ATS fixture connectors", () => {
       },
       {
         ...original,
-        applyUrl:
-          "https://jobs.eu.lever.co/leverdemo/posting-001/apply",
+        applyUrl: "https://jobs.eu.lever.co/leverdemo/posting-001/apply",
       },
     ];
     for (const attack of attacks) {
-      expect(() => adapter.normalize(attack, context(entry))).toThrow(
-        IngestionError,
-      );
+      expect(() => adapter.normalize(attack, context(entry))).toThrow(IngestionError);
     }
   });
 
@@ -299,39 +266,23 @@ describe("G011 disabled ATS fixture connectors", () => {
     const data = await fixture<GreenhouseRawJob>("greenhouse");
     const rows = data.raw.map((raw) => greenhouseRawJobSchema.parse(raw));
     const entry = source("greenhouse", data.tenantKey, data.countryCodes);
-    const adapter = createGreenhouseFixtureSourceAdapter(
-      rows,
-      fixturePolicyId,
-    );
+    const adapter = createGreenhouseFixtureSourceAdapter(rows, fixturePolicyId);
     const invalid = adapter.discover({
       source: entry,
       mode: "full",
       cursor: { version: "g011-fixture-v1", offset: 99 },
       signal: new AbortController().signal,
     });
-    await expect(invalid[Symbol.asyncIterator]().next()).rejects.toBeInstanceOf(
-      IngestionError,
-    );
-    expect(classifyAtsSourceError(new AtsFixtureHttpError(429))).toBe(
-      "rate_limited",
-    );
-    expect(classifyAtsSourceError(new AtsFixtureHttpError(503))).toBe(
-      "retryable",
-    );
-    expect(classifyAtsSourceError(new AtsFixtureHttpError(403))).toBe(
-      "authorization",
-    );
-    expect(classifyAtsSourceError(new SyntaxError("bad fixture"))).toBe(
-      "malformed",
-    );
+    await expect(invalid[Symbol.asyncIterator]().next()).rejects.toBeInstanceOf(IngestionError);
+    expect(classifyAtsSourceError(new AtsFixtureHttpError(429))).toBe("rate_limited");
+    expect(classifyAtsSourceError(new AtsFixtureHttpError(503))).toBe("retryable");
+    expect(classifyAtsSourceError(new AtsFixtureHttpError(403))).toBe("authorization");
+    expect(classifyAtsSourceError(new SyntaxError("bad fixture"))).toBe("malformed");
   });
 
   test("records an empty fixture board as an explicit complete scope", async () => {
     const entry = source("greenhouse", "empty-board", ["FR"]);
-    const adapter = createGreenhouseFixtureSourceAdapter(
-      [],
-      fixturePolicyId,
-    );
+    const adapter = createGreenhouseFixtureSourceAdapter([], fixturePolicyId);
     expect(await pages(adapter, entry)).toEqual([
       {
         scope: {

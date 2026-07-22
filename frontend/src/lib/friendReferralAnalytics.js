@@ -6,7 +6,11 @@ export const FRIEND_REFERRAL_DATAFAST_FUNNEL = [
   { order: 1, goal: "friend_referral_enrolled", label: "Referral code generated" },
   { order: 2, goal: "friend_referral_shared", label: "Referral code copied or shared" },
   { order: 3, goal: "friend_referral_redeemed", label: "Referral code redeemed (invitee)" },
-  { order: 4, goal: "friend_referral_progress", label: "Referrer progress (friend joined / reward ready / claimed)" },
+  {
+    order: 4,
+    goal: "friend_referral_progress",
+    label: "Referrer progress (friend joined / reward ready / claimed)",
+  },
 ];
 
 function trackFriendReferralGoal(goal, params = {}) {

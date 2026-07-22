@@ -1,9 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import {
-  Users, UserPlus, Loader2, TrendingUp, GraduationCap, Mail, BookOpen,
-} from "lucide-react";
+import { Users, UserPlus, Loader2, TrendingUp, GraduationCap, Mail, BookOpen } from "lucide-react";
 import { api } from "../lib/api";
 import TrainingShell, { useTrainingPageMode } from "../components/training/TrainingShell";
 import { useTrainingLocale } from "../context/TrainingLocaleContext";
@@ -78,7 +76,9 @@ export default function TrainingCreator() {
     }
   }, [loadOverview, loadStudents, loadLeads, navigate, t]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
   const addLead = async (e) => {
     e.preventDefault();
@@ -131,7 +131,7 @@ export default function TrainingCreator() {
       isCreator
       title={t("creator.title")}
       subtitle={t("creator.subtitle")}
-      actions={(
+      actions={
         <button
           type="button"
           onClick={() => navigate(trainingPath(lang))}
@@ -140,7 +140,7 @@ export default function TrainingCreator() {
           <BookOpen className="h-4 w-4" />
           {t("catalog")}
         </button>
-      )}
+      }
     >
       <div className="mb-6 flex gap-1 rounded-xl border border-zinc-200 bg-white p-1 shadow-sm w-fit">
         {tabs.map((item) => (
@@ -160,9 +160,17 @@ export default function TrainingCreator() {
       {tab === "overview" && (
         <div className="space-y-8">
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <StatCard icon={GraduationCap} label={t("creator.courses")} value={stats.courses ?? 0} />
+            <StatCard
+              icon={GraduationCap}
+              label={t("creator.courses")}
+              value={stats.courses ?? 0}
+            />
             <StatCard icon={Users} label={t("creator.students")} value={stats.students ?? 0} />
-            <StatCard icon={TrendingUp} label={t("creator.avgProgress")} value={`${stats.avg_progress ?? 0}%`} />
+            <StatCard
+              icon={TrendingUp}
+              label={t("creator.avgProgress")}
+              value={`${stats.avg_progress ?? 0}%`}
+            />
             <StatCard icon={UserPlus} label={t("creator.leadsLabel")} value={stats.leads ?? 0} />
           </div>
 
@@ -199,14 +207,21 @@ export default function TrainingCreator() {
                   {students.slice(0, 8).map((s) => (
                     <tr key={s.enrollment_id} className="hover:bg-zinc-50/80">
                       <td className="px-6 py-4">
-                        <p className="font-semibold text-zinc-900">{s.name || s.email || t("creator.studentFallback")}</p>
+                        <p className="font-semibold text-zinc-900">
+                          {s.name || s.email || t("creator.studentFallback")}
+                        </p>
                         <p className="text-xs text-zinc-500">{s.email}</p>
                       </td>
                       <td className="px-6 py-4 text-zinc-600">{s.course_title}</td>
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
-                          <Progress value={s.progress_percent} className="h-2 w-28 bg-violet-100 [&>div]:bg-violet-600" />
-                          <span className="text-xs font-bold text-violet-600">{s.progress_percent}%</span>
+                          <Progress
+                            value={s.progress_percent}
+                            className="h-2 w-28 bg-violet-100 [&>div]:bg-violet-600"
+                          />
+                          <span className="text-xs font-bold text-violet-600">
+                            {s.progress_percent}%
+                          </span>
                         </div>
                       </td>
                     </tr>
@@ -214,7 +229,9 @@ export default function TrainingCreator() {
                 </tbody>
               </table>
               {!students.length ? (
-                <p className="px-6 py-10 text-center text-sm text-zinc-500">{t("creator.noEnrollments")}</p>
+                <p className="px-6 py-10 text-center text-sm text-zinc-500">
+                  {t("creator.noEnrollments")}
+                </p>
               ) : null}
             </div>
           </section>
@@ -237,23 +254,34 @@ export default function TrainingCreator() {
                 {students.map((s) => (
                   <tr key={s.enrollment_id} className="hover:bg-zinc-50/80">
                     <td className="px-6 py-4">
-                      <p className="font-semibold text-zinc-900">{s.name || t("creator.studentFallback")}</p>
+                      <p className="font-semibold text-zinc-900">
+                        {s.name || t("creator.studentFallback")}
+                      </p>
                       <p className="text-xs text-zinc-500">{s.email}</p>
                     </td>
                     <td className="px-6 py-4 text-zinc-600">{s.course_title}</td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
-                        <Progress value={s.progress_percent} className="h-2 w-32 bg-violet-100 [&>div]:bg-violet-600" />
-                        <span className="text-xs font-bold text-violet-600">{s.progress_percent}%</span>
+                        <Progress
+                          value={s.progress_percent}
+                          className="h-2 w-32 bg-violet-100 [&>div]:bg-violet-600"
+                        />
+                        <span className="text-xs font-bold text-violet-600">
+                          {s.progress_percent}%
+                        </span>
                       </div>
                     </td>
-                    <td className="px-6 py-4 text-xs text-zinc-500">{s.updated_at ? new Date(s.updated_at).toLocaleDateString() : "—"}</td>
+                    <td className="px-6 py-4 text-xs text-zinc-500">
+                      {s.updated_at ? new Date(s.updated_at).toLocaleDateString() : "—"}
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
             {!students.length ? (
-              <p className="px-6 py-12 text-center text-sm text-zinc-500">{t("creator.noStudents")}</p>
+              <p className="px-6 py-12 text-center text-sm text-zinc-500">
+                {t("creator.noStudents")}
+              </p>
             ) : null}
           </div>
         </section>
@@ -261,7 +289,10 @@ export default function TrainingCreator() {
 
       {tab === "leads" && (
         <div className="grid gap-8 xl:grid-cols-[380px_1fr]">
-          <form onSubmit={addLead} className="h-fit rounded-2xl border border-violet-200 bg-violet-50/50 p-6 shadow-sm">
+          <form
+            onSubmit={addLead}
+            className="h-fit rounded-2xl border border-violet-200 bg-violet-50/50 p-6 shadow-sm"
+          >
             <h2 className="flex items-center gap-2 text-base font-bold text-zinc-900">
               <Mail className="h-4 w-4 text-violet-600" />
               {t("creator.addLead")}
@@ -298,14 +329,21 @@ export default function TrainingCreator() {
 
           <div className="space-y-3">
             {leads.map((lead) => (
-              <div key={lead.lead_id} className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
+              <div
+                key={lead.lead_id}
+                className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm"
+              >
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <p className="font-bold text-zinc-900">{lead.name || t("creator.unnamedLead")}</p>
+                    <p className="font-bold text-zinc-900">
+                      {lead.name || t("creator.unnamedLead")}
+                    </p>
                     <p className="text-sm text-zinc-500">{lead.email}</p>
                     {lead.notes ? <p className="mt-2 text-sm text-zinc-600">{lead.notes}</p> : null}
                   </div>
-                  <span className={`rounded-full px-2.5 py-1 text-[11px] font-bold uppercase ${STAGE_COLORS[lead.stage] || STAGE_COLORS.new}`}>
+                  <span
+                    className={`rounded-full px-2.5 py-1 text-[11px] font-bold uppercase ${STAGE_COLORS[lead.stage] || STAGE_COLORS.new}`}
+                  >
                     {t(`stages.${lead.stage}`)}
                   </span>
                 </div>
@@ -328,7 +366,9 @@ export default function TrainingCreator() {
               </div>
             ))}
             {!leads.length ? (
-              <p className="rounded-2xl border border-dashed border-zinc-300 bg-white py-12 text-center text-sm text-zinc-500">{t("creator.noLeads")}</p>
+              <p className="rounded-2xl border border-dashed border-zinc-300 bg-white py-12 text-center text-sm text-zinc-500">
+                {t("creator.noLeads")}
+              </p>
             ) : null}
           </div>
         </div>

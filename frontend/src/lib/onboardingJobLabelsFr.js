@@ -49,7 +49,7 @@ export const ONBOARDING_ROLE_LABELS_FR = {
 
   "Clinical Research Associate": "Attaché de recherche clinique",
   "Clinical Research Coordinator": "Coordinateur de recherche clinique",
-  "Epidemiologist": "Épidémiologiste",
+  Epidemiologist: "Épidémiologiste",
   "Healthcare Administrator": "Administrateur santé",
   "Healthcare Manager": "Responsable santé",
   "Licensed Practical Nurse": "Infirmier·ère auxiliaire",

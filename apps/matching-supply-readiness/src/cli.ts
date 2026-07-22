@@ -18,16 +18,23 @@ export async function runReadinessCli(input: {
 }): Promise<void> {
   assertReadOnlySql(READINESS_SQL);
   assertReadOnlySql(INDEX_EVIDENCE_SQL);
-  const manifest = JSON.parse(await readFile(resolve(input.manifestPath), "utf8")) as ReadinessManifest;
+  const manifest = JSON.parse(
+    await readFile(resolve(input.manifestPath), "utf8"),
+  ) as ReadinessManifest;
   const sql = postgres(input.databaseUrl, { max: 1, connect_timeout: 10, idle_timeout: 5 });
   try {
     const result = await sql.begin("read only", async (tx) => {
       const parameters = [
-        manifest.scope.countryCode.toUpperCase(), manifest.scope.roleFamilyId.toLowerCase(),
-        manifest.scope.radiusKm, manifest.scope.centerLatitude, manifest.scope.centerLongitude,
+        manifest.scope.countryCode.toUpperCase(),
+        manifest.scope.roleFamilyId.toLowerCase(),
+        manifest.scope.radiusKm,
+        manifest.scope.centerLatitude,
+        manifest.scope.centerLongitude,
       ];
       const rows = await tx.unsafe<ReadinessRow[]>(READINESS_SQL, parameters);
-      const indexes = await tx.unsafe<Array<{ indexname: string }>>(INDEX_EVIDENCE_SQL, [REQUIRED_INDEXES]);
+      const indexes = await tx.unsafe<Array<{ indexname: string }>>(INDEX_EVIDENCE_SQL, [
+        REQUIRED_INDEXES,
+      ]);
       const plan = await tx.unsafe(`EXPLAIN (FORMAT JSON) ${READINESS_SQL}`, parameters);
       return buildReadinessScorecard(manifest, rows, {
         captured: Array.isArray(plan) && plan.length > 0,

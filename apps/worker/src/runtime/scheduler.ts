@@ -44,11 +44,7 @@ function zonedParts(date: Date, timezone: string): number[] {
   return [value("minute"), value("hour"), value("day"), value("month"), weekday];
 }
 
-export function nextCronOccurrence(
-  expression: string,
-  timezone: string,
-  after: Date,
-): Date {
+export function nextCronOccurrence(expression: string, timezone: string, after: Date): Date {
   const fields = expression.trim().split(/\s+/);
   if (fields.length !== 5) throw new Error("invalid cron expression");
   new Intl.DateTimeFormat("en-US", { timeZone: timezone }).format(after);
@@ -76,11 +72,7 @@ export async function runSchedulerTick(
     let occurrence = schedule.nextDueAt;
     const catchUpLimit = Math.max(1, schedule.maxCatchUp);
     for (let index = 0; index < catchUpLimit && occurrence <= now; index += 1) {
-      const successor = nextCronOccurrence(
-        schedule.cronExpression,
-        schedule.timezone,
-        occurrence,
-      );
+      const successor = nextCronOccurrence(schedule.cronExpression, schedule.timezone, occurrence);
       const runId = await store.enqueueDueSchedule(schedule.id, successor);
       if (!runId) break;
       enqueued += 1;

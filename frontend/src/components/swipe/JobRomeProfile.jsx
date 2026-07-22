@@ -13,7 +13,10 @@ function RomeSection({ title, items, Icon, iconClass }) {
       </h3>
       <ul className="space-y-2">
         {items.map((item) => (
-          <li key={item} className="flex items-start gap-2 text-sm leading-relaxed text-sprout-muted">
+          <li
+            key={item}
+            className="flex items-start gap-2 text-sm leading-relaxed text-sprout-muted"
+          >
             <span className="mt-1.5 text-[8px] text-sprout-mint">●</span>
             <span>{item}</span>
           </li>
@@ -36,7 +39,10 @@ function RomeGroupedSection({ title, groups, Icon, iconClass }) {
           <h4 className="mb-1 text-sm font-semibold text-white">{group.title}</h4>
           <ul className="space-y-1.5">
             {(group.items || []).map((item) => (
-              <li key={`${group.title}-${item}`} className="flex items-start gap-2 text-sm text-sprout-muted">
+              <li
+                key={`${group.title}-${item}`}
+                className="flex items-start gap-2 text-sm text-sprout-muted"
+              >
                 <span className="mt-1.5 text-[8px] text-sprout-mint">●</span>
                 <span>{item}</span>
               </li>
@@ -63,7 +69,8 @@ export default function JobRomeProfile({ job, t, enabled = true }) {
     let cancelled = false;
     setLoading(true);
     setError("");
-    api.get(`/jobs/${job.job_id}/rome-profile`)
+    api
+      .get(`/jobs/${job.job_id}/rome-profile`)
       .then((res) => {
         if (cancelled) return;
         setProfile(res.data?.available ? res.data : null);
@@ -74,14 +81,14 @@ export default function JobRomeProfile({ job, t, enabled = true }) {
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [enabled, job?.job_id, job?.rome_code, t]);
 
   if (!job?.rome_code) return null;
   if (loading) {
-    return (
-      <p className="text-sm text-sprout-muted">{t("swipe.romeProfileLoading")}</p>
-    );
+    return <p className="text-sm text-sprout-muted">{t("swipe.romeProfileLoading")}</p>;
   }
   if (error) {
     return <p className="text-sm text-sprout-muted">{error}</p>;
@@ -98,16 +105,16 @@ export default function JobRomeProfile({ job, t, enabled = true }) {
           {profile.rome_code}
         </span>
       </div>
-      {profile.label ? (
-        <p className="text-sm font-semibold text-white">{profile.label}</p>
-      ) : null}
+      {profile.label ? <p className="text-sm font-semibold text-white">{profile.label}</p> : null}
       {profile.definition ? (
         <section className="rounded-2xl border border-sprout-border bg-sprout-surface-2/40 px-4 py-3">
           <h4 className="mb-2 flex items-center gap-2 text-sm font-semibold text-white">
             <Briefcase className="h-4 w-4 text-sprout-mint" aria-hidden="true" />
             {t("swipe.romeDefinition")}
           </h4>
-          <p className="text-sm leading-relaxed text-sprout-muted whitespace-pre-wrap">{profile.definition}</p>
+          <p className="text-sm leading-relaxed text-sprout-muted whitespace-pre-wrap">
+            {profile.definition}
+          </p>
         </section>
       ) : null}
       {profile.access ? (
@@ -116,7 +123,9 @@ export default function JobRomeProfile({ job, t, enabled = true }) {
             <GraduationCap className="h-4 w-4 text-sprout-mint" aria-hidden="true" />
             {t("swipe.romeAccess")}
           </h4>
-          <p className="text-sm leading-relaxed text-sprout-muted whitespace-pre-wrap">{profile.access}</p>
+          <p className="text-sm leading-relaxed text-sprout-muted whitespace-pre-wrap">
+            {profile.access}
+          </p>
         </section>
       ) : null}
       <RomeSection

@@ -31,7 +31,9 @@ function JobRow({ row, tab, onApplyNow, onViewApplication, t }) {
       <CompanyLogo company={job.company} size="md" rounded="xl" />
       <div className="min-w-0 flex-1">
         <div className="flex items-start justify-between gap-2">
-          <p className="shell-title line-clamp-2 font-display text-[17px] font-bold leading-tight">{job.title}</p>
+          <p className="shell-title line-clamp-2 font-display text-[17px] font-bold leading-tight">
+            {job.title}
+          </p>
           <span className="inline-flex shrink-0 items-center gap-1 text-sm font-semibold text-linkedin">
             <Zap className="h-4 w-4" />1
           </span>
@@ -43,7 +45,9 @@ function JobRow({ row, tab, onApplyNow, onViewApplication, t }) {
             type="button"
             onClick={() => (tab === "right" ? onViewApplication() : onApplyNow(job.job_id))}
             className="h-9 rounded-full bg-linkedin px-4 text-sm font-semibold text-white transition-opacity hover:opacity-90"
-            data-testid={tab === "right" ? `history-view-${job.job_id}` : `history-apply-${job.job_id}`}
+            data-testid={
+              tab === "right" ? `history-view-${job.job_id}` : `history-apply-${job.job_id}`
+            }
           >
             {tab === "right" ? t("history.viewApplication") : t("history.generatePackage")}
           </button>
@@ -63,17 +67,20 @@ export default function History() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const load = useCallback(async (direction) => {
-    setLoading(true);
-    try {
-      const { data } = await api.get(`/swipes/history?direction=${direction}&limit=100`);
-      setRows(data.swipes || []);
-    } catch {
-      toast.error(t("history.loadError"));
-    } finally {
-      setLoading(false);
-    }
-  }, [t]);
+  const load = useCallback(
+    async (direction) => {
+      setLoading(true);
+      try {
+        const { data } = await api.get(`/swipes/history?direction=${direction}&limit=100`);
+        setRows(data.swipes || []);
+      } catch {
+        toast.error(t("history.loadError"));
+      } finally {
+        setLoading(false);
+      }
+    },
+    [t],
+  );
 
   useEffect(() => {
     load(tab === "left" ? "left" : "right");
@@ -102,7 +109,7 @@ export default function History() {
     <AppPage className={SHELL_PAGE_CLASS}>
       <TitleHeader
         title={title}
-        leftAction={(
+        leftAction={
           <button
             type="button"
             onClick={() => navigate("/swipe")}
@@ -112,7 +119,7 @@ export default function History() {
           >
             <ArrowLeft className="h-5 w-5" />
           </button>
-        )}
+        }
       />
 
       <AppPageScroll className={APP_CONTENT_WIDTH}>
@@ -127,7 +134,10 @@ export default function History() {
         </button>
 
         <DesktopPageHeader title={title} subtitle={t("history.subtitle")} />
-        <div className="mt-6 flex gap-2 rounded-full border border-zinc-200 bg-zinc-100 p-1" data-testid="history-tabs">
+        <div
+          className="mt-6 flex gap-2 rounded-full border border-zinc-200 bg-zinc-100 p-1"
+          data-testid="history-tabs"
+        >
           {tabs.map((tabItem) => (
             <button
               key={tabItem.key}
@@ -161,16 +171,17 @@ export default function History() {
               <p className="text-zinc-500">{emptyMessage}</p>
             </div>
           ) : null}
-          {!loading && rows.map((r) => (
-            <JobRow
-              key={r.job_id}
-              row={r}
-              tab={tab}
-              onApplyNow={applyNow}
-              onViewApplication={() => navigate("/tracker")}
-              t={t}
-            />
-          ))}
+          {!loading &&
+            rows.map((r) => (
+              <JobRow
+                key={r.job_id}
+                row={r}
+                tab={tab}
+                onApplyNow={applyNow}
+                onViewApplication={() => navigate("/tracker")}
+                t={t}
+              />
+            ))}
         </div>
       </AppPageScroll>
     </AppPage>

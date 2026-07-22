@@ -43,7 +43,9 @@ export default function ReportJobSheet({ open, job, onClose, onSubmit }) {
     if (!open) return;
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    return () => { document.body.style.overflow = prev; };
+    return () => {
+      document.body.style.overflow = prev;
+    };
   }, [open]);
 
   const submit = async () => {
@@ -100,7 +102,10 @@ export default function ReportJobSheet({ open, job, onClose, onSubmit }) {
               </button>
             </div>
 
-            <div className="overflow-y-auto px-5 pb-safe" style={{ maxHeight: "calc(88dvh - 8.5rem)" }}>
+            <div
+              className="overflow-y-auto px-5 pb-safe"
+              style={{ maxHeight: "calc(88dvh - 8.5rem)" }}
+            >
               <p className="text-sm text-zinc-500">
                 Help us improve by reporting issues with this job listing
               </p>
@@ -110,7 +115,9 @@ export default function ReportJobSheet({ open, job, onClose, onSubmit }) {
                 <p className="mt-0.5 text-sm text-zinc-500">{job.company}</p>
               </div>
 
-              <p className="mt-6 text-sm font-semibold text-zinc-800">What&apos;s wrong with this job?</p>
+              <p className="mt-6 text-sm font-semibold text-zinc-800">
+                What&apos;s wrong with this job?
+              </p>
 
               <ul className="mt-3 space-y-2 pb-4">
                 {REPORT_REASONS.map((item) => {

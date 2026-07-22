@@ -6,21 +6,22 @@ export function resolveProfileSearchPreferences(profile) {
   const onboarding = profile?.extras?.onboarding || {};
   const contact = profile?.contact || {};
   const role = (
-    profile?.target_role
-    || profile?.target_roles?.[0]
-    || onboarding.selected_roles?.[0]
-    || ""
+    profile?.target_role ||
+    profile?.target_roles?.[0] ||
+    onboarding.selected_roles?.[0] ||
+    ""
   ).trim();
-  const locationData = profile?.target_location_data
-    || contact?.location_data
-    || onboarding.onboarding_location_data
-    || null;
+  const locationData =
+    profile?.target_location_data ||
+    contact?.location_data ||
+    onboarding.onboarding_location_data ||
+    null;
   const location = (
-    profile?.target_location
-    || contact?.location
-    || onboarding.onboarding_location
-    || locationData?.location_label
-    || ""
+    profile?.target_location ||
+    contact?.location ||
+    onboarding.onboarding_location ||
+    locationData?.location_label ||
+    ""
   ).trim();
   return { role, location, locationData };
 }
@@ -37,11 +38,7 @@ export async function syncOnboardingSearchPreferences({
     ? selectedRoles.map((role) => String(role || "").trim()).filter(Boolean)
     : [];
   const primaryRole = roles[0] || "";
-  const locationLabel = (
-    onboardingLocationData?.location_label
-    || onboardingLocation
-    || ""
-  ).trim();
+  const locationLabel = (onboardingLocationData?.location_label || onboardingLocation || "").trim();
 
   if (!primaryRole && !locationLabel) return;
 

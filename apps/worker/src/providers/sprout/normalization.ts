@@ -1,13 +1,6 @@
-import {
-  IngestionError,
-  type NormalizedProviderJob,
-} from "@hirly/ingestion";
+import { IngestionError, type NormalizedProviderJob } from "@hirly/ingestion";
 import type { Provider } from "@hirly/contracts";
-import {
-  sproutRawJobSchema,
-  type SproutLocation,
-  type SproutRawJob,
-} from "./schema";
+import { sproutRawJobSchema, type SproutLocation, type SproutRawJob } from "./schema";
 
 const SPROUT_PROVIDER = "sprout" as Provider;
 
@@ -61,16 +54,10 @@ function nonZeroCoordinate(value: number | null | undefined): number | null {
   return value === null || value === undefined || value === 0 ? null : value;
 }
 
-export function normalizeSproutLocation(
-  location: SproutLocation,
-): NormalizedSproutLocation {
+export function normalizeSproutLocation(location: SproutLocation): NormalizedSproutLocation {
   const coordinates = location.coordinates;
-  const coordinateLatitude = Array.isArray(coordinates)
-    ? coordinates[1]
-    : coordinates?.latitude;
-  const coordinateLongitude = Array.isArray(coordinates)
-    ? coordinates[0]
-    : coordinates?.longitude;
+  const coordinateLatitude = Array.isArray(coordinates) ? coordinates[1] : coordinates?.latitude;
+  const coordinateLongitude = Array.isArray(coordinates) ? coordinates[0] : coordinates?.longitude;
   const city = cleanText(location.city);
   const region = cleanText(location.region) ?? cleanText(location.state);
   const country = cleanText(location.country);
@@ -105,10 +92,15 @@ function primaryLocation(
   );
 }
 
-export function hasSproutCountryLocation(rawValue: SproutRawJob, targetCountryCode: string): boolean {
+export function hasSproutCountryLocation(
+  rawValue: SproutRawJob,
+  targetCountryCode: string,
+): boolean {
   const raw = sproutRawJobSchema.parse(rawValue);
   const countryCode = targetCountryCode.trim().toUpperCase();
-  return raw.locations.some((location) => normalizeSproutLocation(location).countryCode === countryCode);
+  return raw.locations.some(
+    (location) => normalizeSproutLocation(location).countryCode === countryCode,
+  );
 }
 
 export function hasSproutFranceLocation(rawValue: SproutRawJob): boolean {
@@ -118,10 +110,7 @@ export function hasSproutFranceLocation(rawValue: SproutRawJob): boolean {
 function requireApplyUrl(value: string | null | undefined): string {
   const raw = cleanText(value);
   if (!raw) {
-    throw new IngestionError(
-      "invalid_input",
-      "Sprout job is missing its posting URL",
-    );
+    throw new IngestionError("invalid_input", "Sprout job is missing its posting URL");
   }
   let url: URL;
   try {
@@ -129,13 +118,7 @@ function requireApplyUrl(value: string | null | undefined): string {
   } catch {
     throw new IngestionError("invalid_input", "Sprout posting URL is invalid");
   }
-  if (
-    url.protocol !== "https:" ||
-    url.username ||
-    url.password ||
-    url.hash ||
-    !url.hostname
-  ) {
+  if (url.protocol !== "https:" || url.username || url.password || url.hash || !url.hostname) {
     throw new IngestionError(
       "invalid_input",
       "Sprout posting URL must be a credential-free HTTPS URL",
@@ -234,10 +217,7 @@ export function tryNormalizeSproutJob(
   };
 }
 
-export function normalizeSproutJob(
-  rawValue: SproutRawJob,
-  now = new Date(),
-): NormalizedSproutJob {
+export function normalizeSproutJob(rawValue: SproutRawJob, now = new Date()): NormalizedSproutJob {
   const result = tryNormalizeSproutJob(rawValue, now);
   if (!result.accepted) {
     throw new IngestionError(

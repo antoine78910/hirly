@@ -85,9 +85,10 @@ export default function ReferralPanel() {
         const batchesGranted = data?.reward_batches_granted || 0;
         const lastSeen = getLastSeenFriendReferralBatches();
         if (batchesGranted > lastSeen) {
-          const perBatchCredits = data?.credits_earned_total && batchesGranted
-            ? data.credits_earned_total / batchesGranted
-            : 40;
+          const perBatchCredits =
+            data?.credits_earned_total && batchesGranted
+              ? data.credits_earned_total / batchesGranted
+              : 40;
           setJustCompletedCredits((batchesGranted - lastSeen) * perBatchCredits);
           setLastSeenFriendReferralBatches(batchesGranted);
         }
@@ -229,8 +230,13 @@ export default function ReferralPanel() {
             </div>
             {usesCount > 0 && (
               <p className="mt-2 text-xs text-zinc-500">
-                {t("referralPanel.totalReferred", { count: usesCount, plural: usesCount === 1 ? "" : "s" })}
-                {creditsEarnedTotal > 0 ? t("referralPanel.creditsEarned", { count: creditsEarnedTotal }) : ""}
+                {t("referralPanel.totalReferred", {
+                  count: usesCount,
+                  plural: usesCount === 1 ? "" : "s",
+                })}
+                {creditsEarnedTotal > 0
+                  ? t("referralPanel.creditsEarned", { count: creditsEarnedTotal })
+                  : ""}
               </p>
             )}
           </div>

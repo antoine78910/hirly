@@ -1,8 +1,4 @@
-import {
-  ATS_PROVIDERS,
-  classifyAtsUrl,
-  type AtsProvider,
-} from "@hirly/ingestion/ats";
+import { ATS_PROVIDERS, classifyAtsUrl, type AtsProvider } from "@hirly/ingestion/ats";
 
 export const ATS_RANKING_QUERIES = {
   hostInventory: `
@@ -84,17 +80,14 @@ export async function runAtsRankingQueries(
     costWindowEnd: string;
   },
 ): Promise<Record<AtsRankingQuery, Record<string, unknown>[]>> {
-  const execute = (
-    name: AtsRankingQuery,
-    parameters: readonly unknown[] = [],
-  ) => executor.query(ATS_RANKING_QUERIES[name], parameters);
-  const [hostInventory, paidUserImpact, requestCost, policyStatus] =
-    await Promise.all([
-      execute("hostInventory"),
-      execute("paidUserImpact", [input.coverageRunId]),
-      execute("requestCost", [input.costWindowStart, input.costWindowEnd]),
-      execute("policyStatus"),
-    ]);
+  const execute = (name: AtsRankingQuery, parameters: readonly unknown[] = []) =>
+    executor.query(ATS_RANKING_QUERIES[name], parameters);
+  const [hostInventory, paidUserImpact, requestCost, policyStatus] = await Promise.all([
+    execute("hostInventory"),
+    execute("paidUserImpact", [input.coverageRunId]),
+    execute("requestCost", [input.costWindowStart, input.costWindowEnd]),
+    execute("policyStatus"),
+  ]);
   return { hostInventory, paidUserImpact, requestCost, policyStatus };
 }
 
@@ -103,9 +96,7 @@ export function assertReadOnlyAtsRankingQueries(): string[] {
     const normalized = query.replace(/--.*$/gm, " ").trim().toLowerCase();
     if (!/^(select|with)\b/.test(normalized)) return [`${name}:not_read_only`];
     if (
-      /\b(insert|update|delete|merge|truncate|alter|drop|create|grant|revoke)\b/.test(
-        normalized,
-      )
+      /\b(insert|update|delete|merge|truncate|alter|drop|create|grant|revoke)\b/.test(normalized)
     ) {
       return [`${name}:mutation_detected`];
     }
@@ -226,9 +217,7 @@ export function rankAtsCandidates(input: {
   const paidImpact = new Map(input.paidImpact.map((row) => [row.provider, row]));
   const costs = new Map(input.requestCosts.map((row) => [row.provider, row]));
   const policies = new Map(input.policy.map((row) => [row.provider, row]));
-  const deliveryCosts = new Map(
-    input.deliveryCosts.map((row) => [row.provider, row]),
-  );
+  const deliveryCosts = new Map(input.deliveryCosts.map((row) => [row.provider, row]));
   const providers = new Set<AtsProvider>([
     ...inventory.keys(),
     ...paidImpact.keys(),
@@ -270,14 +259,8 @@ export function rankAtsCandidates(input: {
       incrementalGroups,
       paidUserGroupImpacts,
       deliveryCostPoints,
-      paidUserGroupImpactsPerDeliveryPoint: ratio(
-        paidUserGroupImpacts,
-        deliveryCostPoints,
-      ),
-      incrementalGroupsPerDeliveryPoint: ratio(
-        incrementalGroups,
-        deliveryCostPoints,
-      ),
+      paidUserGroupImpactsPerDeliveryPoint: ratio(paidUserGroupImpacts, deliveryCostPoints),
+      incrementalGroupsPerDeliveryPoint: ratio(incrementalGroups, deliveryCostPoints),
       requestCostMinorPerIncrementalGroup:
         requestCost?.requestCostMinor !== null &&
         requestCost?.requestCostMinor !== undefined &&
@@ -300,12 +283,8 @@ export function rankAtsCandidates(input: {
       (right.incrementalGroupsPerDeliveryPoint ?? -1) -
       (left.incrementalGroupsPerDeliveryPoint ?? -1);
     if (groups !== 0) return groups;
-    if (
-      left.requestCostCurrency &&
-      left.requestCostCurrency === right.requestCostCurrency
-    ) {
-      const leftRequestCost =
-        left.requestCostMinorPerIncrementalGroup ?? Number.POSITIVE_INFINITY;
+    if (left.requestCostCurrency && left.requestCostCurrency === right.requestCostCurrency) {
+      const leftRequestCost = left.requestCostMinorPerIncrementalGroup ?? Number.POSITIVE_INFINITY;
       const rightRequestCost =
         right.requestCostMinorPerIncrementalGroup ?? Number.POSITIVE_INFINITY;
       if (leftRequestCost !== rightRequestCost) {
@@ -319,19 +298,20 @@ export function rankAtsCandidates(input: {
   return {
     schemaVersion: 1,
     status: input.status,
-    blockerReason: complete ? null : input.blockerReason ?? "live_evidence_unavailable",
+    blockerReason: complete ? null : (input.blockerReason ?? "live_evidence_unavailable"),
     sampleEvidence: input.sampleEvidence === true,
-    connectorChoice: complete && input.sampleEvidence !== true
-      ? ranking.find(
-          (candidate) =>
-            candidate.policyEligible &&
-            candidate.incrementalGroups > 0 &&
-            candidate.paidUserGroupImpacts > 0 &&
-            candidate.deliveryCostPoints !== null &&
-            candidate.paidUserGroupImpactsPerDeliveryPoint !== null &&
-            candidate.requestCostMinorPerIncrementalGroup !== null,
-        )?.provider ?? null
-      : null,
+    connectorChoice:
+      complete && input.sampleEvidence !== true
+        ? (ranking.find(
+            (candidate) =>
+              candidate.policyEligible &&
+              candidate.incrementalGroups > 0 &&
+              candidate.paidUserGroupImpacts > 0 &&
+              candidate.deliveryCostPoints !== null &&
+              candidate.paidUserGroupImpactsPerDeliveryPoint !== null &&
+              candidate.requestCostMinorPerIncrementalGroup !== null,
+          )?.provider ?? null)
+        : null,
     ranking,
   };
 }

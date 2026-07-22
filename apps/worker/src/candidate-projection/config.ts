@@ -1,11 +1,14 @@
 import { z } from "zod";
 
 const optionalPostgresUrl = z.preprocess(
-  (value) => value === "" ? undefined : value,
-  z.url().refine(
-    (value) => ["postgres:", "postgresql:"].includes(new URL(value).protocol),
-    "primary database URL must use postgres or postgresql",
-  ).optional(),
+  (value) => (value === "" ? undefined : value),
+  z
+    .url()
+    .refine(
+      (value) => ["postgres:", "postgresql:"].includes(new URL(value).protocol),
+      "primary database URL must use postgres or postgresql",
+    )
+    .optional(),
 );
 
 const schema = z
@@ -17,7 +20,10 @@ const schema = z
     CANDIDATE_PROJECTION_LEASE_SECONDS: z.coerce.number().int().min(5).max(3_600).default(120),
   })
   .superRefine((value, context) => {
-    if (value.CANDIDATE_PROJECTION_RELAY_ENABLED === "true" && !value.CANDIDATE_PROJECTION_PRIMARY_DATABASE_URL) {
+    if (
+      value.CANDIDATE_PROJECTION_RELAY_ENABLED === "true" &&
+      !value.CANDIDATE_PROJECTION_PRIMARY_DATABASE_URL
+    ) {
       context.addIssue({
         code: "custom",
         path: ["CANDIDATE_PROJECTION_PRIMARY_DATABASE_URL"],

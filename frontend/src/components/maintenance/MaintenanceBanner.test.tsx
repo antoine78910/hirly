@@ -3,8 +3,9 @@ import { createRoot, type Root } from "react-dom/client";
 
 import MaintenanceBanner, { MAINTENANCE_BANNER_FLAG_KEY } from "./MaintenanceBanner";
 
-(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean })
-  .IS_REACT_ACT_ENVIRONMENT = true;
+(
+  globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
+).IS_REACT_ACT_ENVIRONMENT = true;
 
 let mockLang: "en" | "fr" = "en";
 const mockUseFeatureFlagEnabled = jest.fn<boolean, [string, boolean]>();
@@ -39,10 +40,7 @@ describe("MaintenanceBanner", () => {
   it("fails closed while the flag is unavailable or disabled", () => {
     act(() => root.render(<MaintenanceBanner />));
 
-    expect(mockUseFeatureFlagEnabled).toHaveBeenCalledWith(
-      MAINTENANCE_BANNER_FLAG_KEY,
-      false,
-    );
+    expect(mockUseFeatureFlagEnabled).toHaveBeenCalledWith(MAINTENANCE_BANNER_FLAG_KEY, false);
     expect(container.querySelector("[data-testid='maintenance-banner']")).toBeNull();
 
     act(() => root.render(<MaintenanceBanner />));

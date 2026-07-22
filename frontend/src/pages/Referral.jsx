@@ -22,7 +22,10 @@ export default function Referral() {
           <X className="h-6 w-6" />
         </button>
 
-        <DesktopPageHeader title={t("referralPanel.pageTitle")} subtitle={t("referralPanel.pageSubtitle")} />
+        <DesktopPageHeader
+          title={t("referralPanel.pageTitle")}
+          subtitle={t("referralPanel.pageSubtitle")}
+        />
 
         <ReferralPanel />
       </div>

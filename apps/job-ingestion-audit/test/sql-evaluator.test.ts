@@ -14,7 +14,11 @@ describe("read-only SQL evaluator", () => {
 
   test("requires and summarizes exactly five samples", () => {
     expect(summarizeSamples([5, 1, 3, 2, 4])).toEqual({
-      minMs: 1, maxMs: 5, meanMs: 3, p50Ms: 3, p95Ms: 5,
+      minMs: 1,
+      maxMs: 5,
+      meanMs: 3,
+      p50Ms: 3,
+      p95Ms: 5,
     });
     expect(() => summarizeSamples([1])).toThrow();
   });
@@ -36,23 +40,29 @@ describe("read-only SQL evaluator", () => {
   });
 
   test("rejects unsafe oracle input before SQL construction", () => {
-    expect(() => buildOnlineOracleQuery({
-      role: "Fullstack Engineer",
-      countryCode: "fr'; DELETE FROM jobs; --",
-      freshnessWindowDays: 30,
-      limit: 25,
-    })).toThrow("ISO alpha-2");
-    expect(() => buildOnlineOracleQuery({
-      role: "Fullstack Engineer",
-      countryCode: "fr",
-      freshnessWindowDays: 0,
-      limit: 25,
-    })).toThrow("freshnessWindowDays");
-    expect(() => buildOnlineOracleQuery({
-      role: "--",
-      countryCode: "fr",
-      freshnessWindowDays: 30,
-      limit: 25,
-    })).toThrow("searchable term");
+    expect(() =>
+      buildOnlineOracleQuery({
+        role: "Fullstack Engineer",
+        countryCode: "fr'; DELETE FROM jobs; --",
+        freshnessWindowDays: 30,
+        limit: 25,
+      }),
+    ).toThrow("ISO alpha-2");
+    expect(() =>
+      buildOnlineOracleQuery({
+        role: "Fullstack Engineer",
+        countryCode: "fr",
+        freshnessWindowDays: 0,
+        limit: 25,
+      }),
+    ).toThrow("freshnessWindowDays");
+    expect(() =>
+      buildOnlineOracleQuery({
+        role: "--",
+        countryCode: "fr",
+        freshnessWindowDays: 30,
+        limit: 25,
+      }),
+    ).toThrow("searchable term");
   });
 });

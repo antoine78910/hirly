@@ -1,8 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type {
-  JobProjectionLease,
-  JobProjectionSourceRecord,
-} from "@hirly/db";
+import type { JobProjectionLease, JobProjectionSourceRecord } from "@hirly/db";
 import type { JobSearchDocumentPersistenceRow } from "@hirly/contracts";
 import {
   JobProjectionConsumer,
@@ -171,13 +168,9 @@ describe("job projection consumer", () => {
       },
       enqueueReconciliation: async () => 0,
     };
-    const consumer = new JobProjectionConsumer(
-      store,
-      options(true),
-      async () => {
-        throw new Error("postgres://user:secret@example.test/private-row");
-      },
-    );
+    const consumer = new JobProjectionConsumer(store, options(true), async () => {
+      throw new Error("postgres://user:secret@example.test/private-row");
+    });
     consumer.start();
     await Bun.sleep(20);
     await consumer.stop(100);
@@ -199,18 +192,14 @@ describe("job projection consumer", () => {
       finish: async () => true,
       enqueueReconciliation: async () => 0,
     };
-    const consumer = new JobProjectionConsumer(
-      store,
-      options(true),
-      async () => ({
-        action: "upsert",
-        canonicalGroupId: lease.entityId,
-        preferredJobId: source.preferredJobId,
-        authoritativeVersion: "7",
-        sourceContentHash: "a".repeat(64),
-        row: document,
-      }),
-    );
+    const consumer = new JobProjectionConsumer(store, options(true), async () => ({
+      action: "upsert",
+      canonicalGroupId: lease.entityId,
+      preferredJobId: source.preferredJobId,
+      authoritativeVersion: "7",
+      sourceContentHash: "a".repeat(64),
+      row: document,
+    }));
     consumer.start();
     await Bun.sleep(15);
     const started = performance.now();

@@ -7,10 +7,10 @@ const runIntegration = databaseUrl ? test : test.skip;
 
 async function psql(args: string[]): Promise<string> {
   if (!databaseUrl) throw new Error("JOB_INGESTION_LEDGER_TEST_DATABASE_URL is required");
-  const process = Bun.spawn(
-    ["psql", databaseUrl, "-X", "-v", "ON_ERROR_STOP=1", ...args],
-    { stdout: "pipe", stderr: "pipe" },
-  );
+  const process = Bun.spawn(["psql", databaseUrl, "-X", "-v", "ON_ERROR_STOP=1", ...args], {
+    stdout: "pipe",
+    stderr: "pipe",
+  });
   const [exitCode, stdout, stderr] = await Promise.all([
     process.exited,
     new Response(process.stdout).text(),
@@ -32,7 +32,10 @@ describe("Python ingestion ledger real-Postgres recovery", () => {
       await apply("backend/db/migrations/20260720000100_typescript_worker_foundation.sql");
       await apply("backend/db/migrations/20260720000300_job_ingestion_run_ledger.sql");
       try {
-        await psql(["-q", "-c", `
+        await psql([
+          "-q",
+          "-c",
+          `
           DO $proof$
           DECLARE
             v_manifest jsonb := '{
@@ -137,14 +140,20 @@ describe("Python ingestion ledger real-Postgres recovery", () => {
             END IF;
           END
           $proof$;
-        `]);
+        `,
+        ]);
       } finally {
         await apply("backend/db/migrations/20260720000300_job_ingestion_run_ledger.down.sql");
       }
-      expect(await psql([
-        "-A", "-t", "-q", "-c",
-        "SELECT to_regclass('public.worker_run_partitions') IS NULL;",
-      ])).toBe("t");
+      expect(
+        await psql([
+          "-A",
+          "-t",
+          "-q",
+          "-c",
+          "SELECT to_regclass('public.worker_run_partitions') IS NULL;",
+        ]),
+      ).toBe("t");
     },
     30_000,
   );

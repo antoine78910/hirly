@@ -9,7 +9,15 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { Briefcase, CheckCircle2, AlertTriangle, XCircle, Loader2, RefreshCw, Target } from "lucide-react";
+import {
+  Briefcase,
+  CheckCircle2,
+  AlertTriangle,
+  XCircle,
+  Loader2,
+  RefreshCw,
+  Target,
+} from "lucide-react";
 import { api } from "../lib/api";
 import { adminApiErrorMessage } from "../lib/adminApi";
 import { Button } from "../components/ui/button";
@@ -93,8 +101,12 @@ function FunnelGoalsPanel({ funnelGoals }) {
             {funnel.map((step, index) => (
               <div key={step.id} className="flex flex-1 items-stretch gap-3">
                 <div className="flex-1 rounded-lg border border-zinc-200 bg-white px-3 py-3">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">{step.label}</p>
-                  <p className="mt-1 font-display text-2xl font-bold text-zinc-900">{fmt(step.value)}</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
+                    {step.label}
+                  </p>
+                  <p className="mt-1 font-display text-2xl font-bold text-zinc-900">
+                    {fmt(step.value)}
+                  </p>
                 </div>
                 {index < funnel.length - 1 ? (
                   <div className="hidden items-center text-zinc-300 lg:flex" aria-hidden>
@@ -129,13 +141,19 @@ function FunnelGoalsPanel({ funnelGoals }) {
                 </span>
               </div>
               <div className="mt-4 flex items-end justify-between gap-3">
-                <p className="font-display text-3xl font-bold text-zinc-950">{formatGoalValue(goal)}</p>
-                <p className="pb-1 text-xs font-medium text-zinc-500">Goal {formatGoalTarget(goal)}</p>
+                <p className="font-display text-3xl font-bold text-zinc-950">
+                  {formatGoalValue(goal)}
+                </p>
+                <p className="pb-1 text-xs font-medium text-zinc-500">
+                  Goal {formatGoalTarget(goal)}
+                </p>
               </div>
               <div className="mt-3 h-2 overflow-hidden rounded-full bg-zinc-100">
                 <div
                   className={`h-full rounded-full transition-[width] duration-500 ${meta.bar}`}
-                  style={{ width: `${Math.max(4, Math.min(100, Number(goal.progress_pct || 0)))}%` }}
+                  style={{
+                    width: `${Math.max(4, Math.min(100, Number(goal.progress_pct || 0)))}%`,
+                  }}
                 />
               </div>
             </div>
@@ -143,13 +161,15 @@ function FunnelGoalsPanel({ funnelGoals }) {
         })}
       </div>
 
-      {(signals.ft_last_run_fetched != null || signals.ats_last_run_refreshed != null) ? (
+      {signals.ft_last_run_fetched != null || signals.ats_last_run_refreshed != null ? (
         <div className="flex flex-wrap gap-x-5 gap-y-2 border-t border-zinc-100 px-5 py-3 text-xs text-zinc-500">
           {signals.ft_last_run_fetched != null ? (
             <span>
               Last FT run: {fmt(signals.ft_last_run_fetched)} fetched
               {signals.ft_last_run_errors ? ` · ${signals.ft_last_run_errors} errors` : " · clean"}
-              {signals.ft_last_run_elapsed_ms != null ? ` · ${fmt(signals.ft_last_run_elapsed_ms)} ms` : ""}
+              {signals.ft_last_run_elapsed_ms != null
+                ? ` · ${fmt(signals.ft_last_run_elapsed_ms)} ms`
+                : ""}
             </span>
           ) : null}
           {signals.ats_last_run_refreshed != null ? (
@@ -158,7 +178,9 @@ function FunnelGoalsPanel({ funnelGoals }) {
               {signals.ats_last_run_errors ? ` · ${signals.ats_last_run_errors} errors` : ""}
             </span>
           ) : (
-            <span>No in-process harvest summary yet (appears after a background or admin run).</span>
+            <span>
+              No in-process harvest summary yet (appears after a background or admin run).
+            </span>
           )}
         </div>
       ) : (
@@ -192,7 +214,9 @@ function sourceColor(source) {
 
 function sourceLabel(source, fallbackLabel) {
   if (fallbackLabel) return fallbackLabel;
-  return String(source || "unknown").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  return String(source || "unknown")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 function fmtDateShort(iso) {
@@ -291,12 +315,16 @@ export default function AdminJobs() {
     <AdminShell
       title="Job inventory"
       subtitle="Fill target: 500k touches / week. Daily activity by source + funnel goals below."
-      actions={(
+      actions={
         <Button variant="outline" onClick={load} disabled={loading}>
-          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+          {loading ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <RefreshCw className="h-4 w-4" />
+          )}
           Refresh
         </Button>
-      )}
+      }
     >
       {loading && !data ? (
         <div className="grid min-h-64 place-items-center">
@@ -305,7 +333,9 @@ export default function AdminJobs() {
       ) : accessDenied ? (
         <AdminAccessDenied />
       ) : error ? (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">{error}</div>
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+          {error}
+        </div>
       ) : (
         <div className="space-y-6">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -327,16 +357,34 @@ export default function AdminJobs() {
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <MetricCard title="Total jobs" value={data?.total_jobs} sub="All cached offers in Supabase" />
-            <MetricCard title="Auto-apply ready (A/B)" value={data?.valid_ab_jobs} sub="Validated tiers A and B" />
-            <MetricCard title="Imports last 24h" value={data?.imports_last_24h} sub="Touched in the last day" />
-            <MetricCard title="Imports last 7d" value={data?.imports_last_7d} sub="Touched in the last 7 days" />
+            <MetricCard
+              title="Total jobs"
+              value={data?.total_jobs}
+              sub="All cached offers in Supabase"
+            />
+            <MetricCard
+              title="Auto-apply ready (A/B)"
+              value={data?.valid_ab_jobs}
+              sub="Validated tiers A and B"
+            />
+            <MetricCard
+              title="Imports last 24h"
+              value={data?.imports_last_24h}
+              sub="Touched in the last day"
+            />
+            <MetricCard
+              title="Imports last 7d"
+              value={data?.imports_last_7d}
+              sub="Touched in the last 7 days"
+            />
           </div>
 
           <section className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm">
             <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
               <div>
-                <h2 className="font-display text-lg font-bold text-zinc-900">Daily imports by source</h2>
+                <h2 className="font-display text-lg font-bold text-zinc-900">
+                  Daily imports by source
+                </h2>
                 <p className="text-sm text-zinc-500">Stacked activity for the selected period.</p>
               </div>
             </div>
@@ -376,7 +424,9 @@ export default function AdminJobs() {
                   </AreaChart>
                 </ResponsiveContainer>
               ) : (
-                <div className="grid h-full place-items-center text-sm text-zinc-500">No import activity in this period.</div>
+                <div className="grid h-full place-items-center text-sm text-zinc-500">
+                  No import activity in this period.
+                </div>
               )}
             </div>
           </section>
@@ -385,7 +435,9 @@ export default function AdminJobs() {
 
           <section className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm">
             <h2 className="font-display text-lg font-bold text-zinc-900">Sources breakdown</h2>
-            <p className="mt-1 text-sm text-zinc-500">Share of the full inventory by ingestion provider.</p>
+            <p className="mt-1 text-sm text-zinc-500">
+              Share of the full inventory by ingestion provider.
+            </p>
             <div className="mt-4 space-y-3">
               {(data?.by_source || []).map((row) => {
                 const pct = Math.max(0, Math.min(100, Number(row.share_pct || 0)));

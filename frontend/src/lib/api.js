@@ -2,7 +2,11 @@ import axios from "axios";
 import { demoMode } from "./dev";
 import { getDemoResponse } from "./demoApi";
 import { getFinanceDemoResponse, patchFinanceDemoResponse } from "./financeDemoApi";
-import { getDemoAccountResponse, isDemoAccountEnabled, patchDemoAccountResponse } from "./demoAccount";
+import {
+  getDemoAccountResponse,
+  isDemoAccountEnabled,
+  patchDemoAccountResponse,
+} from "./demoAccount";
 import { isFinanceDemoEnabled } from "./demoSettings";
 import { handleDemoCvUpload, shouldMockCvUpload, extractUploadFile } from "./demoCvUpload";
 import { normalizeApiPath } from "./apiPath";
@@ -50,11 +54,18 @@ export function resolveApiAssetUrl(path) {
   if (/^https?:\/\//i.test(path)) return path;
   const normalized = path.startsWith("/") ? path : `/${path}`;
   // Same-origin static or proxied API paths in the browser.
-  if (typeof window !== "undefined" && (normalized.startsWith("/api/") || normalized.startsWith("/training-videos/"))) {
+  if (
+    typeof window !== "undefined" &&
+    (normalized.startsWith("/api/") || normalized.startsWith("/training-videos/"))
+  ) {
     return normalized;
   }
   const apiOrigin = API.startsWith("http") ? API.replace(/\/api\/?$/i, "") : "";
-  const base = (apiOrigin || BACKEND_URL || (typeof window !== "undefined" ? window.location.origin : "")).replace(/\/+$/, "");
+  const base = (
+    apiOrigin ||
+    BACKEND_URL ||
+    (typeof window !== "undefined" ? window.location.origin : "")
+  ).replace(/\/+$/, "");
   return `${base}${normalized}`;
 }
 
@@ -107,7 +118,8 @@ function readCookie(name) {
 function writeSessionCookie(token) {
   if (typeof document === "undefined") return;
   const domain = sharedCookieDomain();
-  const secure = typeof window !== "undefined" && window.location.protocol === "https:" ? "; Secure" : "";
+  const secure =
+    typeof window !== "undefined" && window.location.protocol === "https:" ? "; Secure" : "";
   const domainPart = domain ? `; Domain=${domain}` : "";
   if (!token) {
     document.cookie = `${TOKEN_COOKIE}=; Max-Age=0; Path=/; SameSite=Lax${domainPart}${secure}`;
@@ -174,25 +186,27 @@ api.interceptors.request.use((config) => {
   if (!config.adapter && process.env.NODE_ENV === "development") {
     const friendReferralMock = getFriendReferralDevResponse(config);
     if (friendReferralMock !== undefined) {
-      config.adapter = () => Promise.resolve({
-        data: friendReferralMock,
-        status: 200,
-        statusText: "OK",
-        headers: {},
-        config,
-      });
+      config.adapter = () =>
+        Promise.resolve({
+          data: friendReferralMock,
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config,
+        });
       return config;
     }
 
     const inviteMock = getInviteDevResponse(config);
     if (inviteMock !== undefined) {
-      config.adapter = () => Promise.resolve({
-        data: inviteMock,
-        status: 200,
-        statusText: "OK",
-        headers: {},
-        config,
-      });
+      config.adapter = () =>
+        Promise.resolve({
+          data: inviteMock,
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config,
+        });
       return config;
     }
   }
@@ -201,13 +215,14 @@ api.interceptors.request.use((config) => {
   if (!config.adapter && isFinanceDemoEnabled()) {
     const financeDemoMock = getFinanceDemoResponse(config);
     if (financeDemoMock !== undefined) {
-      config.adapter = () => Promise.resolve({
-        data: financeDemoMock,
-        status: 200,
-        statusText: "OK",
-        headers: {},
-        config,
-      });
+      config.adapter = () =>
+        Promise.resolve({
+          data: financeDemoMock,
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config,
+        });
       return config;
     }
   }
@@ -216,13 +231,14 @@ api.interceptors.request.use((config) => {
   if (!config.adapter && isDemoAccountEnabled()) {
     const demoSwipeMock = getDemoAccountResponse(config);
     if (demoSwipeMock !== undefined) {
-      config.adapter = () => Promise.resolve({
-        data: demoSwipeMock,
-        status: 200,
-        statusText: "OK",
-        headers: {},
-        config,
-      });
+      config.adapter = () =>
+        Promise.resolve({
+          data: demoSwipeMock,
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config,
+        });
       return config;
     }
   }
@@ -242,13 +258,14 @@ api.interceptors.request.use((config) => {
     if (!skipAuthMeMock) {
       const mock = getDemoResponse(config);
       if (mock !== undefined) {
-        config.adapter = () => Promise.resolve({
-          data: mock,
-          status: 200,
-          statusText: "OK",
-          headers: {},
-          config,
-        });
+        config.adapter = () =>
+          Promise.resolve({
+            data: mock,
+            status: 200,
+            statusText: "OK",
+            headers: {},
+            config,
+          });
       }
     }
   }
@@ -256,13 +273,14 @@ api.interceptors.request.use((config) => {
   if (!config.adapter) {
     const demoAccountMock = getDemoAccountResponse(config);
     if (demoAccountMock !== undefined) {
-      config.adapter = () => Promise.resolve({
-        data: demoAccountMock,
-        status: 200,
-        statusText: "OK",
-        headers: {},
-        config,
-      });
+      config.adapter = () =>
+        Promise.resolve({
+          data: demoAccountMock,
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          config,
+        });
     }
   }
 
@@ -297,8 +315,8 @@ api.interceptors.request.use((config) => {
         "/record-tools/interview-templates",
         "/record-tools/transcribe",
         "/feedback/contact",
-      ].includes(path)
-      && !config.adapter
+      ].includes(path) &&
+      !config.adapter
     ) {
       config.timeout = Math.max(config.timeout || 0, 120000);
     }

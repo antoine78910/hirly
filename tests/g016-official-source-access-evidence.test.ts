@@ -50,9 +50,7 @@ describe("G016 official source access evidence", () => {
       expect(source.productionEligible).toBeFalse();
       expect(source.blockers.length).toBeGreaterThan(0);
       expect(source.officialEvidence.length).toBeGreaterThan(0);
-      expect(
-        source.officialEvidence.every(({ url }) => url.startsWith("https://")),
-      ).toBeTrue();
+      expect(source.officialEvidence.every(({ url }) => url.startsWith("https://"))).toBeTrue();
     }
   });
 
@@ -71,9 +69,7 @@ describe("G016 official source access evidence", () => {
       expect(source.sampleManifest?.parsedRows).toBeGreaterThan(0);
     }
 
-    const bpce = manifest.sources.find(
-      (source) => source.sourceKey === "bpce-open-feed",
-    );
+    const bpce = manifest.sources.find((source) => source.sourceKey === "bpce-open-feed");
     expect(bpce?.decision).toBe("blocked_external_prerequisites_missing");
     expect(bpce?.evidenceOnlyTransportEligible).toBeFalse();
   });
@@ -93,9 +89,7 @@ describe("G016 official source access evidence", () => {
       expect(source?.evidenceOnlyTransportEligible).toBeFalse();
     }
 
-    const generic = manifest.sources.find(
-      (source) => source.sourceKey === "data-gouv-generic",
-    );
+    const generic = manifest.sources.find((source) => source.sourceKey === "data-gouv-generic");
     expect(generic?.decision).toBe("dataset_specific_evidence_required");
     expect(generic?.evidenceOnlyTransportEligible).toBeFalse();
   });

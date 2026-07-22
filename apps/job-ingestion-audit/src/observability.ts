@@ -58,9 +58,7 @@ function percentile(sorted: number[], fraction: number): number {
   return lowerValue + (upperValue - lowerValue) * (position - lower);
 }
 
-export function summarizePaidUserCoverage(
-  snapshots: PaidUserCoverageSnapshot[],
-): CoverageBaseline {
+export function summarizePaidUserCoverage(snapshots: PaidUserCoverageSnapshot[]): CoverageBaseline {
   for (const snapshot of snapshots) {
     if (!/^[0-9a-f]{64}$/.test(snapshot.hashedUserId)) {
       throw new Error("paid_user_coverage_requires_sha256_user_hash");
@@ -77,11 +75,11 @@ export function summarizePaidUserCoverage(
       throw new Error("paid_user_coverage_requires_non_negative_integer_counters");
     }
     if (
-      snapshot.unseenActionableTotal > snapshot.actionableTotal
-      || snapshot.actionableTotal > snapshot.uniqueTotal
-      || snapshot.uniqueTotal > snapshot.relevantTotal
-      || snapshot.routeKnownTotal > snapshot.relevantTotal
-      || snapshot.directEmployerTotal > snapshot.relevantTotal
+      snapshot.unseenActionableTotal > snapshot.actionableTotal ||
+      snapshot.actionableTotal > snapshot.uniqueTotal ||
+      snapshot.uniqueTotal > snapshot.relevantTotal ||
+      snapshot.routeKnownTotal > snapshot.relevantTotal ||
+      snapshot.directEmployerTotal > snapshot.relevantTotal
     ) {
       throw new Error("paid_user_coverage_counter_order");
     }
@@ -112,10 +110,14 @@ function terminalState(
     return "blocked";
   }
   if (partitions.some(({ capHit }) => capHit)) return "capped";
-  if (partitions.some((partition) => (
-    partition.sourceReportedTotal !== null
-    && partition.sourceReportedTotal !== partition.fetchedRecords
-  ))) return "capped";
+  if (
+    partitions.some(
+      (partition) =>
+        partition.sourceReportedTotal !== null &&
+        partition.sourceReportedTotal !== partition.fetchedRecords,
+    )
+  )
+    return "capped";
   return "complete";
 }
 
@@ -126,29 +128,32 @@ export function buildFranceTravailCensusManifest(
   if (evidence.length === 0) throw new Error("france_travail_census_requires_partitions");
   const partitions = evidence
     .map((partition) => ({ ...partition }))
-    .sort((left, right) => (
-      left.runId.localeCompare(right.runId)
-      || left.partitionId.localeCompare(right.partitionId)
-    ));
+    .sort(
+      (left, right) =>
+        left.runId.localeCompare(right.runId) || left.partitionId.localeCompare(right.partitionId),
+    );
   for (const partition of partitions) {
     if (
-      partition.fetchedRecords !== partition.normalizedRecords + partition.rejectedRecords
-      || partition.actionableRecords > partition.normalizedRecords
+      partition.fetchedRecords !== partition.normalizedRecords + partition.rejectedRecords ||
+      partition.actionableRecords > partition.normalizedRecords
     ) {
       throw new Error(`france_travail_partition_accounting:${partition.partitionId}`);
     }
   }
-  const totals = partitions.reduce((sum, partition) => ({
-    fetchedRecords: sum.fetchedRecords + partition.fetchedRecords,
-    normalizedRecords: sum.normalizedRecords + partition.normalizedRecords,
-    rejectedRecords: sum.rejectedRecords + partition.rejectedRecords,
-    actionableRecords: sum.actionableRecords + partition.actionableRecords,
-  }), {
-    fetchedRecords: 0,
-    normalizedRecords: 0,
-    rejectedRecords: 0,
-    actionableRecords: 0,
-  });
+  const totals = partitions.reduce(
+    (sum, partition) => ({
+      fetchedRecords: sum.fetchedRecords + partition.fetchedRecords,
+      normalizedRecords: sum.normalizedRecords + partition.normalizedRecords,
+      rejectedRecords: sum.rejectedRecords + partition.rejectedRecords,
+      actionableRecords: sum.actionableRecords + partition.actionableRecords,
+    }),
+    {
+      fetchedRecords: 0,
+      normalizedRecords: 0,
+      rejectedRecords: 0,
+      actionableRecords: 0,
+    },
+  );
   const reportedTotals = partitions.map(({ sourceReportedTotal }) => sourceReportedTotal);
   const sourceReportedTotal = reportedTotals.every((total) => total !== null)
     ? (reportedTotals as number[]).reduce((sum, total) => sum + total, 0)
@@ -164,8 +169,7 @@ export function buildFranceTravailCensusManifest(
     ...totals,
     partitions,
   };
-  const { generatedAt: _generatedAt, ...immutableDecisionInputs } =
-    manifestWithoutDigest;
+  const { generatedAt: _generatedAt, ...immutableDecisionInputs } = manifestWithoutDigest;
   return {
     ...manifestWithoutDigest,
     digest: stableDigest(immutableDecisionInputs),

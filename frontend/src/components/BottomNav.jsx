@@ -1,11 +1,5 @@
 import { NavLink, useLocation } from "react-router-dom";
-import {
-  Sparkles,
-  FileText,
-  Layers,
-  Mail,
-  User as UserIcon,
-} from "lucide-react";
+import { Sparkles, FileText, Layers, Mail, User as UserIcon } from "lucide-react";
 import { useAppLocale } from "../context/AppLocaleContext";
 import { DemoAccountAvatarIndicator } from "./settings/DemoAccountBadge";
 
@@ -30,8 +24,7 @@ export default function BottomNav() {
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const isActive =
-            location.pathname === tab.to
-            || (tab.to === "/swipe" && location.pathname === "/app");
+            location.pathname === tab.to || (tab.to === "/swipe" && location.pathname === "/app");
           return (
             <NavLink
               key={tab.to}

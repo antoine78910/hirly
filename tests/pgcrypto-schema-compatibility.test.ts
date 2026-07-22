@@ -19,7 +19,9 @@ describe("portable pgcrypto schema compatibility contract", () => {
     expect(sql).toContain("errcode = '42723'");
     expect(sql).toContain("security invoker");
     expect(sql).toContain("set search_path = pg_catalog");
-    expect(sql).toContain("public.digest compatibility wrappers already exist; refusing partial creation");
+    expect(sql).toContain(
+      "public.digest compatibility wrappers already exist; refusing partial creation",
+    );
     expect(sql.match(/create function public\.digest/g)).toHaveLength(2);
     expect(sql).not.toContain("create or replace function");
     expect(sql).not.toContain("alter extension");
@@ -27,10 +29,8 @@ describe("portable pgcrypto schema compatibility contract", () => {
 
   test("marks only created wrappers and removes only exact marker-owned signatures", () => {
     const sql = compact(down);
-    expect(up.match(/hirly:pgcrypto-schema-compatibility:20260721001950/g))
-      .toHaveLength(3);
-    expect(down.match(/hirly:pgcrypto-schema-compatibility:20260721001950/g))
-      .toHaveLength(1);
+    expect(up.match(/hirly:pgcrypto-schema-compatibility:20260721001950/g)).toHaveLength(3);
+    expect(down.match(/hirly:pgcrypto-schema-compatibility:20260721001950/g)).toHaveLength(1);
     expect(sql).toContain("v_text_wrapper");
     expect(sql).toContain("v_bytea_wrapper");
     expect(sql).toContain("is distinct from v_marker");

@@ -1,8 +1,4 @@
-import {
-  enqueueRunSchema,
-  providerSchema,
-  type Provider,
-} from "@hirly/contracts";
+import { enqueueRunSchema, providerSchema, type Provider } from "@hirly/contracts";
 import { createDatabase, WorkerRepository } from "@hirly/db";
 import { parseRuntimeConfig } from "./runtime/config";
 import { PostgresRuntimeStore } from "./runtime/store";
@@ -12,7 +8,12 @@ import { assertProviderTransportActive } from "./providers";
 export type CliCommand =
   | { type: "enqueue-maintenance"; idempotencyKey: string }
   | { type: "enqueue-provider"; provider: Provider; idempotencyKey: string }
-  | { type: "enqueue-sprout"; mode: "canary" | "backfill" | "incremental"; sourceId: string; idempotencyKey: string }
+  | {
+      type: "enqueue-sprout";
+      mode: "canary" | "backfill" | "incremental";
+      sourceId: string;
+      idempotencyKey: string;
+    }
   | { type: "run-status"; runId: string };
 
 export function parseCliArgs(args: string[]): CliCommand {
@@ -33,11 +34,7 @@ export function parseCliArgs(args: string[]): CliCommand {
     }
     return { type: command, mode: first, sourceId: second, idempotencyKey: args[3] };
   }
-  if (
-    command === "run-status" &&
-    first &&
-    /^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(first)
-  ) {
+  if (command === "run-status" && first && /^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(first)) {
     return { type: command, runId: first };
   }
   throw new Error(
@@ -84,21 +81,23 @@ export async function runCli(
       provider: "sprout",
       idempotencyKey: command.idempotencyKey,
       triggerSource: "cli",
-      tasks: [{
-        taskKey: `sprout:france:${command.mode}:${command.sourceId}`,
-        taskType: "provider.fetch_page",
-        payload: {
-          sourceId: command.sourceId,
-          mode: command.mode,
-          maxResponseBytes: 2_000_000,
-          // Operator-triggered runs resume the persisted source checkpoint.
-          // A rewind is an explicit recovery operation, never an accidental
-          // side effect of "resume" or "retry" from this CLI.
-          cycleStart: false,
-          pageCount: 0,
-          maxPages: command.mode === "incremental" ? 10 : null,
+      tasks: [
+        {
+          taskKey: `sprout:france:${command.mode}:${command.sourceId}`,
+          taskType: "provider.fetch_page",
+          payload: {
+            sourceId: command.sourceId,
+            mode: command.mode,
+            maxResponseBytes: 2_000_000,
+            // Operator-triggered runs resume the persisted source checkpoint.
+            // A rewind is an explicit recovery operation, never an accidental
+            // side effect of "resume" or "retry" from this CLI.
+            cycleStart: false,
+            pageCount: 0,
+            maxPages: command.mode === "incremental" ? 10 : null,
+          },
         },
-      }],
+      ],
     });
     const runId = await dependencies.queue.enqueue(input);
     await dependencies.attachCareerSource?.(runId, command.sourceId);

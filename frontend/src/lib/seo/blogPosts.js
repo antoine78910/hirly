@@ -221,9 +221,7 @@ export const blogPosts = [
       },
       {
         h2: "Tableau récapitulatif : quelle app emploi pour quel besoin",
-        body: [
-          "Synthèse pour choisir la meilleure application selon votre situation en 2026 :",
-        ],
+        body: ["Synthèse pour choisir la meilleure application selon votre situation en 2026 :"],
         list: [
           "Tech / startup / SaaS, recherche active → Hirly + LinkedIn en complément",
           "Premier emploi / junior → Hirly + Welcome to the Jungle",
@@ -469,9 +467,7 @@ export const blogPosts = [
       },
       {
         h2: "Checklist CV ATS-friendly",
-        body: [
-          "Avant chaque candidature via ATS, vérifiez ces points :",
-        ],
+        body: ["Avant chaque candidature via ATS, vérifiez ces points :"],
         list: [
           "Format PDF texte ou Word (pas image)",
           "Sections claires : Expériences, Compétences, Formation",
@@ -500,9 +496,7 @@ export const blogPosts = [
       },
       {
         h2: "Vérifier que votre candidature ATS est bien reçue",
-        body: [
-          "Après soumission, quelques vérifications simples :",
-        ],
+        body: ["Après soumission, quelques vérifications simples :"],
         numbered: [
           "Attendre l'email de confirmation Greenhouse ou Lever (généralement sous 24 h)",
           "Si pas de confirmation : relancer poliment par email ou LinkedIn",
@@ -717,9 +711,7 @@ export const blogPosts = [
       },
       {
         h2: "Comment une app emploi swipe fonctionne en pratique",
-        body: [
-          "Le workflow Hirly en 4 étapes, de l'inscription à la candidature envoyée :",
-        ],
+        body: ["Le workflow Hirly en 4 étapes, de l'inscription à la candidature envoyée :"],
         numbered: [
           "Importer son CV : extraction automatique des compétences, expériences et préférences.",
           "Découvrir les offres : chaque carte affiche le poste, l'entreprise et un score de matching.",
@@ -747,9 +739,7 @@ export const blogPosts = [
       },
       {
         h2: "Pour qui une app emploi type Tinder est-elle adaptée ?",
-        body: [
-          "Le modèle swipe + auto-candidature convient particulièrement à :",
-        ],
+        body: ["Le modèle swipe + auto-candidature convient particulièrement à :"],
         list: [
           "Candidats actifs qui veulent postuler à volume sans sacrifier la qualité",
           "Profils tech (dev, data, product, design) où les ATS dominent",

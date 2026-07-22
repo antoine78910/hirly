@@ -85,17 +85,12 @@ describe("analytics historical transform", () => {
       expect(transformed.payload?.properties).toMatchObject({
         $process_person_profile: false,
       });
-      expect(transformed.identityQuality).toBe(
-        `legacy_${identityResolution}`,
-      );
+      expect(transformed.identityQuality).toBe(`legacy_${identityResolution}`);
     }
   });
 
   test("never falls back to anonymous identity for unresolved known users", () => {
-    for (const identityResolution of [
-      "known_user_unresolved",
-      "known_user_ambiguous",
-    ] as const) {
+    for (const identityResolution of ["known_user_unresolved", "known_user_ambiguous"] as const) {
       expect(
         transformLegacyAnalyticsRow({
           ...exactRow,
@@ -140,13 +135,11 @@ describe("analytics historical transform", () => {
   test("validates the JSON boundary before transforming rows", () => {
     expect(parseLegacyAnalyticsRows([exactRow])).toEqual([exactRow]);
     expect(() =>
-      parseLegacyAnalyticsRows([
-        { ...exactRow, identityResolution: "guessed_from_anonymous_id" },
-      ]),
+      parseLegacyAnalyticsRows([{ ...exactRow, identityResolution: "guessed_from_anonymous_id" }]),
     ).toThrow("invalid_input_row:0:identityResolution");
-    expect(() =>
-      parseLegacyAnalyticsRows([{ ...exactRow, properties: [] }]),
-    ).toThrow("invalid_input_row:0:properties");
+    expect(() => parseLegacyAnalyticsRows([{ ...exactRow, properties: [] }])).toThrow(
+      "invalid_input_row:0:properties",
+    );
   });
 
   test("quarantines denylisted, malformed, and unknown rows", () => {
@@ -156,12 +149,10 @@ describe("analytics historical transform", () => {
         properties: { email: "private@example.com" },
       }),
     ).toMatchObject({ status: "quarantined", reason: "denylisted_property" });
-    expect(
-      transformLegacyAnalyticsRow({ ...exactRow, eventName: "not_registered" }),
-    ).toMatchObject({ status: "quarantined", reason: "unknown_event" });
-    expect(
-      transformLegacyAnalyticsRow({ ...exactRow, createdAt: "not-a-time" }),
-    ).toMatchObject({
+    expect(transformLegacyAnalyticsRow({ ...exactRow, eventName: "not_registered" })).toMatchObject(
+      { status: "quarantined", reason: "unknown_event" },
+    );
+    expect(transformLegacyAnalyticsRow({ ...exactRow, createdAt: "not-a-time" })).toMatchObject({
       status: "quarantined",
       reason: "invalid_source_created_at",
     });
@@ -189,12 +180,14 @@ describe("analytics historical transform", () => {
       },
     ];
     expect(
-      rows.filter((row) =>
-        afterCheckpoint(row, {
-          createdAt: "2025-01-02T00:00:00.000Z",
-          eventId: "a",
-        }),
-      ).map((row) => row.eventId),
+      rows
+        .filter((row) =>
+          afterCheckpoint(row, {
+            createdAt: "2025-01-02T00:00:00.000Z",
+            eventId: "a",
+          }),
+        )
+        .map((row) => row.eventId),
     ).toEqual(["b", "c"]);
     let sideEffects = 0;
     const manifest = await runBackfill({
@@ -220,10 +213,8 @@ describe("analytics historical transform", () => {
       eventId: "c",
     });
     expect(
-      buildBackfillManifest(
-        rows.map(transformLegacyAnalyticsRow),
-        "2025-01-03T00:00:00.000Z",
-      ).digest,
+      buildBackfillManifest(rows.map(transformLegacyAnalyticsRow), "2025-01-03T00:00:00.000Z")
+        .digest,
     ).toMatch(/^[a-f0-9]{64}$/);
   });
 
@@ -242,12 +233,7 @@ describe("analytics historical transform", () => {
       invalid_source_created_at: 1,
     });
 
-    for (const rateLimitPerSecond of [
-      0,
-      -1,
-      Number.POSITIVE_INFINITY,
-      1_001,
-    ]) {
+    for (const rateLimitPerSecond of [0, -1, Number.POSITIVE_INFINITY, 1_001]) {
       await expect(
         runBackfill({
           rows: [exactRow],
@@ -322,13 +308,7 @@ describe("analytics historical transform", () => {
       },
       rateLimitPerSecond: 1_000,
     });
-    expect(calls).toEqual([
-      "seed",
-      "claim",
-      "send_started",
-      "transport",
-      "accepted",
-    ]);
+    expect(calls).toEqual(["seed", "claim", "send_started", "transport", "accepted"]);
     expect(calls).not.toContain("observed");
   });
 

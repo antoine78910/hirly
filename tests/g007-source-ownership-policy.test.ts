@@ -31,9 +31,7 @@ function stripFreshFranceTravailOwnerSeed(sql: string): string {
 
 describe("G007 source ownership and policy invariants", () => {
   test("keeps every characterized ingestion and feed stage Python-owned", () => {
-    const registry = JSON.parse(
-      read("artifacts/job-ingestion/stage-registry.json"),
-    ) as {
+    const registry = JSON.parse(read("artifacts/job-ingestion/stage-registry.json")) as {
       schemaVersion: number;
       stages: Array<{
         stage: string;
@@ -58,9 +56,7 @@ describe("G007 source ownership and policy invariants", () => {
       "matching",
       "application_route",
     ]) {
-      expect(
-        registry.stages.some(({ stage }) => stage === requiredStage),
-      ).toBeTrue();
+      expect(registry.stages.some(({ stage }) => stage === requiredStage)).toBeTrue();
     }
   });
 
@@ -80,9 +76,7 @@ describe("G007 source ownership and policy invariants", () => {
       "backend/db/migrations/20260720000100_typescript_worker_foundation.sql",
     );
     const laterMigrations = migrationFiles()
-      .filter(
-        (name) => name !== "20260720000100_typescript_worker_foundation.sql",
-      )
+      .filter((name) => name !== "20260720000100_typescript_worker_foundation.sql")
       .map((name) => read(`backend/db/migrations/${name}`))
       .join("\n");
     const applyTimeSql = stripFreshFranceTravailOwnerSeed(
@@ -95,9 +89,7 @@ describe("G007 source ownership and policy invariants", () => {
     expect(foundation).toMatch(
       /IF p_enabled AND \(\s*v_provider\.authorization_status <> 'authorized'\s*OR v_provider\.writer_runtime <> 'typescript'/,
     );
-    expect(foundation).toContain(
-      "false, 'none', '{\"requestsPerMinute\":1,\"concurrency\":1}'",
-    );
+    expect(foundation).toContain("false, 'none', '{\"requestsPerMinute\":1,\"concurrency\":1}'");
     expect(applyTimeSql).not.toMatch(
       /(?:insert\s+into|update|delete\s+from)\s+(?:public\.)?provider_registry\b/i,
     );
@@ -122,8 +114,6 @@ describe("G007 source ownership and policy invariants", () => {
     expect(transitionGrants[0]).toMatch(
       /\(\s*text, text, text, bigint\s*\)\s+TO hirly_inventory_operator;/i,
     );
-    expect(transitionGrants[0]).not.toMatch(
-      /\b(?:PUBLIC|hirly_inventory_worker|service_role)\b/i,
-    );
+    expect(transitionGrants[0]).not.toMatch(/\b(?:PUBLIC|hirly_inventory_worker|service_role)\b/i);
   });
 });

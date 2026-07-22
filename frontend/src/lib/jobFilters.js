@@ -105,26 +105,30 @@ export function formatMinSalary(value, lang) {
 export function hasActiveFilters(value, defaultRadius = DEFAULT_SEARCH_RADIUS) {
   if (!value) return false;
   return Boolean(
-    value.minSalary > 0
-    || (value.postedDate && value.postedDate !== "any")
-    || (value.workLocations || []).length
-    || (value.jobTypes || []).length
-    || (value.experience || []).length
-    || (value.locations || []).length
-    || (value.locationsData || []).length
-    || value.locationData
-    || (value.onlyCompanies || []).length
-    || (value.hideCompanies || []).length
-    || (value.onlyIndustries || []).length
-    || (value.hideIndustries || []).length
-    || value.includeUnknownLocation === false
-    || value.includeUnknownSalary === false
-    || (value.searchRadius && value.searchRadius !== defaultRadius)
-    || value.onlyMyCountry,
+    value.minSalary > 0 ||
+      (value.postedDate && value.postedDate !== "any") ||
+      (value.workLocations || []).length ||
+      (value.jobTypes || []).length ||
+      (value.experience || []).length ||
+      (value.locations || []).length ||
+      (value.locationsData || []).length ||
+      value.locationData ||
+      (value.onlyCompanies || []).length ||
+      (value.hideCompanies || []).length ||
+      (value.onlyIndustries || []).length ||
+      (value.hideIndustries || []).length ||
+      value.includeUnknownLocation === false ||
+      value.includeUnknownSalary === false ||
+      (value.searchRadius && value.searchRadius !== defaultRadius) ||
+      value.onlyMyCountry,
   );
 }
 
-export function countActiveFilterGroups(value, defaultRadius = DEFAULT_SEARCH_RADIUS, options = {}) {
+export function countActiveFilterGroups(
+  value,
+  defaultRadius = DEFAULT_SEARCH_RADIUS,
+  options = {},
+) {
   const { excludeRadius = false, excludeLocations = false } = options;
   if (!value) return 0;
   let count = 0;
@@ -139,8 +143,8 @@ export function countActiveFilterGroups(value, defaultRadius = DEFAULT_SEARCH_RA
   if (!excludeRadius && value.searchRadius && value.searchRadius !== defaultRadius) count += 1;
   if (value.onlyMyCountry) count += 1;
   if (
-    !excludeLocations
-    && ((value.locations || []).length || (value.locationsData || []).length || value.locationData)
+    !excludeLocations &&
+    ((value.locations || []).length || (value.locationsData || []).length || value.locationData)
   ) {
     count += 1;
   }
@@ -148,7 +152,10 @@ export function countActiveFilterGroups(value, defaultRadius = DEFAULT_SEARCH_RA
 }
 
 export function countMenuFilterGroups(value, defaultRadius = DEFAULT_SEARCH_RADIUS) {
-  return countActiveFilterGroups(value, defaultRadius, { excludeRadius: true, excludeLocations: true });
+  return countActiveFilterGroups(value, defaultRadius, {
+    excludeRadius: true,
+    excludeLocations: true,
+  });
 }
 
 export function hasActiveMenuFilters(value, defaultRadius = DEFAULT_SEARCH_RADIUS) {

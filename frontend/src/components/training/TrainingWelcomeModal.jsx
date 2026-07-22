@@ -27,7 +27,8 @@ export default function TrainingWelcomeModal({ open, onOpenChange, onDismiss }) 
               Bienvenue dans la formation
             </DialogTitle>
             <DialogDescription className="text-sm leading-relaxed text-violet-100">
-              Ton accès au programme créateur {BRAND.NAME} est activé. Tu peux commencer le cours dès maintenant.
+              Ton accès au programme créateur {BRAND.NAME} est activé. Tu peux commencer le cours
+              dès maintenant.
             </DialogDescription>
           </DialogHeader>
         </div>
@@ -38,7 +39,8 @@ export default function TrainingWelcomeModal({ open, onOpenChange, onDismiss }) 
             <div className="text-sm text-zinc-700">
               <p className="font-semibold text-zinc-900">Job Search Mastery</p>
               <p className="mt-1 leading-relaxed text-zinc-600">
-                Parcours les modules, regarde les vidéos et valide les quiz à la fin de chaque chapitre.
+                Parcours les modules, regarde les vidéos et valide les quiz à la fin de chaque
+                chapitre.
               </p>
             </div>
           </div>
@@ -48,8 +50,8 @@ export default function TrainingWelcomeModal({ open, onOpenChange, onDismiss }) 
             <div className="text-sm text-zinc-700">
               <p className="font-semibold text-zinc-900">Accès confidentiel</p>
               <p className="mt-1 leading-relaxed text-zinc-600">
-                Ne partage pas ton accès ni le contenu de la formation. Tout partage détecté entraîne une exclusion
-                immédiate du programme.
+                Ne partage pas ton accès ni le contenu de la formation. Tout partage détecté
+                entraîne une exclusion immédiate du programme.
               </p>
             </div>
           </div>

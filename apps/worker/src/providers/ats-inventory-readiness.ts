@@ -17,24 +17,13 @@ const countrySchema = z
 
 const sha256Schema = z.string().regex(/^[a-f0-9]{64}$/);
 
-export const productionShadowProviderSchema = z.enum([
-  "greenhouse",
-  "recruitee",
-  "nicoka",
-]);
+export const productionShadowProviderSchema = z.enum(["greenhouse", "recruitee", "nicoka"]);
 
-export type ProductionShadowProvider = z.output<
-  typeof productionShadowProviderSchema
->;
+export type ProductionShadowProvider = z.output<typeof productionShadowProviderSchema>;
 
-const completeSnapshotProviders = new Set<ProductionShadowProvider>([
-  "greenhouse",
-  "nicoka",
-]);
+const completeSnapshotProviders = new Set<ProductionShadowProvider>(["greenhouse", "nicoka"]);
 
-export function assertCompleteShadowSnapshotProven(
-  provider: ProductionShadowProvider,
-): void {
+export function assertCompleteShadowSnapshotProven(provider: ProductionShadowProvider): void {
   if (!completeSnapshotProviders.has(provider)) {
     refuse(`${provider} public transport cannot prove complete snapshots`);
   }
@@ -67,9 +56,7 @@ export const atsInventoryShadowPolicySchema = z
     }
   });
 
-export type AtsInventoryShadowPolicy = z.output<
-  typeof atsInventoryShadowPolicySchema
->;
+export type AtsInventoryShadowPolicy = z.output<typeof atsInventoryShadowPolicySchema>;
 
 export class AtsShadowRefusal extends Error {
   readonly code = "ATS_SHADOW_REFUSED" as const;
@@ -204,9 +191,11 @@ export function buildAtsRepeatedShadowScorecard(runs: readonly unknown[]) {
       }
       timestamps.add(timestamp);
     }
-    const ordered = [...parsed].sort((left, right) =>
-      new Date(left.capturedAt).getTime() - new Date(right.capturedAt).getTime()
-      || left.runId.localeCompare(right.runId));
+    const ordered = [...parsed].sort(
+      (left, right) =>
+        new Date(left.capturedAt).getTime() - new Date(right.capturedAt).getTime() ||
+        left.runId.localeCompare(right.runId),
+    );
     const reconciliation = ordered.slice(1).map((current, index) => {
       const previous = ordered[index]!;
       const before = new Map(previous.jobs.map((job) => [job.externalId, job.fingerprint]));

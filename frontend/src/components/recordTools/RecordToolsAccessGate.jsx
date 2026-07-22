@@ -4,7 +4,8 @@ import { useAuth } from "../../context/AuthContext";
 import { devBypassAuth } from "../../lib/dev";
 
 /** Keep in sync with TrainingAccessGate and backend TRAINING_OPEN_ACCESS. */
-const TRAINING_OPEN_ACCESS = (process.env.REACT_APP_TRAINING_OPEN_ACCESS ?? "true").toLowerCase() !== "false";
+const TRAINING_OPEN_ACCESS =
+  (process.env.REACT_APP_TRAINING_OPEN_ACCESS ?? "true").toLowerCase() !== "false";
 
 function hasRecordToolsAccess({ user, hasTrainingAccess, isAdmin, isTrainingCreator }) {
   if (!user) return false;

@@ -4,10 +4,8 @@ import { extname, join, relative } from "node:path";
 
 const repoRoot = join(import.meta.dir, "..");
 const migrationsDirectory = join(repoRoot, "backend", "db", "migrations");
-const sourceBoundaryMigrationName =
-  "20260720000600_typescript_ingestion_source_boundary.sql";
-const ownershipEpochMigrationName =
-  "20260720000700_provider_ownership_epochs.sql";
+const sourceBoundaryMigrationName = "20260720000600_typescript_ingestion_source_boundary.sql";
+const ownershipEpochMigrationName = "20260720000700_provider_ownership_epochs.sql";
 
 function read(path: string): string {
   return readFileSync(join(repoRoot, path), "utf8");
@@ -30,10 +28,7 @@ function productionTypeScriptFiles(root: string): string[] {
     const path = join(root, entry);
     if (statSync(path).isDirectory()) {
       files.push(...productionTypeScriptFiles(path));
-    } else if (
-      [".ts", ".tsx"].includes(extname(entry)) &&
-      !entry.endsWith(".test.ts")
-    ) {
+    } else if ([".ts", ".tsx"].includes(extname(entry)) && !entry.endsWith(".test.ts")) {
       files.push(path);
     }
   }
@@ -53,21 +48,15 @@ function withoutFreshFranceTravailOwnerSeed(sql: string): string {
 
 describe("G011 provider and source safety contract", () => {
   test("retains provider_registry as the only writer ownership authority", () => {
-    const sourceBoundary = read(
-      `backend/db/migrations/${sourceBoundaryMigrationName}`,
-    );
+    const sourceBoundary = read(`backend/db/migrations/${sourceBoundaryMigrationName}`);
     expect(sourceBoundary).toContain("registry.writer_runtime = 'typescript'");
 
     for (const { name, sql } of forwardMigrations()) {
-      const migrationCommands = withoutFreshFranceTravailOwnerSeed(
-        withoutRoutineBodies(sql),
-      );
+      const migrationCommands = withoutFreshFranceTravailOwnerSeed(withoutRoutineBodies(sql));
       expect(
         migrationCommands,
         `${name} must not transfer provider ownership while applying`,
-      ).not.toMatch(
-        /\b(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+(?:public\.)?provider_registry\b/i,
-      );
+      ).not.toMatch(/\b(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+(?:public\.)?provider_registry\b/i);
 
       for (const tableDefinition of sql.matchAll(
         /CREATE\s+TABLE(?:\s+IF\s+NOT\s+EXISTS)?\s+public\.([a-z_]+)\s*\(([\s\S]*?)\n\);/gi,
@@ -88,9 +77,7 @@ describe("G011 provider and source safety contract", () => {
         );
       }
     }
-    const ownershipMigration = read(
-      `backend/db/migrations/${ownershipEpochMigrationName}`,
-    );
+    const ownershipMigration = read(`backend/db/migrations/${ownershipEpochMigrationName}`);
     expect(ownershipMigration).toMatch(
       /'france_travail', 'official-api', 'unverified', NULL,\s*false, 'python'/,
     );
@@ -99,9 +86,7 @@ describe("G011 provider and source safety contract", () => {
   });
 
   test("retains the complete source-policy activation gate", () => {
-    const sourceBoundary = read(
-      `backend/db/migrations/${sourceBoundaryMigrationName}`,
-    );
+    const sourceBoundary = read(`backend/db/migrations/${sourceBoundaryMigrationName}`);
     const runnableFunction = sourceBoundary.match(
       /CREATE OR REPLACE FUNCTION worker_private\.career_source_runnable\([\s\S]*?\n\$\$;/,
     )?.[0];
@@ -124,28 +109,22 @@ describe("G011 provider and source safety contract", () => {
       "source.access_type = ANY(policy.permitted_access_methods)",
       "policy.expires_at > clock_timestamp()",
     ]) {
-      expect(
-        runnableFunction,
-        `career source activation must retain ${predicate}`,
-      ).toContain(predicate);
+      expect(runnableFunction, `career source activation must retain ${predicate}`).toContain(
+        predicate,
+      );
     }
   });
 
   test("keeps connector transports and source seeds disabled by default", () => {
     const ingestionContract = read("packages/ingestion/src/index.ts");
-    expect(ingestionContract).toMatch(
-      /interface SourceAdapter[\s\S]*?readonly enabled: false;/,
-    );
+    expect(ingestionContract).toMatch(/interface SourceAdapter[\s\S]*?readonly enabled: false;/);
     expect(ingestionContract).toMatch(
       /interface SourceAdapter[\s\S]*?readonly liveTransportReady: false;/,
     );
 
     for (const { name, sql } of forwardMigrations()) {
       const migrationCommands = withoutRoutineBodies(sql);
-      expect(
-        migrationCommands,
-        `${name} must not activate a source during migration`,
-      ).not.toMatch(
+      expect(migrationCommands, `${name} must not activate a source during migration`).not.toMatch(
         /\b(?:UPDATE|DELETE\s+FROM)\s+(?:public\.)?career_sources\b/i,
       );
       expect(

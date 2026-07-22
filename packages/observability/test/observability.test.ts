@@ -19,10 +19,12 @@ describe("structured observability", () => {
   });
 
   test("redacts auth and cookie headers plus secret-bearing URLs", () => {
-    const serialized = JSON.stringify(redact({
-      message:
-        "Authorization: Basic private-auth\nCookie: session=private-cookie\nX-Refresh-Token: private-refresh https://api.example/jobs?session=private-session",
-    }));
+    const serialized = JSON.stringify(
+      redact({
+        message:
+          "Authorization: Basic private-auth\nCookie: session=private-cookie\nX-Refresh-Token: private-refresh https://api.example/jobs?session=private-session",
+      }),
+    );
     expect(serialized).not.toContain("private-auth");
     expect(serialized).not.toContain("private-cookie");
     expect(serialized).not.toContain("private-refresh");

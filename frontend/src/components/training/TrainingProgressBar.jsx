@@ -1,7 +1,7 @@
 import { Check } from "lucide-react";
 import { isQuizPassed } from "../../lib/trainingData";
 import { quizIdForModule } from "../../lib/trainingQuizzes";
-import { SCORED_MODULE_IDS, moduleProgressFraction } from "../../lib/trainingProgress";/**
+import { SCORED_MODULE_IDS, moduleProgressFraction } from "../../lib/trainingProgress"; /**
  * Inline module progress stepper — shows inside the page content area
  * (below the module title, above the section nav).
  *
@@ -30,9 +30,7 @@ export default function TrainingProgressBar({
     void progressTick;
     return moduleProgressFraction(courseId, m, quizResults);
   });
-  const overallPct = Math.round(
-    (fractions.reduce((a, b) => a + b, 0) / scored.length) * 100,
-  );
+  const overallPct = Math.round((fractions.reduce((a, b) => a + b, 0) / scored.length) * 100);
   const completedCount = scored.filter(
     (m) => m.completed || isQuizPassed(enrollment, quizIdForModule(m.module_id), courseId),
   ).length;
@@ -73,7 +71,8 @@ export default function TrainingProgressBar({
                   <Check className="h-2.5 w-2.5" strokeWidth={3} aria-hidden />
                 ) : (
                   <span aria-hidden>{stepNum}</span>
-                )}                {/* Tooltip (desktop) */}
+                )}{" "}
+                {/* Tooltip (desktop) */}
                 <span
                   className="pointer-events-none absolute bottom-7 left-1/2 hidden w-max max-w-[140px] -translate-x-1/2 whitespace-normal break-words rounded-md bg-zinc-900 px-2 py-1 text-[10px] font-normal leading-tight text-white group-hover:block sm:block"
                   role="tooltip"
@@ -92,7 +91,8 @@ export default function TrainingProgressBar({
                     style={{ width: `${isValidated ? 100 : frac * 100}%` }}
                     aria-hidden
                   />
-                </span>              )}
+                </span>
+              )}
             </span>
           );
         })}
@@ -100,9 +100,7 @@ export default function TrainingProgressBar({
 
       {/* Right: percentage + label */}
       <div className="flex shrink-0 flex-col items-end leading-none">
-        <span className="text-sm font-bold tabular-nums text-violet-600">
-          {overallPct}%
-        </span>
+        <span className="text-sm font-bold tabular-nums text-violet-600">{overallPct}%</span>
         <span className="mt-0.5 text-[10px] text-zinc-400">{doneLabel}</span>
       </div>
     </div>

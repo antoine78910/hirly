@@ -41,9 +41,7 @@ function rawJob(overrides: Partial<SproutRawJob> = {}): SproutRawJob {
 
 describe("Sprout adapter security and inventory contract", () => {
   test("repairs inverted salary bounds before canonical validation", () => {
-    const result = tryNormalizeSproutJob(
-      rawJob({ salaryMin: 70_000, salaryMax: 50_000 }),
-    );
+    const result = tryNormalizeSproutJob(rawJob({ salaryMin: 70_000, salaryMax: 50_000 }));
 
     expect(result).toMatchObject({
       accepted: true,
@@ -141,9 +139,7 @@ describe("Sprout adapter security and inventory contract", () => {
   });
 
   test("quarantines invalid apply routes and future freshness", () => {
-    expect(
-      tryNormalizeSproutJob(rawJob({ postingUrl: "http://jobs.example.com/42" })),
-    ).toEqual({
+    expect(tryNormalizeSproutJob(rawJob({ postingUrl: "http://jobs.example.com/42" }))).toEqual({
       accepted: false,
       reason: "invalid_apply_url",
       externalId: "42",

@@ -257,26 +257,12 @@ interface FeedReadRow {
 }
 
 export interface FeedReadSqlClient {
-  unsafe(
-    query: string,
-    parameters: readonly unknown[],
-  ): Promise<readonly FeedReadRow[]>;
+  unsafe(query: string, parameters: readonly unknown[]): Promise<readonly FeedReadRow[]>;
 }
 
 function queryParameters(query: FeedEffectiveQuery | null): readonly unknown[] {
   if (!query) {
-    return [
-      "candidate-profile",
-      null,
-      [],
-      [],
-      [],
-      [],
-      [],
-      [],
-      1,
-      false,
-    ];
+    return ["candidate-profile", null, [], [], [], [], [], [], 1, false];
   }
   const countryCodes = [
     query.countryCode,
@@ -291,24 +277,28 @@ function queryParameters(query: FeedEffectiveQuery | null): readonly unknown[] {
   // Make an explicitly selected location usable for those records as well as
   // for coordinate-bearing inventory. The leading label segment is the city
   // for our canonical location labels (for example "Paris, Île-de-France").
-  const freeTextLocations = [...new Set([
-    ...query.freeTextLocations,
-    ...query.locations.flatMap((location) => {
-      const city = location.label.split(",", 1)[0]?.trim();
-      return city ? [location.label, city] : [location.label];
-    }),
-  ])].sort();
+  const freeTextLocations = [
+    ...new Set([
+      ...query.freeTextLocations,
+      ...query.locations.flatMap((location) => {
+        const city = location.label.split(",", 1)[0]?.trim();
+        return city ? [location.label, city] : [location.label];
+      }),
+    ]),
+  ].sort();
   return [
     query.fingerprint,
     query.role,
     [...new Set(countryCodes)].sort(),
     query.workModes,
-    [...new Set(query.jobTypes.flatMap((value) => {
-      const normalized = value.toLowerCase().replaceAll("_", "-");
-      return normalized === "full-time"
-        ? ["full-time", "permanent"]
-        : [normalized];
-    }))].sort(),
+    [
+      ...new Set(
+        query.jobTypes.flatMap((value) => {
+          const normalized = value.toLowerCase().replaceAll("_", "-");
+          return normalized === "full-time" ? ["full-time", "permanent"] : [normalized];
+        }),
+      ),
+    ].sort(),
     locations.map((location) => location.latitude),
     locations.map((location) => location.longitude),
     freeTextLocations,
@@ -330,8 +320,7 @@ export class PostgresFeedReadRepository implements FeedReadRepository {
       throw new Error("invalid_candidate_scope");
     }
     const limit = Math.max(1, Math.min(Math.trunc(input.limit), 1_000));
-    const queryFingerprint =
-      input.effectiveQuery?.fingerprint ?? "candidate-profile";
+    const queryFingerprint = input.effectiveQuery?.fingerprint ?? "candidate-profile";
     const rows = await this.sql.unsafe(FEED_V2_INDEXED_READ_SQL, [
       input.candidateId,
       input.after?.relevanceScore ?? null,
@@ -366,17 +355,19 @@ export class PostgresFeedReadRepository implements FeedReadRepository {
       ) {
         return [];
       }
-      return [{
-        canonicalGroupId: row.canonical_group_id,
-        preferredJobId: row.preferred_job_id,
-        jobVersion: row.job_version,
-        companyKey: row.company_key,
-        relevanceScore: row.relevance_score,
-        fulfillmentRoute: row.fulfillment_route,
-        actionExcluded: row.action_excluded === true,
-        policyEligible: row.policy_eligible === true,
-        lifecycleEligible: row.lifecycle_eligible === true,
-      }];
+      return [
+        {
+          canonicalGroupId: row.canonical_group_id,
+          preferredJobId: row.preferred_job_id,
+          jobVersion: row.job_version,
+          companyKey: row.company_key,
+          relevanceScore: row.relevance_score,
+          fulfillmentRoute: row.fulfillment_route,
+          actionExcluded: row.action_excluded === true,
+          policyEligible: row.policy_eligible === true,
+          lifecycleEligible: row.lifecycle_eligible === true,
+        },
+      ];
     });
     return {
       snapshotVersion: metadata.snapshot_version,

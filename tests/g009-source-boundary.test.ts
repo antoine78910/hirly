@@ -36,9 +36,7 @@ function sourceBoundaryMigration(): {
   const filename = matches[0]!;
   return {
     migration: read(`backend/db/migrations/${filename}`),
-    rollback: read(
-      `backend/db/migrations/${filename.replace(/\.sql$/, ".down.sql")}`,
-    ),
+    rollback: read(`backend/db/migrations/${filename.replace(/\.sql$/, ".down.sql")}`),
   };
 }
 
@@ -153,10 +151,7 @@ describe("G009 source adapter contract", () => {
   });
 
   test("keeps stable IDs and deduplicates repeated source occurrences before one write", async () => {
-    const raw = [
-      { externalId: "same-source-id" },
-      { externalId: "same-source-id" },
-    ];
+    const raw = [{ externalId: "same-source-id" }, { externalId: "same-source-id" }];
     let writtenIds: string[] = [];
 
     const result = await runIngestion({
@@ -262,9 +257,7 @@ describe("G009 source adapter contract", () => {
       now: () => new Date("2026-07-20T00:00:00Z"),
     });
 
-    expect(writtenApplyUrls).toEqual([
-      "https://boards.greenhouse.io/hirly/jobs/valid",
-    ]);
+    expect(writtenApplyUrls).toEqual(["https://boards.greenhouse.io/hirly/jobs/valid"]);
     expect(result.metrics).toMatchObject({
       fetched: 2,
       accepted: 1,
@@ -349,9 +342,7 @@ describe("G009 source persistence contract", () => {
 
   test("keeps sources disabled behind policy and provider/country kill switches", () => {
     const { migration } = sourceBoundaryMigration();
-    const observability = read(
-      "backend/db/migrations/20260720000400_job_supply_observability.sql",
-    );
+    const observability = read("backend/db/migrations/20260720000400_job_supply_observability.sql");
 
     for (const disabledDefault of [
       "transport_enabled boolean NOT NULL DEFAULT false",
@@ -360,19 +351,13 @@ describe("G009 source persistence contract", () => {
     ]) {
       expect(migration).toContain(disabledDefault);
     }
-    expect(migration).toContain(
-      "country_kill_switches jsonb NOT NULL DEFAULT '{}'::jsonb",
-    );
+    expect(migration).toContain("country_kill_switches jsonb NOT NULL DEFAULT '{}'::jsonb");
     expect(migration).toContain("registry.country_kill_switches");
     expect(migration).toContain("registry.writer_runtime = 'typescript'");
     expect(migration).toContain("policy.approval_status = 'approved'");
     expect(observability).toContain("enabled boolean NOT NULL DEFAULT false");
-    expect(migration).not.toMatch(
-      /\b(?:UPDATE|INSERT\s+INTO)\s+(?:public\.)?provider_registry\b/i,
-    );
-    expect(migration).not.toMatch(
-      /\b(?:UPDATE|INSERT\s+INTO)\s+(?:public\.)?career_sources\b/i,
-    );
+    expect(migration).not.toMatch(/\b(?:UPDATE|INSERT\s+INTO)\s+(?:public\.)?provider_registry\b/i);
+    expect(migration).not.toMatch(/\b(?:UPDATE|INSERT\s+INTO)\s+(?:public\.)?career_sources\b/i);
   });
 
   test("is reversible and grants no canonical mutation capability", () => {
@@ -392,9 +377,7 @@ describe("G009 source persistence contract", () => {
     expect(migration).not.toMatch(
       /GRANT\s+(?:INSERT|UPDATE|DELETE|ALL)[\s\S]*?(?:raw_job_snapshots|job_occurrences|canonical_job_groups)/i,
     );
-    expect(migration).toContain(
-      "CREATE OR REPLACE VIEW public.raw_job_snapshot_metadata",
-    );
+    expect(migration).toContain("CREATE OR REPLACE VIEW public.raw_job_snapshot_metadata");
     expect(migration).toMatch(
       /GRANT SELECT ON[\s\S]*public\.job_occurrences[\s\S]*public\.canonical_job_groups[\s\S]*TO hirly_inventory_operator/i,
     );
@@ -404,9 +387,7 @@ describe("G009 source persistence contract", () => {
     expect(migration).not.toMatch(
       /ALTER FUNCTION worker_private\.career_source_runnable[\s\S]*OWNER TO/i,
     );
-    expect(migration).not.toMatch(
-      /GRANT SELECT ON public\.raw_job_snapshots/i,
-    );
+    expect(migration).not.toMatch(/GRANT SELECT ON public\.raw_job_snapshots/i);
     expect(migration).toMatch(
       /REVOKE ALL ON FUNCTION worker_private\.career_source_runnable[\s\S]*FROM PUBLIC/i,
     );

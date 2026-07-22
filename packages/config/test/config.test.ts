@@ -28,9 +28,7 @@ describe("server configuration", () => {
   });
 
   test("client config cannot expose server credentials", () => {
-    expect(() =>
-      parseClientConfig({ NEXT_PUBLIC_JOBS_DATABASE_URL: databaseUrl }),
-    ).toThrow();
+    expect(() => parseClientConfig({ NEXT_PUBLIC_JOBS_DATABASE_URL: databaseUrl })).toThrow();
     expect(parseClientConfig({ JOBS_DATABASE_URL: databaseUrl })).toEqual({});
   });
 

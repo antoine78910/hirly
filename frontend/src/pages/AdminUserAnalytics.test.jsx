@@ -16,7 +16,12 @@ jest.mock("../components/ui/button", () => ({
 }));
 jest.mock("../components/admin/AdminShell", () => ({
   __esModule: true,
-  default: ({ actions, children }) => <main>{actions}{children}</main>,
+  default: ({ actions, children }) => (
+    <main>
+      {actions}
+      {children}
+    </main>
+  ),
   AdminAccessDenied: () => <div>Admin access denied</div>,
 }));
 
@@ -70,7 +75,9 @@ describe("AdminUserAnalytics server pagination state", () => {
 
     api.get.mockRejectedValueOnce(new Error("database unavailable"));
     await act(async () => {
-      [...container.querySelectorAll("button")].find((item) => item.textContent.includes("Refresh")).click();
+      [...container.querySelectorAll("button")]
+        .find((item) => item.textContent.includes("Refresh"))
+        .click();
     });
     expect(container.textContent).not.toContain("analytics@example.com");
     expect(container.textContent).toContain("0 users");
@@ -98,8 +105,11 @@ describe("AdminUserAnalytics server pagination state", () => {
     await act(async () => {
       [...container.querySelectorAll("button")].find((item) => item.textContent === "Next").click();
     });
-    expect(api.get).toHaveBeenLastCalledWith("/admin/user-analytics", expect.objectContaining({
-      params: expect.objectContaining({ cursor: "signed-next", limit: 100 }),
-    }));
+    expect(api.get).toHaveBeenLastCalledWith(
+      "/admin/user-analytics",
+      expect.objectContaining({
+        params: expect.objectContaining({ cursor: "signed-next", limit: 100 }),
+      }),
+    );
   });
 });

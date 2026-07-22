@@ -62,17 +62,19 @@ function redactString(value: string): string {
     const index = uuids.push(match) - 1;
     return `[HIRLY_UUID_${index}]`;
   });
-  const redacted = protectedValue.replace(credentialUrl, (match) => {
-    const schemeEnd = match.indexOf("://") + 3;
-    return `${match.slice(0, schemeEnd)}[REDACTED]@`;
-  })
+  const redacted = protectedValue
+    .replace(credentialUrl, (match) => {
+      const schemeEnd = match.indexOf("://") + 3;
+      return `${match.slice(0, schemeEnd)}[REDACTED]@`;
+    })
     .replace(sensitiveHeader, "$1: [REDACTED]")
     .replace(bearer, "Bearer [REDACTED]")
     .replace(querySecret, "$1[REDACTED]")
     .replace(email, "[REDACTED_EMAIL]")
     .replace(phone, "[REDACTED_PHONE]");
-  return redacted.replace(/\[HIRLY_UUID_(\d+)\]/g, (_match, index: string) =>
-    uuids[Number(index)] ?? "[REDACTED]"
+  return redacted.replace(
+    /\[HIRLY_UUID_(\d+)\]/g,
+    (_match, index: string) => uuids[Number(index)] ?? "[REDACTED]",
   );
 }
 
@@ -84,10 +86,7 @@ export function redact(value: unknown, key = ""): unknown {
   if (Array.isArray(value)) return value.map((entry) => redact(entry));
   if (value && typeof value === "object") {
     return Object.fromEntries(
-      Object.entries(value).map(([entryKey, entry]) => [
-        entryKey,
-        redact(entry, entryKey),
-      ]),
+      Object.entries(value).map(([entryKey, entry]) => [entryKey, redact(entry, entryKey)]),
     );
   }
   return value;

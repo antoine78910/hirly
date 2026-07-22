@@ -35,7 +35,9 @@ function AnswerDistributionCard({ step }) {
           <div key={option.label}>
             <div className="flex items-center justify-between gap-2 text-xs text-zinc-600">
               <span className="truncate">{option.label}</span>
-              <span className="shrink-0 font-semibold tabular-nums text-zinc-800">{option.count} · {option.pct}%</span>
+              <span className="shrink-0 font-semibold tabular-nums text-zinc-800">
+                {option.count} · {option.pct}%
+              </span>
             </div>
             <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-zinc-100">
               <div
@@ -62,7 +64,9 @@ function OnboardingAnswersGrid({ answers }) {
       {entries.map(([key, label]) => (
         <div key={key} className="rounded-lg border border-zinc-100 bg-zinc-50 px-3 py-2.5">
           <p className="text-[11px] font-medium uppercase tracking-wide text-zinc-500">{label}</p>
-          <p className="mt-0.5 text-sm font-medium text-zinc-800">{formatOnboardingAnswerValue(key, answers[key])}</p>
+          <p className="mt-0.5 text-sm font-medium text-zinc-800">
+            {formatOnboardingAnswerValue(key, answers[key])}
+          </p>
         </div>
       ))}
     </div>
@@ -136,15 +140,23 @@ export default function AdminUserAnalytics() {
     <AdminShell
       title="User Analytics"
       subtitle="Onboarding answers, engagement, swipes, applications, and drop-off points per user."
-      actions={(
+      actions={
         <Button variant="outline" onClick={load} disabled={loading}>
-          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+          {loading ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <RefreshCw className="h-4 w-4" />
+          )}
           Refresh
         </Button>
-      )}
+      }
     >
-      {accessDenied ? <AdminAccessDenied /> : error ? (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">{error}</div>
+      {accessDenied ? (
+        <AdminAccessDenied />
+      ) : error ? (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+          {error}
+        </div>
       ) : null}
 
       {!accessDenied ? (
@@ -167,7 +179,9 @@ export default function AdminUserAnalytics() {
           <section className="overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm">
             <div className="border-b border-zinc-200 px-5 py-4">
               <h2 className="font-display text-lg font-bold text-zinc-900">Onboarding drop-off</h2>
-              <p className="mt-1 text-sm text-zinc-500">Steps where users are currently stuck — ranked by frequency.</p>
+              <p className="mt-1 text-sm text-zinc-500">
+                Steps where users are currently stuck — ranked by frequency.
+              </p>
             </div>
             <table className="w-full min-w-[640px] text-left text-sm">
               <thead className="bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500">
@@ -179,17 +193,29 @@ export default function AdminUserAnalytics() {
               </thead>
               <tbody className="divide-y divide-zinc-100">
                 {loading ? (
-                  <tr><td className="px-4 py-8 text-center text-zinc-500" colSpan={3}><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>
-                ) : dropoffSteps.length ? dropoffSteps.map((row) => (
-                  <tr key={row.step}>
-                    <td className="px-4 py-3 font-semibold">{row.label}</td>
-                    <td className="px-4 py-3">{row.count}</td>
-                    <td className="px-4 py-3">
-                      {dropoff.in_progress ? `${Math.round((row.count / dropoff.in_progress) * 100)}%` : "—"}
+                  <tr>
+                    <td className="px-4 py-8 text-center text-zinc-500" colSpan={3}>
+                      <Loader2 className="mx-auto h-5 w-5 animate-spin" />
                     </td>
                   </tr>
-                )) : (
-                  <tr><td className="px-4 py-8 text-center text-zinc-500" colSpan={3}>No drop-off data yet.</td></tr>
+                ) : dropoffSteps.length ? (
+                  dropoffSteps.map((row) => (
+                    <tr key={row.step}>
+                      <td className="px-4 py-3 font-semibold">{row.label}</td>
+                      <td className="px-4 py-3">{row.count}</td>
+                      <td className="px-4 py-3">
+                        {dropoff.in_progress
+                          ? `${Math.round((row.count / dropoff.in_progress) * 100)}%`
+                          : "—"}
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td className="px-4 py-8 text-center text-zinc-500" colSpan={3}>
+                      No drop-off data yet.
+                    </td>
+                  </tr>
                 )}
               </tbody>
             </table>
@@ -198,15 +224,23 @@ export default function AdminUserAnalytics() {
           <section className="overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm">
             <div className="border-b border-zinc-200 px-5 py-4">
               <h2 className="font-display text-lg font-bold text-zinc-900">Most chosen answers</h2>
-              <p className="mt-1 text-sm text-zinc-500">For each onboarding step, the answers picked most often across all users.</p>
+              <p className="mt-1 text-sm text-zinc-500">
+                For each onboarding step, the answers picked most often across all users.
+              </p>
             </div>
             <div className="grid gap-4 p-5 sm:grid-cols-2 lg:grid-cols-3">
               {loading ? (
-                <div className="col-span-full flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-zinc-400" /></div>
-              ) : answerDistribution.length ? answerDistribution.map((step) => (
-                <AnswerDistributionCard key={step.key} step={step} />
-              )) : (
-                <p className="col-span-full text-sm text-zinc-500">No onboarding answers saved yet.</p>
+                <div className="col-span-full flex justify-center py-8">
+                  <Loader2 className="h-5 w-5 animate-spin text-zinc-400" />
+                </div>
+              ) : answerDistribution.length ? (
+                answerDistribution.map((step) => (
+                  <AnswerDistributionCard key={step.key} step={step} />
+                ))
+              ) : (
+                <p className="col-span-full text-sm text-zinc-500">
+                  No onboarding answers saved yet.
+                </p>
               )}
             </div>
           </section>
@@ -215,7 +249,9 @@ export default function AdminUserAnalytics() {
             <div className="flex flex-col gap-3 border-b border-zinc-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h2 className="font-display text-lg font-bold text-zinc-900">All users</h2>
-                <p className="mt-1 text-sm text-zinc-500">Click a row to see every onboarding answer and activity detail.</p>
+                <p className="mt-1 text-sm text-zinc-500">
+                  Click a row to see every onboarding answer and activity detail.
+                </p>
               </div>
               <input
                 type="search"
@@ -250,88 +286,162 @@ export default function AdminUserAnalytics() {
                 </thead>
                 <tbody className="divide-y divide-zinc-100">
                   {loading ? (
-                    <tr><td className="px-4 py-8 text-center text-zinc-500" colSpan={17}><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>
-                  ) : users.length ? users.map((user) => {
-                    const answers = user.onboarding_answers || {};
-                    const progress = user.onboarding_progress || {};
-                    const expanded = expandedId === user.user_id;
-                    const salaryLabel = answers.salary_min || answers.salary_max
-                      ? `${formatOnboardingAnswerValue("salary_min", answers.salary_min)} – ${formatOnboardingAnswerValue("salary_max", answers.salary_max)}`
-                      : "—";
-                    return (
-                      <Fragment key={user.user_id}>
-                        <tr
-                          className="cursor-pointer hover:bg-zinc-50"
-                          onClick={() => toggleExpanded(user.user_id)}
-                        >
-                          <td className="px-4 py-3 text-zinc-400">
-                            {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                          </td>
-                          <td className="px-4 py-3">
-                            <span className="font-semibold text-zinc-900">{user.email || user.user_id}</span>
-                            <p className="mt-0.5 text-xs text-zinc-400">{user.name || "Unknown"}</p>
-                          </td>
-                          <td className="px-4 py-3 text-zinc-700">{formatOnboardingAnswerValue("job_search_status", answers.job_search_status)}</td>
-                          <td className="px-4 py-3 text-zinc-700">{formatOnboardingAnswerValue("job_goal", answers.job_goal)}</td>
-                          <td className="px-4 py-3 text-zinc-700">{formatOnboardingAnswerValue("phone", answers.phone)}</td>
-                          <td className="px-4 py-3 text-zinc-700">{formatOnboardingAnswerValue("onboarding_location", answers.onboarding_location)}</td>
-                          <td className="px-4 py-3 text-zinc-700">{formatOnboardingAnswerValue("contract_type", answers.contract_type)}</td>
-                          <td className="max-w-[180px] truncate px-4 py-3 text-zinc-700" title={formatOnboardingAnswerValue("selected_roles", answers.selected_roles)}>
-                            {formatOnboardingAnswerValue("selected_roles", answers.selected_roles)}
-                          </td>
-                          <td className="px-4 py-3 text-zinc-700">{salaryLabel}</td>
-                          <td className="px-4 py-3 text-zinc-700">{formatOnboardingAnswerValue("acquisition_source", answers.acquisition_source)}</td>
-                          <td className="px-4 py-3">
-                            <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                              progress.completed
-                                ? "bg-emerald-100 text-emerald-700"
-                                : progress.drop_off_step_label
-                                  ? "bg-amber-100 text-amber-700"
-                                  : "bg-zinc-100 text-zinc-500"
-                            }`}
+                    <tr>
+                      <td className="px-4 py-8 text-center text-zinc-500" colSpan={17}>
+                        <Loader2 className="mx-auto h-5 w-5 animate-spin" />
+                      </td>
+                    </tr>
+                  ) : users.length ? (
+                    users.map((user) => {
+                      const answers = user.onboarding_answers || {};
+                      const progress = user.onboarding_progress || {};
+                      const expanded = expandedId === user.user_id;
+                      const salaryLabel =
+                        answers.salary_min || answers.salary_max
+                          ? `${formatOnboardingAnswerValue("salary_min", answers.salary_min)} – ${formatOnboardingAnswerValue("salary_max", answers.salary_max)}`
+                          : "—";
+                      return (
+                        <Fragment key={user.user_id}>
+                          <tr
+                            className="cursor-pointer hover:bg-zinc-50"
+                            onClick={() => toggleExpanded(user.user_id)}
+                          >
+                            <td className="px-4 py-3 text-zinc-400">
+                              {expanded ? (
+                                <ChevronDown className="h-4 w-4" />
+                              ) : (
+                                <ChevronRight className="h-4 w-4" />
+                              )}
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className="font-semibold text-zinc-900">
+                                {user.email || user.user_id}
+                              </span>
+                              <p className="mt-0.5 text-xs text-zinc-400">
+                                {user.name || "Unknown"}
+                              </p>
+                            </td>
+                            <td className="px-4 py-3 text-zinc-700">
+                              {formatOnboardingAnswerValue(
+                                "job_search_status",
+                                answers.job_search_status,
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-zinc-700">
+                              {formatOnboardingAnswerValue("job_goal", answers.job_goal)}
+                            </td>
+                            <td className="px-4 py-3 text-zinc-700">
+                              {formatOnboardingAnswerValue("phone", answers.phone)}
+                            </td>
+                            <td className="px-4 py-3 text-zinc-700">
+                              {formatOnboardingAnswerValue(
+                                "onboarding_location",
+                                answers.onboarding_location,
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-zinc-700">
+                              {formatOnboardingAnswerValue("contract_type", answers.contract_type)}
+                            </td>
+                            <td
+                              className="max-w-[180px] truncate px-4 py-3 text-zinc-700"
+                              title={formatOnboardingAnswerValue(
+                                "selected_roles",
+                                answers.selected_roles,
+                              )}
                             >
-                              {onboardingStatusLabel(progress)}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3">
-                            <span className="font-semibold text-zinc-800">{user.total_swipes || 0}</span>
-                            <p className="mt-0.5 text-xs text-zinc-400">{user.right_swipes || 0} liked</p>
-                          </td>
-                          <td className="px-4 py-3 text-zinc-700">{user.left_swipes || 0}</td>
-                          <td className="px-4 py-3 text-zinc-700">{user.total_applications || 0}</td>
-                          <td className="px-4 py-3 text-zinc-700">
-                            {fmtDuration(user.time_spent_minutes)}
-                            <p className="mt-0.5 text-xs text-zinc-400">{user.sessions_count || 0} sessions</p>
-                          </td>
-                          <td className="px-4 py-3 text-zinc-600">{fmtDate(user.last_login_at) || "—"}</td>
-                          <td className="px-4 py-3 text-zinc-600">{fmtDate(user.last_active_at || user.created_at)}</td>
-                        </tr>
-                        {expanded ? (
-                          <tr className="bg-zinc-50/80">
-                            <td colSpan={17} className="px-6 py-5">
-                              <div className="space-y-4">
-                                <div>
-                                  <h3 className="text-sm font-semibold text-zinc-900">Onboarding answers</h3>
-                                  <div className="mt-3">
-                                    <OnboardingAnswersGrid answers={answers} />
-                                  </div>
-                                </div>
-                                <div className="flex flex-wrap gap-4 text-xs text-zinc-500">
-                                  <span>CV uploaded: {user.cv_uploaded ? "Yes" : "No"}</span>
-                                  <span>Profile: {user.profile_completion || 0}%</span>
-                                  <span>Plan: {user.is_premium ? (user.plan || "Paid") : "Free"}</span>
-                                  {progress.started_at ? <span>Onboarding started: {fmtDate(progress.started_at)}</span> : null}
-                                  {progress.completed_at ? <span>Completed: {fmtDate(progress.completed_at)}</span> : null}
-                                  {user.last_swipe_at ? <span>Last swipe: {fmtDate(user.last_swipe_at)}</span> : null}
-                                </div>
-                              </div>
+                              {formatOnboardingAnswerValue(
+                                "selected_roles",
+                                answers.selected_roles,
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-zinc-700">{salaryLabel}</td>
+                            <td className="px-4 py-3 text-zinc-700">
+                              {formatOnboardingAnswerValue(
+                                "acquisition_source",
+                                answers.acquisition_source,
+                              )}
+                            </td>
+                            <td className="px-4 py-3">
+                              <span
+                                className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                                  progress.completed
+                                    ? "bg-emerald-100 text-emerald-700"
+                                    : progress.drop_off_step_label
+                                      ? "bg-amber-100 text-amber-700"
+                                      : "bg-zinc-100 text-zinc-500"
+                                }`}
+                              >
+                                {onboardingStatusLabel(progress)}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className="font-semibold text-zinc-800">
+                                {user.total_swipes || 0}
+                              </span>
+                              <p className="mt-0.5 text-xs text-zinc-400">
+                                {user.right_swipes || 0} liked
+                              </p>
+                            </td>
+                            <td className="px-4 py-3 text-zinc-700">{user.left_swipes || 0}</td>
+                            <td className="px-4 py-3 text-zinc-700">
+                              {user.total_applications || 0}
+                            </td>
+                            <td className="px-4 py-3 text-zinc-700">
+                              {fmtDuration(user.time_spent_minutes)}
+                              <p className="mt-0.5 text-xs text-zinc-400">
+                                {user.sessions_count || 0} sessions
+                              </p>
+                            </td>
+                            <td className="px-4 py-3 text-zinc-600">
+                              {fmtDate(user.last_login_at) || "—"}
+                            </td>
+                            <td className="px-4 py-3 text-zinc-600">
+                              {fmtDate(user.last_active_at || user.created_at)}
                             </td>
                           </tr>
-                        ) : null}
-                      </Fragment>
-                    );
-                  }) : (
-                    <tr><td className="px-4 py-8 text-center text-zinc-500" colSpan={17}>No users found.</td></tr>
+                          {expanded ? (
+                            <tr className="bg-zinc-50/80">
+                              <td colSpan={17} className="px-6 py-5">
+                                <div className="space-y-4">
+                                  <div>
+                                    <h3 className="text-sm font-semibold text-zinc-900">
+                                      Onboarding answers
+                                    </h3>
+                                    <div className="mt-3">
+                                      <OnboardingAnswersGrid answers={answers} />
+                                    </div>
+                                  </div>
+                                  <div className="flex flex-wrap gap-4 text-xs text-zinc-500">
+                                    <span>CV uploaded: {user.cv_uploaded ? "Yes" : "No"}</span>
+                                    <span>Profile: {user.profile_completion || 0}%</span>
+                                    <span>
+                                      Plan: {user.is_premium ? user.plan || "Paid" : "Free"}
+                                    </span>
+                                    {progress.started_at ? (
+                                      <span>
+                                        Onboarding started: {fmtDate(progress.started_at)}
+                                      </span>
+                                    ) : null}
+                                    {progress.completed_at ? (
+                                      <span>Completed: {fmtDate(progress.completed_at)}</span>
+                                    ) : null}
+                                    {user.last_swipe_at ? (
+                                      <span>Last swipe: {fmtDate(user.last_swipe_at)}</span>
+                                    ) : null}
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
+                          ) : null}
+                        </Fragment>
+                      );
+                    })
+                  ) : (
+                    <tr>
+                      <td className="px-4 py-8 text-center text-zinc-500" colSpan={17}>
+                        No users found.
+                      </td>
+                    </tr>
                   )}
                 </tbody>
               </table>

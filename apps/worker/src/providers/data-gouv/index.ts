@@ -17,20 +17,17 @@ export const dataGouvProviderJobSchema = z
   })
   .strict();
 
-export type DataGouvProviderJob = z.infer<
-  typeof dataGouvProviderJobSchema
->;
+export type DataGouvProviderJob = z.infer<typeof dataGouvProviderJobSchema>;
 
-export const dataGouvProvider =
-  defineProviderCore<"data_gouv", DataGouvProviderJob>({
-    provider: "data_gouv",
-    schema: dataGouvProviderJobSchema,
-    authorizationStatus: "unverified",
-    accessMethod:
-      "fixture-only data.gouv resource snapshots; live resource transport requires source-specific reviewed evidence",
-    rateLimit: {
-      requestsPerMinute: 1,
-      concurrency: 1,
-    },
-    shadowModeReady: false,
-  });
+export const dataGouvProvider = defineProviderCore<"data_gouv", DataGouvProviderJob>({
+  provider: "data_gouv",
+  schema: dataGouvProviderJobSchema,
+  authorizationStatus: "unverified",
+  accessMethod:
+    "fixture-only data.gouv resource snapshots; live resource transport requires source-specific reviewed evidence",
+  rateLimit: {
+    requestsPerMinute: 1,
+    concurrency: 1,
+  },
+  shadowModeReady: false,
+});

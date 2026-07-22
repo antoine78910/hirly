@@ -1,11 +1,4 @@
-import {
-  Briefcase,
-  FileText,
-  Layers,
-  Mail,
-  Sparkles,
-  User,
-} from "lucide-react";
+import { Briefcase, FileText, Layers, Mail, Sparkles, User } from "lucide-react";
 
 export function getDesktopNavItems(t) {
   return [

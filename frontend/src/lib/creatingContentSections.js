@@ -1,10 +1,7 @@
 /** Creating Content sub-chapters (mirrors backend training_module_content.py). */
 
 import { postingHoursBlocks } from "./trainingPostingHours";
-import {
-  INTRODUCE_HIRLY_RESOURCES_EN,
-  INTRODUCE_HIRLY_RESOURCES_FR,
-} from "./introIntroResources";
+import { INTRODUCE_HIRLY_RESOURCES_EN, INTRODUCE_HIRLY_RESOURCES_FR } from "./introIntroResources";
 
 /** Presentation video — Creating Content §1 (Filming / Guide de tournage). */
 export const CREATING_CONTENT_FILMING_VIDEO_URL =
@@ -52,7 +49,10 @@ export const CREATING_CONTENT_SECTIONS_EN = [
       },
       { type: "heading", level: 3, text: "3. Facial Expressions" },
       { type: "paragraph", text: "Your face sells the video, so exaggeration helps." },
-      { type: "paragraph", text: "Use: eyebrow raises, smirks, eye rolls, awkward reactions, dramatic expressions." },
+      {
+        type: "paragraph",
+        text: "Use: eyebrow raises, smirks, eye rolls, awkward reactions, dramatic expressions.",
+      },
       { type: "paragraph", text: "These create visual engagement even without sound." },
       { type: "heading", level: 3, text: "4. Pacing" },
       {
@@ -161,7 +161,7 @@ export const CREATING_CONTENT_SECTIONS_EN = [
         style: "bullet",
         items: [
           "Import all clips from filming — keep every angle you shot.",
-          "Split and delete long pauses, \"ums,\" mistakes, and dead air.",
+          'Split and delete long pauses, "ums," mistakes, and dead air.',
           "Keep only the high-energy takes. Tighter trims feel more professional instantly.",
         ],
       },
@@ -211,7 +211,7 @@ export const CREATING_CONTENT_SECTIONS_EN = [
         style: "bullet",
         items: [
           "Add a text hook in the first 1–2 seconds if the verbal hook needs reinforcement.",
-          "Pop up key phrases as you speak — especially for product demos (include \"Hirly\" on screen).",
+          'Pop up key phrases as you speak — especially for product demos (include "Hirly" on screen).',
           "Keep text inside safe zones — avoid the top and bottom UI overlay areas.",
         ],
       },
@@ -291,9 +291,15 @@ export const CREATING_CONTENT_SECTIONS_FR = [
       {
         type: "list",
         style: "bullet",
-        items: ["7–45 secondes au total", "Pas plus de 30 secondes pour les débutants ou comptes récents"],
+        items: [
+          "7–45 secondes au total",
+          "Pas plus de 30 secondes pour les débutants ou comptes récents",
+        ],
       },
-      { type: "paragraph", text: "Les vidéos courtes performent mieux pour la croissance et la rétention." },
+      {
+        type: "paragraph",
+        text: "Les vidéos courtes performent mieux pour la croissance et la rétention.",
+      },
       { type: "heading", level: 3, text: "6. Cadrage & plans caméra" },
       {
         type: "paragraph",

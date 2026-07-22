@@ -43,13 +43,7 @@ export function useAdminDark() {
 
 const DARK_STORAGE_KEY = "hirly-admin-dark";
 
-export default function AdminShell({
-  title,
-  subtitle,
-  actions,
-  children,
-  enableDarkMode = false,
-}) {
+export default function AdminShell({ title, subtitle, actions, children, enableDarkMode = false }) {
   const location = useLocation();
   const [dark, setDark] = useState(() => {
     if (typeof window === "undefined") return false;
@@ -89,7 +83,9 @@ export default function AdminShell({
               <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
                 {BRAND.NAME}
               </p>
-              <h1 className="font-display text-xl font-bold text-zinc-900 dark:text-zinc-100">Admin</h1>
+              <h1 className="font-display text-xl font-bold text-zinc-900 dark:text-zinc-100">
+                Admin
+              </h1>
             </div>
             <nav className="mt-6 space-y-1">
               {navItems.map((item) => {
@@ -98,11 +94,13 @@ export default function AdminShell({
                   <NavLink
                     key={item.to}
                     to={item.to}
-                    className={({ isActive }) => `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-semibold ${
-                      isActive
-                        ? "bg-linkedin text-white"
-                        : "text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
-                    }`}
+                    className={({ isActive }) =>
+                      `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-semibold ${
+                        isActive
+                          ? "bg-linkedin text-white"
+                          : "text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                      }`
+                    }
                   >
                     <Icon className="h-4 w-4" />
                     {item.label}
@@ -119,8 +117,12 @@ export default function AdminShell({
                   <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
                     {BRAND.NAME} Admin
                   </p>
-                  <h1 className="font-display text-2xl font-bold text-zinc-900 dark:text-zinc-100">{title}</h1>
-                  {subtitle ? <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">{subtitle}</p> : null}
+                  <h1 className="font-display text-2xl font-bold text-zinc-900 dark:text-zinc-100">
+                    {title}
+                  </h1>
+                  {subtitle ? (
+                    <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">{subtitle}</p>
+                  ) : null}
                 </div>
                 <div className="flex items-center gap-2">
                   {darkToggle}
@@ -132,11 +134,13 @@ export default function AdminShell({
                   <NavLink
                     key={item.to}
                     to={item.to}
-                    className={({ isActive }) => `shrink-0 rounded-full px-3 py-1.5 text-sm font-semibold ${
-                      isActive
-                        ? "bg-linkedin text-white"
-                        : "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
-                    }`}
+                    className={({ isActive }) =>
+                      `shrink-0 rounded-full px-3 py-1.5 text-sm font-semibold ${
+                        isActive
+                          ? "bg-linkedin text-white"
+                          : "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
+                      }`
+                    }
                   >
                     {item.label}
                   </NavLink>
@@ -154,7 +158,9 @@ export default function AdminShell({
 export function AdminAccessDenied() {
   return (
     <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-8 text-center dark:border-red-900/60 dark:bg-red-950/40">
-      <h2 className="font-display text-xl font-bold text-red-700 dark:text-red-300">Admin access denied</h2>
+      <h2 className="font-display text-xl font-bold text-red-700 dark:text-red-300">
+        Admin access denied
+      </h2>
       <p className="mt-2 text-sm text-red-600 dark:text-red-400">
         Your account is not allowed to view admin operations data.
       </p>

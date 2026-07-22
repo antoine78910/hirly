@@ -119,7 +119,10 @@ export const CONTENT_BANK_FR = [
         "Bien. Mieux. Le top. Édition candidature.\n\nBien. LinkedIn et Indeed.\nTes plateformes classiques. Plein d'offres, mais tu es en concurrence avec des centaines de candidats — souvent c'est hit or miss.\n\nMieux. Welcome to the Jungle / France Travail.\nPlus ciblé pour le marché français. Stages, alternances et premiers jobs, mais tu dois tout postuler toi-même.\n\nLe top. Hirly. Tu swipes à droite sur les jobs que tu veux et ça postule en auto à des centaines d'offres sans que tu fasses quoi que ce soit. CV et lettre adaptés par offre, soumis directement sur le site de l'entreprise.",
       ),
       heading(3, "Ressources"),
-      linkBlock("Logos : ouvrir le dossier Google Drive (logos Hirly officiels)", BRAND_ASSETS_DRIVE_URL),
+      linkBlock(
+        "Logos : ouvrir le dossier Google Drive (logos Hirly officiels)",
+        BRAND_ASSETS_DRIVE_URL,
+      ),
       warningGuideline(
         "Pointe chaque niveau (Bien, Mieux, Le top) à l'écran quand tu le dis. Utilise les PNG transparents du dossier partagé pour les incrustations — ne déforme pas, ne recolore pas et n'ajoute pas d'effets.",
       ),
@@ -155,7 +158,7 @@ export const CONTENT_BANK_FR = [
       ),
       heading(3, "Consignes"),
       warningGuideline(
-        'LinkedIn requis. Quand tu montres l\'app, affiche le mot « Hirly » en texte dans la vidéo → « Apparemment il y a cette app Hirly qui te permet de… »\nBouge-toi dans les 3 premières secondes et flip la caméra pour montrer LinkedIn → le mouvement accroche l\'œil.',
+        "LinkedIn requis. Quand tu montres l'app, affiche le mot « Hirly » en texte dans la vidéo → « Apparemment il y a cette app Hirly qui te permet de… »\nBouge-toi dans les 3 premières secondes et flip la caméra pour montrer LinkedIn → le mouvement accroche l'œil.",
       ),
       heading(3, "Légendes"),
       paragraph(
@@ -211,7 +214,7 @@ export const CONTENT_BANK_FR = [
       ]),
       heading(3, "Consignes"),
       warningGuideline(
-        'Fais une petite pause avant de dire « point com » pour l\'emphase. Voix PLATE/MONOTONE en disant « point com ».',
+        "Fais une petite pause avant de dire « point com » pour l'emphase. Voix PLATE/MONOTONE en disant « point com ».",
       ),
       heading(3, "Légende"),
       paragraph(

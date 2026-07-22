@@ -1,10 +1,5 @@
 import { Link } from "react-router-dom";
-import {
-  PRIVACY_PATH,
-  TERMS_PATH,
-  legalHref,
-  shouldOpenLegalInNewTab,
-} from "../../lib/legalPaths";
+import { PRIVACY_PATH, TERMS_PATH, legalHref, shouldOpenLegalInNewTab } from "../../lib/legalPaths";
 
 export default function LegalLink({ page = "terms", className = "", children }) {
   const isPrivacy = page === "privacy";
@@ -13,12 +8,7 @@ export default function LegalLink({ page = "terms", className = "", children }) 
 
   if (shouldOpenLegalInNewTab()) {
     return (
-      <a
-        href={href}
-        target="_blank"
-        rel="noopener noreferrer"
-        className={className}
-      >
+      <a href={href} target="_blank" rel="noopener noreferrer" className={className}>
         {children}
       </a>
     );

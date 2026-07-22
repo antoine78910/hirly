@@ -1,8 +1,5 @@
 import { z } from "zod";
-import {
-  DisabledProviderTransport,
-  type ProviderCore,
-} from "../core";
+import { DisabledProviderTransport, type ProviderCore } from "../core";
 import {
   FixtureOnlyAtsSourceAdapter,
   requireBoundAtsUrl,
@@ -17,25 +14,17 @@ import {
   type AtsTrialTransportOptions,
   type BoundAtsTrialTransport,
 } from "../ats-trial-transport";
-import {
-  approveAtsInventoryShadowScope,
-} from "../ats-inventory-readiness";
+import { approveAtsInventoryShadowScope } from "../ats-inventory-readiness";
 
 const greenhouseIdSchema = z.union([z.string(), z.number()]).transform(String);
 
 export const greenhouseRawJobSchema = z
   .object({
     id: greenhouseIdSchema,
-    internal_job_id: z
-      .union([z.string(), z.number()])
-      .transform(String)
-      .nullable()
-      .optional(),
+    internal_job_id: z.union([z.string(), z.number()]).transform(String).nullable().optional(),
     title: z.string().trim().min(1).max(512),
     updated_at: z.iso.datetime({ offset: true }).nullable().optional(),
-    location: z
-      .object({ name: z.string().trim().min(1).max(512) })
-      .passthrough(),
+    location: z.object({ name: z.string().trim().min(1).max(512) }).passthrough(),
     absolute_url: z.url(),
     content: z.string().max(100_000).default(""),
   })
@@ -46,28 +35,23 @@ export type GreenhouseRawJob = z.output<typeof greenhouseRawJobSchema>;
 const greenhouseTrialResponseSchema = z
   .object({
     jobs: z.array(greenhouseRawJobSchema),
-    meta: z.object({
-      total: z.number().int().nonnegative(),
-    }).strict(),
+    meta: z
+      .object({
+        total: z.number().int().nonnegative(),
+      })
+      .strict(),
   })
   .passthrough();
 
 // This is a fixture safety ceiling, not a claim about a vendor quota.
 const rateLimit = { requestsPerMinute: 1, concurrency: 1 } as const;
 
-function normalized(
-  rawValue: GreenhouseRawJob,
-  tenantKey: string,
-  countryCode: string,
-) {
+function normalized(rawValue: GreenhouseRawJob, tenantKey: string, countryCode: string) {
   const raw = greenhouseRawJobSchema.parse(rawValue);
   const absoluteUrl = requireBoundAtsUrl({
     value: raw.absolute_url,
     provider: "greenhouse",
-    allowedHosts: [
-      "boards.greenhouse.io",
-      "job-boards.greenhouse.io",
-    ],
+    allowedHosts: ["boards.greenhouse.io", "job-boards.greenhouse.io"],
     tenantKey,
     postingId: raw.id,
     pathKind: "greenhouse_job",
@@ -117,13 +101,11 @@ export const greenhouseProvider: ProviderCore<GreenhouseRawJob> = {
 };
 
 class GreenhouseFixtureSourceAdapter extends FixtureOnlyAtsSourceAdapter<GreenhouseRawJob> {
-  protected readonly documentationUrl =
-    "https://developer.greenhouse.io/job-board.html";
+  protected readonly documentationUrl = "https://developer.greenhouse.io/job-board.html";
 
   normalize(rawValue: GreenhouseRawJob, context: SourceContext) {
     const raw = greenhouseRawJobSchema.parse(rawValue);
-    const tenantKey =
-      context.source.tenantKey ?? context.source.sourceKey;
+    const tenantKey = context.source.tenantKey ?? context.source.sourceKey;
     const countryCode = context.source.countryCodes[0] ?? "ZZ";
     const job = normalized(raw, tenantKey, countryCode);
     return {
@@ -144,12 +126,7 @@ export function createGreenhouseFixtureSourceAdapter(
   rows: readonly GreenhouseRawJob[],
   fixturePolicyId: string,
 ): SourceAdapter<GreenhouseRawJob, AtsFixtureCursor, AtsFixtureScope> {
-  return new GreenhouseFixtureSourceAdapter(
-    "greenhouse",
-    rateLimit,
-    rows,
-    fixturePolicyId,
-  );
+  return new GreenhouseFixtureSourceAdapter("greenhouse", rateLimit, rows, fixturePolicyId);
 }
 
 export function createGreenhouseTrialTransport(
@@ -190,9 +167,9 @@ export function createGreenhouseTrialTransport(
   };
 }
 
-export function createGreenhouseShadowTransport(
-  options: AtsTrialTransportOptions,
-): ReturnType<typeof createGreenhouseTrialTransport> & {
+export function createGreenhouseShadowTransport(options: AtsTrialTransportOptions): ReturnType<
+  typeof createGreenhouseTrialTransport
+> & {
   readonly shadowOnly: true;
 } {
   return {

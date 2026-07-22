@@ -172,15 +172,21 @@ WHERE schemaname = 'public'
 ORDER BY indexname ASC
 `.trim();
 
-const MUTATING_SQL = /\b(insert|update|delete|merge|alter|drop|create|truncate|grant|revoke|copy|call)\b/i;
+const MUTATING_SQL =
+  /\b(insert|update|delete|merge|alter|drop|create|truncate|grant|revoke|copy|call)\b/i;
 
 export function assertReadOnlySql(sql: string): void {
   const normalized = sql.replace(/--.*$/gm, "").trim();
   if (!/^(with|select)\b/i.test(normalized) || MUTATING_SQL.test(normalized)) {
     throw new Error("matching readiness accepts read-only SELECT/CTE SQL only");
   }
-  for (const forbidden of ["provider_registry", "projection_reconciliation_tasks", "worker_tasks"]) {
-    if (normalized.includes(forbidden)) throw new Error(`matching readiness SQL references forbidden surface ${forbidden}`);
+  for (const forbidden of [
+    "provider_registry",
+    "projection_reconciliation_tasks",
+    "worker_tasks",
+  ]) {
+    if (normalized.includes(forbidden))
+      throw new Error(`matching readiness SQL references forbidden surface ${forbidden}`);
   }
 }
 
@@ -197,30 +203,43 @@ function rate(numerator: number, denominator: number): number {
 }
 
 function normalizedManifest(input: ReadinessManifest): ReadinessManifest {
-  if (input.schemaVersion !== "hirly.matching-supply-readiness.v1") throw new Error("unsupported schemaVersion");
+  if (input.schemaVersion !== "hirly.matching-supply-readiness.v1")
+    throw new Error("unsupported schemaVersion");
   const scope = {
     ...input.scope,
     countryCode: input.scope.countryCode.trim().toUpperCase(),
     cohortId: input.scope.cohortId.trim().toLowerCase(),
     roleFamilyId: input.scope.roleFamilyId.trim().toLowerCase(),
   };
-  if (!/^[A-Z]{2}$/.test(scope.countryCode)) throw new Error("scope.countryCode must be ISO alpha-2");
+  if (!/^[A-Z]{2}$/.test(scope.countryCode))
+    throw new Error("scope.countryCode must be ISO alpha-2");
   if (!input.thresholds.thresholdId.trim() || !input.thresholds.approvedBy.trim()) {
     throw new Error("thresholds require thresholdId and approvedBy");
   }
   for (const key of [
-    "minimumFreshVisibleCanonicalGroups", "maximumProjectionLagSeconds",
+    "minimumFreshVisibleCanonicalGroups",
+    "maximumProjectionLagSeconds",
   ] as const) {
     const value = input.thresholds[key];
-    if (!Number.isSafeInteger(value) || value < 0) throw new Error(`thresholds.${key} must be a non-negative integer`);
+    if (!Number.isSafeInteger(value) || value < 0)
+      throw new Error(`thresholds.${key} must be a non-negative integer`);
   }
   for (const key of [
-    "maximumBlockedRate", "maximumInvalidRate", "maximumDuplicateRate", "maximumActionExclusionRate",
+    "maximumBlockedRate",
+    "maximumInvalidRate",
+    "maximumDuplicateRate",
+    "maximumActionExclusionRate",
   ] as const) {
     const value = input.thresholds[key];
-    if (!Number.isFinite(value) || value < 0 || value > 1) throw new Error(`thresholds.${key} must be between zero and one`);
+    if (!Number.isFinite(value) || value < 0 || value > 1)
+      throw new Error(`thresholds.${key} must be between zero and one`);
   }
-  return { ...input, scope, evaluatedAt: iso(input.evaluatedAt, "evaluatedAt"), freshnessCutoff: iso(input.freshnessCutoff, "freshnessCutoff") };
+  return {
+    ...input,
+    scope,
+    evaluatedAt: iso(input.evaluatedAt, "evaluatedAt"),
+    freshnessCutoff: iso(input.freshnessCutoff, "freshnessCutoff"),
+  };
 }
 
 function planText(plan: unknown): string {
@@ -237,37 +256,70 @@ export function buildReadinessScorecard(
   const freshnessCutoffMs = Date.parse(manifest.freshnessCutoff);
   const ids = new Set(rows.map((row) => row.canonical_group_id));
   const canonicalGroups = ids.size;
-  const blockedIds = new Set(rows.filter((row) => row.fulfillment_route === "blocked" || row.lifecycle_status === "blocked").map((row) => row.canonical_group_id));
-  const invalidIds = new Set(rows.filter((row) => row.validation_status === "invalid").map((row) => row.canonical_group_id));
-  const duplicateIds = new Set(rows.filter((row) => Number(row.duplicate_count) > 1).map((row) => row.canonical_group_id));
-  const actionExcludedIds = new Set(rows.filter((row) => row.action_excluded).map((row) => row.canonical_group_id));
-  const visibleRows = rows.filter((row) =>
-    row.lifecycle_status === "active"
-    && row.validation_status === "valid"
-    && row.source_eligible
-    && row.policy_eligible
-    && row.fulfillment_route !== "blocked"
-    && Date.parse(row.last_seen_at) >= freshnessCutoffMs
-    && !row.action_excluded
+  const blockedIds = new Set(
+    rows
+      .filter((row) => row.fulfillment_route === "blocked" || row.lifecycle_status === "blocked")
+      .map((row) => row.canonical_group_id),
+  );
+  const invalidIds = new Set(
+    rows.filter((row) => row.validation_status === "invalid").map((row) => row.canonical_group_id),
+  );
+  const duplicateIds = new Set(
+    rows.filter((row) => Number(row.duplicate_count) > 1).map((row) => row.canonical_group_id),
+  );
+  const actionExcludedIds = new Set(
+    rows.filter((row) => row.action_excluded).map((row) => row.canonical_group_id),
+  );
+  const visibleRows = rows.filter(
+    (row) =>
+      row.lifecycle_status === "active" &&
+      row.validation_status === "valid" &&
+      row.source_eligible &&
+      row.policy_eligible &&
+      row.fulfillment_route !== "blocked" &&
+      Date.parse(row.last_seen_at) >= freshnessCutoffMs &&
+      !row.action_excluded,
   );
   const visibleIds = new Set(visibleRows.map((row) => row.canonical_group_id));
   const visibleByRoute = { auto: 0, assisted: 0, manual: 0, blocked: 0 };
   for (const row of visibleRows) visibleByRoute[row.fulfillment_route] += 1;
 
-  const projectedTimes = rows.flatMap((row) => [row.projected_at, row.latest_profile_projected_at].filter((value): value is string => Boolean(value))).map(Date.parse).filter(Number.isFinite);
+  const projectedTimes = rows
+    .flatMap((row) =>
+      [row.projected_at, row.latest_profile_projected_at].filter((value): value is string =>
+        Boolean(value),
+      ),
+    )
+    .map(Date.parse)
+    .filter(Number.isFinite);
   const latestProjection = projectedTimes.length === 0 ? null : Math.max(...projectedTimes);
-  const projectionLagSeconds = latestProjection === null ? null : Math.max(0, Math.floor((evaluatedAtMs - latestProjection) / 1000));
+  const projectionLagSeconds =
+    latestProjection === null
+      ? null
+      : Math.max(0, Math.floor((evaluatedAtMs - latestProjection) / 1000));
   const availableIndexes = [...new Set(queryEvidence.availableIndexes)].sort();
   const missingIndexes = REQUIRED_INDEXES.filter((index) => !availableIndexes.includes(index));
-  const queryPlanUsesRequiredIndex = REQUIRED_INDEXES.some((index) => planText(queryEvidence.plan).includes(index.toLowerCase()));
-  const evidenceComplete = queryEvidence.captured && missingIndexes.length === 0 && queryPlanUsesRequiredIndex && rows.length > 0;
+  const queryPlanUsesRequiredIndex = REQUIRED_INDEXES.some((index) =>
+    planText(queryEvidence.plan).includes(index.toLowerCase()),
+  );
+  const evidenceComplete =
+    queryEvidence.captured &&
+    missingIndexes.length === 0 &&
+    queryPlanUsesRequiredIndex &&
+    rows.length > 0;
 
   const exception = manifest.exception ?? null;
-  const thresholdActive = Date.parse(iso(manifest.thresholds.expiresAt, "thresholds.expiresAt")) > evaluatedAtMs;
-  const exceptionActive = exception !== null
-    && Boolean(exception.exceptionId.trim() && exception.approvedBy.trim() && exception.reason.trim())
-    && Date.parse(iso(exception.expiresAt, "exception.expiresAt")) > evaluatedAtMs;
-  const appliedMinimum = exceptionActive ? exception!.minimumFreshVisibleCanonicalGroups : manifest.thresholds.minimumFreshVisibleCanonicalGroups;
+  const thresholdActive =
+    Date.parse(iso(manifest.thresholds.expiresAt, "thresholds.expiresAt")) > evaluatedAtMs;
+  const exceptionActive =
+    exception !== null &&
+    Boolean(
+      exception.exceptionId.trim() && exception.approvedBy.trim() && exception.reason.trim(),
+    ) &&
+    Date.parse(iso(exception.expiresAt, "exception.expiresAt")) > evaluatedAtMs;
+  const appliedMinimum = exceptionActive
+    ? exception!.minimumFreshVisibleCanonicalGroups
+    : manifest.thresholds.minimumFreshVisibleCanonicalGroups;
   const rates = {
     blocked: rate(blockedIds.size, canonicalGroups),
     invalid: rate(invalidIds.size, canonicalGroups),
@@ -278,18 +330,32 @@ export function buildReadinessScorecard(
   if (!thresholdActive) failedGates.push("THRESHOLD_EXPIRED");
   if (!evidenceComplete) failedGates.push("INCOMPLETE_QUERY_EVIDENCE");
   if (visibleIds.size < appliedMinimum) failedGates.push("INSUFFICIENT_FRESH_VISIBLE_GROUPS");
-  if (rates.blocked > manifest.thresholds.maximumBlockedRate) failedGates.push("BLOCKED_RATE_EXCEEDED");
-  if (rates.invalid > manifest.thresholds.maximumInvalidRate) failedGates.push("INVALID_RATE_EXCEEDED");
-  if (rates.duplicate > manifest.thresholds.maximumDuplicateRate) failedGates.push("DUPLICATE_RATE_EXCEEDED");
-  if (rates.actionExclusion > manifest.thresholds.maximumActionExclusionRate) failedGates.push("ACTION_EXCLUSION_RATE_EXCEEDED");
-  if (projectionLagSeconds === null || projectionLagSeconds > manifest.thresholds.maximumProjectionLagSeconds) failedGates.push("PROJECTION_LAG_EXCEEDED");
+  if (rates.blocked > manifest.thresholds.maximumBlockedRate)
+    failedGates.push("BLOCKED_RATE_EXCEEDED");
+  if (rates.invalid > manifest.thresholds.maximumInvalidRate)
+    failedGates.push("INVALID_RATE_EXCEEDED");
+  if (rates.duplicate > manifest.thresholds.maximumDuplicateRate)
+    failedGates.push("DUPLICATE_RATE_EXCEEDED");
+  if (rates.actionExclusion > manifest.thresholds.maximumActionExclusionRate)
+    failedGates.push("ACTION_EXCLUSION_RATE_EXCEEDED");
+  if (
+    projectionLagSeconds === null ||
+    projectionLagSeconds > manifest.thresholds.maximumProjectionLagSeconds
+  )
+    failedGates.push("PROJECTION_LAG_EXCEEDED");
   if (exception && !exceptionActive) failedGates.push("EXCEPTION_EXPIRED_OR_INVALID");
 
-  const decision: ReadinessScorecard["decision"] = failedGates.length === 0 ? "enabled" : "disabled";
+  const decision: ReadinessScorecard["decision"] =
+    failedGates.length === 0 ? "enabled" : "disabled";
   const scorecardWithoutDigest = {
     schemaVersion: "hirly.matching-supply-readiness.v1" as const,
     decision,
-    decisionMode: decision === "disabled" ? "blocked" as const : exceptionActive ? "exception" as const : "threshold" as const,
+    decisionMode:
+      decision === "disabled"
+        ? ("blocked" as const)
+        : exceptionActive
+          ? ("exception" as const)
+          : ("threshold" as const),
     scope: manifest.scope,
     evaluatedAt: manifest.evaluatedAt,
     freshnessCutoff: manifest.freshnessCutoff,
@@ -318,7 +384,8 @@ export function buildReadinessScorecard(
     },
     exception: exceptionActive ? exception : null,
     failedGates,
-    rollbackReason: decision === "enabled" ? "NONE" : failedGates[0] ?? "UNKNOWN_READINESS_FAILURE",
+    rollbackReason:
+      decision === "enabled" ? "NONE" : (failedGates[0] ?? "UNKNOWN_READINESS_FAILURE"),
   };
   const digest = createHash("sha256").update(JSON.stringify(scorecardWithoutDigest)).digest("hex");
   return { ...scorecardWithoutDigest, digest };

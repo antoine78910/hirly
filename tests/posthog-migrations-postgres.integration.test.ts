@@ -1,27 +1,17 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
-import {
-  createDatabase,
-  type Database,
-} from "../packages/db/src";
+import { createDatabase, type Database } from "../packages/db/src";
 
 const databaseUrl = process.env.POSTHOG_MIGRATION_TEST_DATABASE_URL;
 const describePostgres = databaseUrl ? describe : describe.skip;
-const read = (path: string): string =>
-  readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
+const read = (path: string): string => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 
-const warehouseUp = read(
-  "backend/db/migrations/20260720001800_posthog_warehouse_containment.sql",
-);
+const warehouseUp = read("backend/db/migrations/20260720001800_posthog_warehouse_containment.sql");
 const warehouseDown = read(
   "backend/db/migrations/20260720001800_posthog_warehouse_containment.down.sql",
 );
-const ledgerUp = read(
-  "backend/db/migrations/20260720001900_posthog_migration_ledger.sql",
-);
-const ledgerDown = read(
-  "backend/db/migrations/20260720001900_posthog_migration_ledger.down.sql",
-);
+const ledgerUp = read("backend/db/migrations/20260720001900_posthog_migration_ledger.sql");
+const ledgerDown = read("backend/db/migrations/20260720001900_posthog_migration_ledger.down.sql");
 
 const fixtureSql = `
   CREATE TABLE public.users (

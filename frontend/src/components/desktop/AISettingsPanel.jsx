@@ -1,9 +1,4 @@
-import {
-  FileText,
-  ScanSearch,
-  ScrollText,
-  ShieldCheck,
-} from "lucide-react";
+import { FileText, ScanSearch, ScrollText, ShieldCheck } from "lucide-react";
 import { useAiSettings } from "../../hooks/useAiSettings";
 import { useDesktopTheme } from "./DesktopAppShell";
 import FinanceDemoSection from "../settings/FinanceDemoSection";
@@ -29,7 +24,9 @@ function SettingRow({ row, checked, onChange, isDark }) {
     >
       <div
         className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl border ${
-          isDark ? "border-zinc-800 bg-zinc-900 text-zinc-300" : "border-zinc-200 bg-zinc-50 text-zinc-600"
+          isDark
+            ? "border-zinc-800 bg-zinc-900 text-zinc-300"
+            : "border-zinc-200 bg-zinc-50 text-zinc-600"
         }`}
       >
         <Icon className="h-4 w-4" strokeWidth={1.9} />
@@ -67,16 +64,22 @@ export default function AISettingsPanel() {
     <div className="mx-auto max-w-3xl px-6 py-10 lg:px-10 lg:py-14">
       <div className="mb-8 space-y-5">
         <div>
-          <h1 className={`font-display text-3xl font-bold tracking-tight lg:text-4xl ${isDark ? "text-white" : "text-zinc-900"}`}>
+          <h1
+            className={`font-display text-3xl font-bold tracking-tight lg:text-4xl ${isDark ? "text-white" : "text-zinc-900"}`}
+          >
             {t("aiSettings.title")}
           </h1>
           <p className={`mt-2 text-base ${isDark ? "text-zinc-400" : "text-zinc-500"}`}>
             {t("aiSettings.subtitle")}
           </p>
-          <p className={`mt-1 max-w-xl text-sm leading-relaxed ${isDark ? "text-zinc-500" : "text-zinc-400"}`}>
+          <p
+            className={`mt-1 max-w-xl text-sm leading-relaxed ${isDark ? "text-zinc-500" : "text-zinc-400"}`}
+          >
             {t("aiSettings.description")}
           </p>
-          <p className={`mt-4 text-xs font-medium uppercase tracking-[0.14em] ${isDark ? "text-zinc-600" : "text-zinc-400"}`}>
+          <p
+            className={`mt-4 text-xs font-medium uppercase tracking-[0.14em] ${isDark ? "text-zinc-600" : "text-zinc-400"}`}
+          >
             {t("aiSettings.featuresOn", { n: activeCount })}
           </p>
         </div>
@@ -88,8 +91,12 @@ export default function AISettingsPanel() {
         }`}
         data-testid="ai-settings-card"
       >
-        <div className={`border-b px-5 py-3.5 sm:px-6 ${isDark ? "border-zinc-800" : "border-zinc-100"}`}>
-          <p className={`text-[11px] font-semibold uppercase tracking-[0.16em] ${isDark ? "text-zinc-500" : "text-zinc-400"}`}>
+        <div
+          className={`border-b px-5 py-3.5 sm:px-6 ${isDark ? "border-zinc-800" : "border-zinc-100"}`}
+        >
+          <p
+            className={`text-[11px] font-semibold uppercase tracking-[0.16em] ${isDark ? "text-zinc-500" : "text-zinc-400"}`}
+          >
             {t("aiSettings.automation")}
           </p>
         </div>

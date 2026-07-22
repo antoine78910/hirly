@@ -29,9 +29,7 @@ const LOGO_SIZE_CLASS = {
 
 function TrustLogo({ name, src, scale = "default" }) {
   const boxClass =
-    scale === "lg"
-      ? "h-10 w-[7.75rem] sm:h-12 sm:w-44"
-      : "h-9 w-[5.75rem] sm:h-12 sm:w-40";
+    scale === "lg" ? "h-10 w-[7.75rem] sm:h-12 sm:w-44" : "h-9 w-[5.75rem] sm:h-12 sm:w-40";
 
   return (
     <div className={`flex shrink-0 items-center justify-center ${boxClass}`}>
@@ -55,7 +53,12 @@ function TrustLogoTrack({ logos, suffix, hidden = false, loose = false }) {
       aria-hidden={hidden || undefined}
     >
       {logos.map((logo) => (
-        <TrustLogo key={`${logo.name}-${suffix}`} name={logo.name} src={logo.src} scale={logo.scale} />
+        <TrustLogo
+          key={`${logo.name}-${suffix}`}
+          name={logo.name}
+          src={logo.src}
+          scale={logo.scale}
+        />
       ))}
     </div>
   );

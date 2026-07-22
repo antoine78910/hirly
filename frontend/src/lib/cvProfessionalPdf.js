@@ -53,7 +53,16 @@ async function drawPhotoHeader(doc, { name, contact, setFill, setText, setDraw, 
     doc.circle(cx, photoY, photoR + 4, "F");
     const size = photoR * 2;
     const format = String(resolvedPhoto).includes("image/png") ? "PNG" : "JPEG";
-    doc.addImage(resolvedPhoto, format, cx - photoR, photoY - photoR, size, size, undefined, "FAST");
+    doc.addImage(
+      resolvedPhoto,
+      format,
+      cx - photoR,
+      photoY - photoR,
+      size,
+      size,
+      undefined,
+      "FAST",
+    );
     setDraw(doc, colors.photoRing);
     doc.setLineWidth(2);
     doc.circle(cx, photoY, photoR + 2, "S");
@@ -71,7 +80,9 @@ async function drawPhotoHeader(doc, { name, contact, setFill, setText, setDraw, 
   const headerLines = [contact.email, contact.phone, contact.location].filter(Boolean);
   let contactY = nameY - 2;
   headerLines.forEach((line) => {
-    doc.text(String(line), PRO_CV_PAGE.widthPt - PRO_CV_LAYOUT_PHOTO.marginX, contactY, { align: "right" });
+    doc.text(String(line), PRO_CV_PAGE.widthPt - PRO_CV_LAYOUT_PHOTO.marginX, contactY, {
+      align: "right",
+    });
     contactY += 13;
   });
 
@@ -93,7 +104,9 @@ function drawPlainHeader(doc, { name, contact, setFill, setText, setDraw }) {
   doc.setFont("helvetica", "normal");
   doc.setFontSize(9.5);
   setText(doc, colors.muted);
-  const contactLine = [contact.email, contact.phone, contact.location].filter(Boolean).join("   ·   ");
+  const contactLine = [contact.email, contact.phone, contact.location]
+    .filter(Boolean)
+    .join("   ·   ");
   if (contactLine) {
     doc.text(contactLine, marginX, y);
     y += 18;
@@ -106,17 +119,13 @@ function drawPlainHeader(doc, { name, contact, setFill, setText, setDraw }) {
   return PRO_CV_LAYOUT_PLAIN.contentStartPt;
 }
 
-function renderColumns(doc, {
-  contact,
-  resume,
-  colors,
-  layout,
-  contentStart,
-  helpers,
-}) {
+function renderColumns(doc, { contact, resume, colors, layout, contentStart, helpers }) {
   const { setFill, setText, setDraw, writeWrapped } = helpers;
   const accent = colors.accent;
-  const { leftX, leftW, rightX, rightW, dividerX } = getColumnPositions(PRO_CV_PAGE.widthPt, layout);
+  const { leftX, leftW, rightX, rightW, dividerX } = getColumnPositions(
+    PRO_CV_PAGE.widthPt,
+    layout,
+  );
   const pageBottom = PRO_CV_PAGE.heightPt - 36;
 
   const vScale = computeVerticalFillScale(
@@ -155,18 +164,20 @@ function renderColumns(doc, {
     ["Address", contact.location],
     ["Phone", contact.phone],
     ["Email", contact.email],
-  ].filter(([, value]) => value).forEach(([label, value]) => {
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(7.5);
-    setText(doc, accent);
-    doc.text(label.toUpperCase(), leftX, leftY);
-    leftY += gap(12);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(9.5);
-    setText(doc, colors.text);
-    leftY = writeWrapped(doc, String(value), leftX, leftY, leftW, lineH(13), pageBottom);
-    leftY += gap(10);
-  });
+  ]
+    .filter(([, value]) => value)
+    .forEach(([label, value]) => {
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(7.5);
+      setText(doc, accent);
+      doc.text(label.toUpperCase(), leftX, leftY);
+      leftY += gap(12);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9.5);
+      setText(doc, colors.text);
+      leftY = writeWrapped(doc, String(value), leftX, leftY, leftW, lineH(13), pageBottom);
+      leftY += gap(10);
+    });
 
   const socialLinks = [];
   if (contact.linkedin) socialLinks.push(contact.linkedin);
@@ -192,7 +203,15 @@ function renderColumns(doc, {
       doc.setFont("helvetica", "normal");
       doc.setFontSize(9.5);
       setText(doc, colors.text);
-      leftY = writeWrapped(doc, String(skill), leftX + 10, leftY, leftW - 10, lineH(13), pageBottom);
+      leftY = writeWrapped(
+        doc,
+        String(skill),
+        leftX + 10,
+        leftY,
+        leftW - 10,
+        lineH(13),
+        pageBottom,
+      );
       leftY += gap(4);
     });
   }
@@ -264,7 +283,15 @@ function renderColumns(doc, {
       setText(doc, colors.text);
       (entry.highlights || []).forEach((highlight) => {
         doc.text("•", rightX, rightY);
-        rightY = writeWrapped(doc, highlight, rightX + 10, rightY, rightW - 10, lineH(13), pageBottom);
+        rightY = writeWrapped(
+          doc,
+          highlight,
+          rightX + 10,
+          rightY,
+          rightW - 10,
+          lineH(13),
+          pageBottom,
+        );
         rightY += gap(4);
       });
       rightY += gap(8);

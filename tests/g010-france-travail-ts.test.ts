@@ -7,10 +7,7 @@ import {
   type FranceTravailCensusManifest,
 } from "../apps/job-ingestion-audit/src/france-travail-census";
 import { freezeFranceTravailCensusManifest } from "../apps/job-ingestion-audit/src/audit";
-import {
-  stableJobId,
-  toCanonicalJob,
-} from "../packages/ingestion/src";
+import { stableJobId, toCanonicalJob } from "../packages/ingestion/src";
 
 const manifest: FranceTravailCensusManifest = freezeFranceTravailCensusManifest({
   schemaVersion: 1,
@@ -22,21 +19,20 @@ const manifest: FranceTravailCensusManifest = freezeFranceTravailCensusManifest(
   publicationWindowRules: { boundary: "half-open", timezone: "UTC" },
   generatedAt: "2026-07-20T00:00:00.000Z",
   capRules: { pageSize: 2, maxRecordsPerPartition: 4, maxRetries: 1 },
-  partitions: [{
-    id: "fr-01",
-    parameters: { department: "01" },
-    publishedAfter: "2026-07-01",
-    publishedBefore: "2026-07-20",
-  }],
+  partitions: [
+    {
+      id: "fr-01",
+      parameters: { department: "01" },
+      publishedAfter: "2026-07-01",
+      publishedBefore: "2026-07-20",
+    },
+  ],
 });
 
 describe("France Travail TS migration boundary", () => {
   test("matches the frozen Python parity fixture for identity and fulfillment-critical fields", async () => {
     const fixture = JSON.parse(
-      await readFile(
-        new URL("./fixtures/g010/france-travail.json", import.meta.url),
-        "utf8",
-      ),
+      await readFile(new URL("./fixtures/g010/france-travail.json", import.meta.url), "utf8"),
     ) as {
       raw: unknown;
       expected: Record<string, unknown> & {
@@ -51,17 +47,19 @@ describe("France Travail TS migration boundary", () => {
 
     expect(job).toMatchObject({
       ...fixture.expected,
-      jobId: stableJobId(
-        fixture.expected.provider,
-        fixture.expected.externalId,
-      ),
+      jobId: stableJobId(fixture.expected.provider, fixture.expected.externalId),
     });
   });
 
   test("normalizes stable identity, FR country and deterministic apply fallback", () => {
     const normalized = franceTravailProvider.adapter.normalizeRaw({
-      id: "abc-1", intitule: "Développeur", description: "desc",
-      entreprise: {}, lieuTravail: {}, contact: {}, origineOffre: {},
+      id: "abc-1",
+      intitule: "Développeur",
+      description: "desc",
+      entreprise: {},
+      lieuTravail: {},
+      contact: {},
+      origineOffre: {},
     });
     expect(normalized.envelope.provider).toBe("france_travail");
     expect(normalized.envelope.externalId).toBe("abc-1");
@@ -82,9 +80,7 @@ describe("France Travail TS migration boundary", () => {
         const url = new URL(request instanceof Request ? request.url : String(request));
         calls.push(url.searchParams.get("range") ?? "");
         const start = Number((url.searchParams.get("range") ?? "0").split("-")[0]);
-        const rows = start === 0
-          ? [{ id: "1" }, { id: "2" }]
-          : [{ id: "2" }, { id: "3" }];
+        const rows = start === 0 ? [{ id: "1" }, { id: "2" }] : [{ id: "2" }, { id: "3" }];
         return new Response(JSON.stringify({ resultats: rows }), {
           status: 206,
           headers: { "content-range": "0-3/3" },
@@ -93,8 +89,10 @@ describe("France Travail TS migration boundary", () => {
     });
     expect(calls).toEqual(["0-1", "2-3"]);
     expect(result.partitions[0]).toMatchObject({
-      status: "complete", sourceReportedTotal: 3,
-      uniqueExternalIds: ["1", "2", "3"], duplicateRawRecords: 1,
+      status: "complete",
+      sourceReportedTotal: 3,
+      uniqueExternalIds: ["1", "2", "3"],
+      duplicateRawRecords: 1,
     });
   });
 

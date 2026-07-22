@@ -17,9 +17,7 @@
       "description": "Fixture synthétique sans donnée personnelle.",
       "contractType": "CDI",
       "status": "active",
-      "applyUrls": [
-        "https://apply.example.org/jobs/record-001"
-      ],
+      "applyUrls": ["https://apply.example.org/jobs/record-001"],
       "sourceUrl": "https://www.data.gouv.fr/fr/datasets/dataset-fixture/",
       "publishedAt": "2026-07-18T08:00:00.000Z",
       "expiresAt": "2026-08-18T08:00:00.000Z",
@@ -40,9 +38,7 @@
       "description": "Fixture expirée pour le contrôle du cycle de vie.",
       "contractType": "CDD",
       "status": "closed",
-      "applyUrls": [
-        "https://apply.example.org/jobs/record-002"
-      ],
+      "applyUrls": ["https://apply.example.org/jobs/record-002"],
       "sourceUrl": "https://www.data.gouv.fr/fr/datasets/dataset-fixture/",
       "publishedAt": "2026-06-18T08:00:00.000Z",
       "expiresAt": "2026-07-18T08:00:00.000Z",

@@ -26,7 +26,11 @@ export function buildOnlineOracleQuery(input: OnlineOracleQueryInput): string {
   const countryCode = input.countryCode.trim().toLocaleLowerCase();
   if (!role || role.length > 120) throw new Error("oracle role must contain 1-120 characters");
   if (!/^[a-z]{2}$/.test(countryCode)) throw new Error("oracle countryCode must be ISO alpha-2");
-  if (!Number.isSafeInteger(input.freshnessWindowDays) || input.freshnessWindowDays < 1 || input.freshnessWindowDays > 90) {
+  if (
+    !Number.isSafeInteger(input.freshnessWindowDays) ||
+    input.freshnessWindowDays < 1 ||
+    input.freshnessWindowDays > 90
+  ) {
     throw new Error("oracle freshnessWindowDays must be an integer from 1 to 90");
   }
   if (!Number.isSafeInteger(input.limit) || input.limit < 1 || input.limit > 1000) {
@@ -66,15 +70,26 @@ LIMIT ${input.limit}
 export const FEED_QUERY = buildOnlineOracleQuery(DEFAULT_ONLINE_ORACLE_INPUT);
 
 export function assertReadOnlySelect(query: string): void {
-  const normalized = query.replace(/--.*$/gm, "").trim().replace(/;+\s*$/, "");
+  const normalized = query
+    .replace(/--.*$/gm, "")
+    .trim()
+    .replace(/;+\s*$/, "");
   if (!/^select\b/i.test(normalized)) throw new Error("SQL evaluator accepts SELECT only");
-  if (/\b(insert|update|delete|merge|alter|drop|create|truncate|grant|revoke|copy|call)\b/i.test(normalized)) {
+  if (
+    /\b(insert|update|delete|merge|alter|drop|create|truncate|grant|revoke|copy|call)\b/i.test(
+      normalized,
+    )
+  ) {
     throw new Error("SQL evaluator rejected a mutating token");
   }
 }
 
 export function summarizeSamples(samples: number[]): {
-  minMs: number; maxMs: number; meanMs: number; p50Ms: number; p95Ms: number;
+  minMs: number;
+  maxMs: number;
+  meanMs: number;
+  p50Ms: number;
+  p95Ms: number;
 } {
   if (samples.length !== 5) throw new Error("exactly five SQL samples are required");
   const sorted = [...samples].sort((a, b) => a - b);
@@ -105,9 +120,11 @@ export async function evaluateSql(
         samples.push(performance.now() - started);
         plans.push(plan);
         const rows = await tx.unsafe<{ canonical_group_id: string }[]>(query);
-        resultDigests.push(createHash("sha256")
-          .update(JSON.stringify(rows.map((row) => row.canonical_group_id)))
-          .digest("hex"));
+        resultDigests.push(
+          createHash("sha256")
+            .update(JSON.stringify(rows.map((row) => row.canonical_group_id)))
+            .digest("hex"),
+        );
       }
       if (new Set(resultDigests).size !== 1) {
         throw new Error("feed result ID digest changed across evaluator samples");

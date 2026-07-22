@@ -151,7 +151,9 @@ export function formatDigitsWithGroups(digits, groups) {
 
 export function formatLocalPhoneDisplay(value, iso2, dial) {
   const format = getPhoneLocalFormat(iso2, dial);
-  const digits = String(value || "").replace(/\D/g, "").slice(0, format.maxDigits);
+  const digits = String(value || "")
+    .replace(/\D/g, "")
+    .slice(0, format.maxDigits);
   return formatDigitsWithGroups(digits, format.groups);
 }
 
@@ -166,7 +168,5 @@ export function isValidLocalPhoneLength(value, iso2, dial) {
 }
 
 export function getDefaultPhoneCountry(lang = "en") {
-  return lang === "fr"
-    ? { iso2: "FR", dial: "+33" }
-    : { iso2: "US", dial: "+1" };
+  return lang === "fr" ? { iso2: "FR", dial: "+33" } : { iso2: "US", dial: "+1" };
 }

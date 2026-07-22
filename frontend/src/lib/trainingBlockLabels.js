@@ -12,7 +12,7 @@ export const TRAINING_BLOCK_LABELS = {
     variation: "Variation",
     linkToAudio: "Link to Audio",
     warmUpIntro:
-      'Warm-Up Posts are creator-tested content formats from other Hirly creators that can help boost engagement and activity on your account. These posts are especially useful if you\'re just getting started in the program, or if you\'ve noticed your recent content is getting fewer views than usual and want to help "warm up" your account again.',
+      "Warm-Up Posts are creator-tested content formats from other Hirly creators that can help boost engagement and activity on your account. These posts are especially useful if you're just getting started in the program, or if you've noticed your recent content is getting fewer views than usual and want to help \"warm up\" your account again.",
     warmUpPayoutNote:
       "Please note that Warm Up Posts receive 50% of the standard content payout. Must add #aihirlyai to the caption for tracking purposes.",
     captionExamples: "Caption Examples",

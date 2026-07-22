@@ -1,11 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { describe, expect, test } from "bun:test";
 import type { SourceRegistryEntry } from "../packages/contracts/src";
-import {
-  stableJobId,
-  toCanonicalJob,
-  type SourceContext,
-} from "../packages/ingestion/src";
+import { stableJobId, toCanonicalJob, type SourceContext } from "../packages/ingestion/src";
 import {
   CSP_DATASET_ID,
   CSP_DATASET_URL,
@@ -33,10 +29,7 @@ interface CspFixture {
 
 async function fixture(): Promise<CspFixture> {
   return JSON.parse(
-    await readFile(
-      new URL("./fixtures/g012/csp.json", import.meta.url),
-      "utf8",
-    ),
+    await readFile(new URL("./fixtures/g012/csp.json", import.meta.url), "utf8"),
   ) as CspFixture;
 }
 
@@ -69,9 +62,7 @@ function context(entry = source()): SourceContext {
 describe("G012 disabled CSP fixture adapter", () => {
   test("stays fixture-only and policy-ineligible with explicit attribution", async () => {
     const data = await fixture();
-    const rows = data.initialSnapshot.map((row) =>
-      cspRawJobSchema.parse(row),
-    );
+    const rows = data.initialSnapshot.map((row) => cspRawJobSchema.parse(row));
     const adapter = createCspFixtureSourceAdapter(rows, fixturePolicyId);
 
     expect(data.provenance).toMatchObject({
@@ -114,15 +105,13 @@ describe("G012 disabled CSP fixture adapter", () => {
     const adapter = createCspFixtureSourceAdapter([row], fixturePolicyId);
     const first = adapter.normalize(row, context());
     const second = adapter.normalize(structuredClone(row), context());
-    const externalId =
-      `${CSP_DATASET_ID}:${CSP_QUALIFICATION_RESOURCE_ID}:csp-fixture-001`;
+    const externalId = `${CSP_DATASET_ID}:${CSP_QUALIFICATION_RESOURCE_ID}:csp-fixture-001`;
 
     expect(second).toEqual(first);
     expect(first).toMatchObject({
       externalId,
       canonicalSourceUrl: CSP_DATASET_URL,
-      canonicalApplyUrl:
-        "https://boards.greenhouse.io/administrationexemple/jobs/csp-fixture-001",
+      canonicalApplyUrl: "https://boards.greenhouse.io/administrationexemple/jobs/csp-fixture-001",
       atsPostingId: null,
       job: {
         countryCode: "FR",
@@ -146,8 +135,7 @@ describe("G012 disabled CSP fixture adapter", () => {
     expect(canonical.jobId).toBe(stableJobId("data_gouv", externalId));
     expect(canonical).toMatchObject({
       countryCode: "FR",
-      selectedApplyUrl:
-        "https://boards.greenhouse.io/administrationexemple/jobs/csp-fixture-001",
+      selectedApplyUrl: "https://boards.greenhouse.io/administrationexemple/jobs/csp-fixture-001",
       validationStatus: "valid",
       applyabilityTier: "A",
       applyFulfillmentStatus: "manual_ready",
@@ -159,13 +147,8 @@ describe("G012 disabled CSP fixture adapter", () => {
 
   test("uses complete immutable snapshots for lifecycle and removal evidence", async () => {
     const data = await fixture();
-    const initialRows = data.initialSnapshot.map((row) =>
-      cspRawJobSchema.parse(row),
-    );
-    const initial = createCspFixtureSourceAdapter(
-      initialRows,
-      fixturePolicyId,
-    );
+    const initialRows = data.initialSnapshot.map((row) => cspRawJobSchema.parse(row));
+    const initial = createCspFixtureSourceAdapter(initialRows, fixturePolicyId);
     const pages = [];
     for await (const page of initial.discover({
       source: source(),
@@ -199,10 +182,7 @@ describe("G012 disabled CSP fixture adapter", () => {
       reason: expect.stringContaining("explicit"),
     });
 
-    const afterRemoval = createCspFixtureSourceAdapter(
-      data.afterRemovalSnapshot,
-      fixturePolicyId,
-    );
+    const afterRemoval = createCspFixtureSourceAdapter(data.afterRemovalSnapshot, fixturePolicyId);
     const remaining = [];
     for await (const page of afterRemoval.discover({
       source: source(),
@@ -213,9 +193,7 @@ describe("G012 disabled CSP fixture adapter", () => {
       remaining.push(...page.items);
       expect(page.complete).toBeTrue();
     }
-    expect(remaining.map((row) => row.recordId)).toEqual([
-      "csp-fixture-001",
-    ]);
+    expect(remaining.map((row) => row.recordId)).toEqual(["csp-fixture-001"]);
   });
 
   test("rejects source-specific identity drift before generic ingestion", async () => {
@@ -228,16 +206,10 @@ describe("G012 disabled CSP fixture adapter", () => {
       }),
     ).toThrow();
     expect(() =>
-      createCspFixtureSourceAdapter(
-        [{ ...row, applyUrls: [] }],
-        fixturePolicyId,
-      ),
+      createCspFixtureSourceAdapter([{ ...row, applyUrls: [] }], fixturePolicyId),
     ).toThrow();
     expect(() =>
-      createCspFixtureSourceAdapter(
-        [{ ...row, countryCode: "BE" }],
-        fixturePolicyId,
-      ),
+      createCspFixtureSourceAdapter([{ ...row, countryCode: "BE" }], fixturePolicyId),
     ).toThrow();
     expect(row.sourceUrl).toBe(CSP_DATASET_URL);
   });

@@ -4,7 +4,14 @@ import { Loader2, MapPin } from "lucide-react";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { api } from "../lib/api";
-import { buildTypedLocationResult, isResolvedLocation, locationMatchesQuery, preferFranceLocationSearch, searchLocationsClient, sortLocationResults } from "../lib/locationSearch";
+import {
+  buildTypedLocationResult,
+  isResolvedLocation,
+  locationMatchesQuery,
+  preferFranceLocationSearch,
+  searchLocationsClient,
+  sortLocationResults,
+} from "../lib/locationSearch";
 import { isFrench, translateLocationLabel } from "../lib/localizedDisplay";
 
 const EMPTY_SUGGESTIONS = [];
@@ -95,30 +102,30 @@ export default function PlacesAutocomplete({
   const selectedLabel = (selectedLocation?.location_label || "").trim();
   // Only treat as "picked" when the input still matches the saved label.
   // If the user edits the text, search again even if the parent hasn't cleared yet.
-  const hasSelection = isResolvedLocation(selectedLocation, trimmedValue)
-    || (!requireSelection && Boolean(selectedLabel && selectedLabel === trimmedValue));
+  const hasSelection =
+    isResolvedLocation(selectedLocation, trimmedValue) ||
+    (!requireSelection && Boolean(selectedLabel && selectedLabel === trimmedValue));
 
-  const showSearchDropdown = focused
-    && trimmedValue.length >= 2
-    && !hasSelection;
-  const showPopularDropdown = inline
-    && focused
-    && !trimmedValue
-    && visibleSuggestions.length > 0;
+  const showSearchDropdown = focused && trimmedValue.length >= 2 && !hasSelection;
+  const showPopularDropdown = inline && focused && !trimmedValue && visibleSuggestions.length > 0;
   const showDropdown = showSearchDropdown || showPopularDropdown;
 
-  const labelClass = light ? "text-sm font-semibold text-zinc-700" : "text-sm font-semibold text-zinc-200";
+  const labelClass = light
+    ? "text-sm font-semibold text-zinc-700"
+    : "text-sm font-semibold text-zinc-200";
   const optionalClass = light ? "text-zinc-400 font-normal" : "text-sprout-dim font-normal";
   const inputClass = inline
     ? `h-auto min-h-0 border-0 bg-transparent p-0 pr-6 text-sm shadow-none focus-visible:ring-0 ${
-      light ? "text-zinc-900 placeholder:text-zinc-400" : "text-white placeholder:text-sprout-dim"
-    }`
+        light ? "text-zinc-900 placeholder:text-zinc-400" : "text-white placeholder:text-sprout-dim"
+      }`
     : light
-    ? `h-11 rounded-xl bg-white border-zinc-200 text-zinc-900 placeholder:text-zinc-400 pr-10 ${focused ? "border-linkedin ring-2 ring-linkedin/20" : ""}`
-    : `h-11 rounded-xl bg-sprout-surface-2 border-sprout-border text-white placeholder:text-sprout-dim pr-10`;
+      ? `h-11 rounded-xl bg-white border-zinc-200 text-zinc-900 placeholder:text-zinc-400 pr-10 ${focused ? "border-linkedin ring-2 ring-linkedin/20" : ""}`
+      : `h-11 rounded-xl bg-sprout-surface-2 border-sprout-border text-white placeholder:text-sprout-dim pr-10`;
   const iconClass = inline
     ? "hidden"
-    : light ? "w-4 h-4 text-zinc-400 absolute right-3 top-3.5" : "w-4 h-4 text-sprout-muted absolute right-3 top-3.5";
+    : light
+      ? "w-4 h-4 text-zinc-400 absolute right-3 top-3.5"
+      : "w-4 h-4 text-sprout-muted absolute right-3 top-3.5";
   const helperClass = light ? "text-xs text-zinc-500" : "text-xs text-sprout-muted";
   const dropdownClass = light
     ? "scrollbar-thin rounded-2xl border border-zinc-200 bg-white shadow-xl overflow-hidden max-h-60 overflow-y-auto"
@@ -129,11 +136,14 @@ export default function PlacesAutocomplete({
   const chipOnClass = "selection-chip-on";
   const chipOffClass = light ? "selection-chip-off" : "selection-chip-off bg-zinc-50";
 
-  const applyLocation = useCallback((location) => {
-    setResults([]);
-    onSelect(location);
-    onInputChange(location.location_label);
-  }, [onInputChange, onSelect]);
+  const applyLocation = useCallback(
+    (location) => {
+      setResults([]);
+      onSelect(location);
+      onInputChange(location.location_label);
+    },
+    [onInputChange, onSelect],
+  );
 
   // Compute dropdown position using pageY offsets (works with mobile keyboard scroll)
   const updateDropdownRect = useCallback(() => {
@@ -183,7 +193,9 @@ export default function PlacesAutocomplete({
     const requestId = ++requestIdRef.current;
     const localMatches = localSuggestionResults(trimmedValue, suggestions, 10);
     const typedNow = requireSelection ? [] : buildTypedLocationResult(trimmedValue);
-    const immediate = dedupeResults(sortLocationResults(trimmedValue, [...localMatches, ...typedNow]));
+    const immediate = dedupeResults(
+      sortLocationResults(trimmedValue, [...localMatches, ...typedNow]),
+    );
     setResults(immediate);
     setSearching(true);
 
@@ -224,11 +236,9 @@ export default function PlacesAutocomplete({
 
         // Merge: backend first (higher quality), then Photon; typed fallback only when allowed
         const typed = requireSelection ? [] : buildTypedLocationResult(trimmedValue);
-        const merged = dedupeResults(sortLocationResults(trimmedValue, [
-          ...backendResults,
-          ...photonResults,
-          ...typed,
-        ]));
+        const merged = dedupeResults(
+          sortLocationResults(trimmedValue, [...backendResults, ...photonResults, ...typed]),
+        );
         setResults(merged.length > 0 ? merged.slice(0, 12) : immediate);
       } catch (error) {
         if (requestId !== requestIdRef.current || isAbort(error)) return;
@@ -255,7 +265,9 @@ export default function PlacesAutocomplete({
           ? "Appuyez sur une suggestion ou gardez votre saisie telle quelle."
           : "Choisissez une suggestion ou gardez votre saisie telle quelle.";
       }
-      return optional ? "Facultatif — toute ville ou région acceptée" : "Tapez 2 lettres pour voir des suggestions";
+      return optional
+        ? "Facultatif — toute ville ou région acceptée"
+        : "Tapez 2 lettres pour voir des suggestions";
     }
     if (requireSelection && trimmedValue && !hasSelection) {
       return "Pick a city from the suggestions list.";
@@ -389,9 +401,12 @@ export default function PlacesAutocomplete({
   return (
     <div className={inline ? "min-w-0 flex-1" : "space-y-1.5"} data-testid={testId}>
       {!hideLabel && !inline && label ? (
-      <Label className={labelClass}>
-        {label} {optional && <span className={optionalClass}>({isFrench(lang) ? "facultatif" : "optional"})</span>}
-      </Label>
+        <Label className={labelClass}>
+          {label}{" "}
+          {optional && (
+            <span className={optionalClass}>({isFrench(lang) ? "facultatif" : "optional"})</span>
+          )}
+        </Label>
       ) : null}
       <div className="relative" ref={anchorRef}>
         <Input
@@ -425,7 +440,9 @@ export default function PlacesAutocomplete({
               >
                 {showPopularDropdown ? (
                   <>
-                    <p className={`px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.14em] ${light ? "text-zinc-400" : "text-sprout-muted"}`}>
+                    <p
+                      className={`px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.14em] ${light ? "text-zinc-400" : "text-sprout-muted"}`}
+                    >
                       {isFrench(lang) ? "Lieux populaires" : "Popular locations"}
                     </p>
                     {visibleSuggestions.slice(0, maxSuggestions || 10).map((suggestion) => (
@@ -438,7 +455,9 @@ export default function PlacesAutocomplete({
                         data-testid={`${testId}-popular-option`}
                         role="option"
                       >
-                        <MapPin className={`w-4 h-4 shrink-0 mt-0.5 ${light ? "text-linkedin" : "text-sprout-mint"}`} />
+                        <MapPin
+                          className={`w-4 h-4 shrink-0 mt-0.5 ${light ? "text-linkedin" : "text-sprout-mint"}`}
+                        />
                         <span className="block">{translateLocationLabel(suggestion, lang)}</span>
                       </button>
                     ))}
@@ -469,14 +488,20 @@ export default function PlacesAutocomplete({
                         data-testid={`${testId}-use-custom`}
                         role="option"
                       >
-                        <MapPin className={`w-4 h-4 shrink-0 mt-0.5 ${light ? "text-linkedin" : "text-sprout-mint"}`} />
+                        <MapPin
+                          className={`w-4 h-4 shrink-0 mt-0.5 ${light ? "text-linkedin" : "text-sprout-mint"}`}
+                        />
                         <span className="block">
-                          {isFrench(lang) ? `Utiliser « ${trimmedValue} »` : `Use "${trimmedValue}"`}
+                          {isFrench(lang)
+                            ? `Utiliser « ${trimmedValue} »`
+                            : `Use "${trimmedValue}"`}
                         </span>
                       </button>
                     ) : null}
                     {searching && results.length === 0 && (
-                      <div className={`px-4 py-3 text-sm ${light ? "text-zinc-500" : "text-zinc-500"}`}>
+                      <div
+                        className={`px-4 py-3 text-sm ${light ? "text-zinc-500" : "text-zinc-500"}`}
+                      >
                         {isFrench(lang) ? "Recherche..." : "Searching..."}
                       </div>
                     )}
@@ -492,11 +517,17 @@ export default function PlacesAutocomplete({
                           data-testid={`${testId}-option`}
                           role="option"
                         >
-                          <MapPin className={`w-4 h-4 shrink-0 mt-0.5 ${light ? "text-linkedin" : "text-sprout-mint"}`} />
+                          <MapPin
+                            className={`w-4 h-4 shrink-0 mt-0.5 ${light ? "text-linkedin" : "text-sprout-mint"}`}
+                          />
                           <span className="min-w-0">
-                            <span className="block">{translateLocationLabel(result.label, lang)}</span>
+                            <span className="block">
+                              {translateLocationLabel(result.label, lang)}
+                            </span>
                             {badge ? (
-                              <span className={`block text-xs mt-0.5 ${light ? "text-zinc-400" : "text-zinc-500"}`}>
+                              <span
+                                className={`block text-xs mt-0.5 ${light ? "text-zinc-400" : "text-zinc-500"}`}
+                              >
                                 {badge}
                               </span>
                             ) : null}
@@ -514,7 +545,9 @@ export default function PlacesAutocomplete({
       {!inline ? <p className={helperClass}>{helperText}</p> : null}
       {!inline && visibleSuggestions.length > 0 && !trimmedValue && (
         <div className="pt-0.5">
-          <p className={`text-[11px] font-medium mb-1.5 ${light ? "text-zinc-500" : "text-sprout-muted"}`}>
+          <p
+            className={`text-[11px] font-medium mb-1.5 ${light ? "text-zinc-500" : "text-sprout-muted"}`}
+          >
             {isFrench(lang) ? "Lieux populaires" : "Popular locations"}
           </p>
           <div className={`flex flex-wrap ${compactChips ? "gap-1.5" : "gap-2"}`}>

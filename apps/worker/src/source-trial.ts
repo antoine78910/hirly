@@ -23,10 +23,7 @@ import {
   type LeverRawJob,
   type LeverTrialRegion,
 } from "./providers/lever";
-import {
-  AtsTrialTransportError,
-  type AtsTrialFetch,
-} from "./providers/ats-trial-transport";
+import { AtsTrialTransportError, type AtsTrialFetch } from "./providers/ats-trial-transport";
 
 export interface SourceTrialCandidate {
   candidateKey: string;
@@ -232,10 +229,7 @@ export async function persistAtsSourceTrial(input: {
         stopReason: failure.stopReason,
       });
     } catch (evidenceError) {
-      throw new AggregateError(
-        [error, evidenceError],
-        "trial_failure_evidence_write_failed",
-      );
+      throw new AggregateError([error, evidenceError], "trial_failure_evidence_write_failed");
     }
     throw error;
   }
@@ -268,10 +262,7 @@ function classifyTrialFailure(
   }
   if (error instanceof AtsTrialTransportError) {
     return {
-      status:
-        error.classification === "budget_exceeded"
-          ? "budget_exhausted"
-          : "failed",
+      status: error.classification === "budget_exceeded" ? "budget_exhausted" : "failed",
       stopReason: error.classification,
     };
   }
@@ -279,9 +270,7 @@ function classifyTrialFailure(
   if (message.startsWith("trial_budget_exceeded:")) {
     return {
       status: "budget_exhausted",
-      stopReason: sourceTrialBudgetStopReasonSchema.parse(
-        message.slice("trial_".length),
-      ),
+      stopReason: sourceTrialBudgetStopReasonSchema.parse(message.slice("trial_".length)),
     };
   }
   if (message === "trial_policy_window_invalid") {
@@ -334,16 +323,12 @@ function normalizeTrialRow(
   }
   return {
     ...normalized,
-    countryCode: normalized.countryCode === "ZZ"
-      ? manifest.countryCodes[0]
-      : normalized.countryCode,
+    countryCode:
+      normalized.countryCode === "ZZ" ? manifest.countryCodes[0] : normalized.countryCode,
   };
 }
 
-function assertTrialIsCurrent(
-  manifest: SourceTrialManifest,
-  now: Date,
-): void {
+function assertTrialIsCurrent(manifest: SourceTrialManifest, now: Date): void {
   const requestedAt = new Date(manifest.requestedAt);
   const expiresAt = new Date(manifest.expiresAt);
   if (requestedAt > now) throw new Error("trial_policy_not_started");

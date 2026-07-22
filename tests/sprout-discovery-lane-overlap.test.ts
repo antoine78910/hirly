@@ -2,10 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 
 const migration = readFileSync(
-  new URL(
-    "../backend/db/migrations/20260721003300_sprout_occurrence_overlap.sql",
-    import.meta.url,
-  ),
+  new URL("../backend/db/migrations/20260721003300_sprout_occurrence_overlap.sql", import.meta.url),
   "utf8",
 );
 

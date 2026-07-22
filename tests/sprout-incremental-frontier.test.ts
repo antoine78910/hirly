@@ -30,19 +30,23 @@ const sourceId = "11111111-1111-4111-8111-111111111111";
 
 describe("Sprout incremental frontier cycles", () => {
   test("allows only an explicit first task to rewind a bounded scan", () => {
-    expect(sproutTaskPayloadSchema.parse({
-      sourceId,
-      mode: "incremental",
-      maxResponseBytes: 2_000_000,
-      cycleStart: true,
-      pageCount: 0,
-      maxPages: 10,
-    })).toMatchObject({ cycleStart: true, pageCount: 0, maxPages: 10 });
-    expect(sproutTaskPayloadSchema.parse({
-      sourceId,
-      mode: "backfill",
-      maxResponseBytes: 2_000_000,
-    })).toMatchObject({ cycleStart: false, pageCount: 0, maxPages: null });
+    expect(
+      sproutTaskPayloadSchema.parse({
+        sourceId,
+        mode: "incremental",
+        maxResponseBytes: 2_000_000,
+        cycleStart: true,
+        pageCount: 0,
+        maxPages: 10,
+      }),
+    ).toMatchObject({ cycleStart: true, pageCount: 0, maxPages: 10 });
+    expect(
+      sproutTaskPayloadSchema.parse({
+        sourceId,
+        mode: "backfill",
+        maxResponseBytes: 2_000_000,
+      }),
+    ).toMatchObject({ cycleStart: false, pageCount: 0, maxPages: null });
   });
 
   test("fences the rewind by the active task and writer claim, then enables one hourly schedule", () => {
@@ -88,7 +92,9 @@ const globalFrontierMigration = readFileSync(
 
 test("Sprout global frontier migration uses source-scoped countries and waits for the matching deploy", () => {
   expect(globalFrontierMigration).toContain("('US'),('DE'),('GB'),('CA'),('AU'),('IN')");
-  expect(globalFrontierMigration).toContain("worker_private.career_source_runnable(p_source_id, upper(p_country_code), p_mode)");
+  expect(globalFrontierMigration).toContain(
+    "worker_private.career_source_runnable(p_source_id, upper(p_country_code), p_mode)",
+  );
   expect(globalFrontierMigration).toContain("SET career_source_id=p_source_id");
   expect(globalFrontierMigration).toContain("set_schedule_enabled");
   expect(globalFrontierMigration).toContain("false, clock_timestamp()");

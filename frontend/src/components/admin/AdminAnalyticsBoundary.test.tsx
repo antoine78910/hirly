@@ -1,12 +1,11 @@
 import { act, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 
-import AdminAnalyticsBoundary, {
-  validatedAdminPostHogUrl,
-} from "./AdminAnalyticsBoundary";
+import AdminAnalyticsBoundary, { validatedAdminPostHogUrl } from "./AdminAnalyticsBoundary";
 
-(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean })
-  .IS_REACT_ACT_ENVIRONMENT = true;
+(
+  globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
+).IS_REACT_ACT_ENVIRONMENT = true;
 
 jest.mock("../../lib/analytics", () => ({ trackEvent: jest.fn() }));
 jest.mock("./AdminShell", () => ({
@@ -78,18 +77,12 @@ describe("AdminAnalyticsBoundary", () => {
     renderBoundary();
 
     expect(container.querySelector("[data-testid=legacy]")).toBeNull();
-    const external = container.querySelector<HTMLAnchorElement>(
-      'a[target="_blank"]',
-    );
-    expect(external?.href).toBe(
-      "https://eu.posthog.com/project/228425/dashboard/834897",
-    );
+    const external = container.querySelector<HTMLAnchorElement>('a[target="_blank"]');
+    expect(external?.href).toBe("https://eu.posthog.com/project/228425/dashboard/834897");
     expect(external?.rel).toContain("noopener");
     expect(container.querySelector("iframe")).toBeNull();
     expect(container.querySelector('a[href="/admin/overview"]')).not.toBeNull();
-    expect(
-      container.querySelector('a[href="/admin/applications"]'),
-    ).not.toBeNull();
+    expect(container.querySelector('a[href="/admin/applications"]')).not.toBeNull();
   });
 
   test("fails closed to legacy for unsafe or secret-bearing URLs", () => {

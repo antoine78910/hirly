@@ -93,7 +93,9 @@ export default function SearchRadiusSlider({
     <section data-testid={testId}>
       <div className="mb-3 flex items-center justify-between gap-3">
         <h3 className="font-display text-2xl font-bold text-inherit">{label}</h3>
-        <span className="text-sm font-semibold text-linkedin">{formatSearchRadius(displayValue)}</span>
+        <span className="text-sm font-semibold text-linkedin">
+          {formatSearchRadius(displayValue)}
+        </span>
       </div>
       <Slider
         min={MIN_SEARCH_RADIUS_KM}

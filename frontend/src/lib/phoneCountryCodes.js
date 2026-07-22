@@ -215,9 +215,7 @@ function getDisplayNames(lang) {
 export function countryFlag(iso2) {
   const code = String(iso2 || "").toUpperCase();
   if (code.length !== 2) return "";
-  return String.fromCodePoint(
-    ...[...code].map((char) => 0x1f1e6 - 65 + char.charCodeAt(0)),
-  );
+  return String.fromCodePoint(...[...code].map((char) => 0x1f1e6 - 65 + char.charCodeAt(0)));
 }
 
 export function getCountryLabel(iso2, lang = "en") {
@@ -250,7 +248,9 @@ export function resolveCountryByDial(dial, lang = "en") {
 }
 
 export function filterPhoneCountries(query, lang = "en") {
-  const q = String(query || "").trim().toLowerCase();
+  const q = String(query || "")
+    .trim()
+    .toLowerCase();
   const withLabels = PHONE_COUNTRIES.map((country) => ({
     ...country,
     label: getCountryLabel(country.iso2, lang),
@@ -262,10 +262,10 @@ export function filterPhoneCountries(query, lang = "en") {
     const dialDigits = country.dial.replace(/\D/g, "");
     const qDigits = q.replace(/\D/g, "");
     return (
-      country.label.toLowerCase().includes(q)
-      || country.iso2.toLowerCase().includes(q)
-      || country.dial.includes(q)
-      || (qDigits && dialDigits.startsWith(qDigits))
+      country.label.toLowerCase().includes(q) ||
+      country.iso2.toLowerCase().includes(q) ||
+      country.dial.includes(q) ||
+      (qDigits && dialDigits.startsWith(qDigits))
     );
   });
 }

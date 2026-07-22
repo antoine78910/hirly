@@ -55,11 +55,9 @@ describe("Sprout checkpoint safety", () => {
   test("accepts only a rebuilt numeric or relative-query offset", () => {
     expect(parseSproutCheckpointOffset(20)).toBe(20);
     expect(parseSproutCheckpointOffset("?offset=20&limit=10")).toBe(20);
-    expect(() =>
-      parseSproutCheckpointOffset(
-        "https://api.usesprout.com/jobs?offset=20",
-      ),
-    ).toThrow("sprout_checkpoint_untrusted_next");
+    expect(() => parseSproutCheckpointOffset("https://api.usesprout.com/jobs?offset=20")).toThrow(
+      "sprout_checkpoint_untrusted_next",
+    );
     expect(() => parseSproutCheckpointOffset("?offset=-1")).toThrow(
       "sprout_checkpoint_invalid_next_offset",
     );
@@ -238,9 +236,7 @@ describe("Sprout activation and bounded page runtime", () => {
         maxResponseBytes: 1_024,
       });
 
-      await expect(promise).rejects.toThrow(
-        "sprout_release_evidence_incomplete",
-      );
+      await expect(promise).rejects.toThrow("sprout_release_evidence_incomplete");
       expect(fetches).toBe(0);
       expect(commits).toBe(0);
     }
@@ -265,7 +261,10 @@ describe("Sprout activation and bounded page runtime", () => {
         async fetchPage(input) {
           transportInputs.push(input);
           return {
-            items: [{ id: "1", countries: ["FR"] }, { id: "2", countries: ["FR"] }],
+            items: [
+              { id: "1", countries: ["FR"] },
+              { id: "2", countries: ["FR"] },
+            ],
             next: "?offset=2&limit=2",
             sourceReportedTotal: 3,
             responseBytes: 256,
@@ -338,9 +337,7 @@ describe("Sprout activation and bounded page runtime", () => {
       maxResponseBytes: 1_024,
     });
 
-    await expect(promise).rejects.toThrow(
-      "sprout_canary_must_start_at_initial_checkpoint",
-    );
+    await expect(promise).rejects.toThrow("sprout_canary_must_start_at_initial_checkpoint");
     expect(fetches).toBe(0);
 
     expect(() => assertSproutActivationReady(activeRegistration(), "canary")).toThrow(
@@ -358,9 +355,7 @@ describe("Sprout activation and bounded page runtime", () => {
         transport: {
           async fetchPage() {
             return {
-              items: [
-                { countries: scenario === "country" ? ["DE"] : ["FR"] },
-              ],
+              items: [{ countries: scenario === "country" ? ["DE"] : ["FR"] }],
               next: scenario === "cursor" ? "?offset=2" : "?offset=1",
               sourceReportedTotal: 3,
               responseBytes: scenario === "bytes" ? 2_000 : 100,

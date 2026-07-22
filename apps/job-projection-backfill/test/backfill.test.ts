@@ -22,9 +22,8 @@ const candidate = (
 function repository(rows: ProjectionBackfillCandidate[]) {
   const enqueued: string[] = [];
   const repo: ProjectionBackfillRepository = {
-    listCandidates: async ({ cursor, limit }) => rows
-      .filter((row) => cursor === null || row.canonicalGroupId > cursor)
-      .slice(0, limit),
+    listCandidates: async ({ cursor, limit }) =>
+      rows.filter((row) => cursor === null || row.canonicalGroupId > cursor).slice(0, limit),
     enqueue: async (row) => {
       if (enqueued.includes(row.canonicalGroupId)) return "existing";
       enqueued.push(row.canonicalGroupId);
@@ -50,7 +49,9 @@ describe("bounded projection backfill", () => {
     expect(progress.selected).toBe(2);
     expect(progress.enqueued).toBe(2);
     expect(enqueued).toEqual([candidate(1).canonicalGroupId, candidate(2).canonicalGroupId]);
-    await expect(runProjectionBackfill({ repository: repo, batchSize: 501 })).rejects.toThrow("invalid_batch_size");
+    await expect(runProjectionBackfill({ repository: repo, batchSize: 501 })).rejects.toThrow(
+      "invalid_batch_size",
+    );
   });
 
   test("resumes idempotently after the emitted checkpoint cursor", async () => {

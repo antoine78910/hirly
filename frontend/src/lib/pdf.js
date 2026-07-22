@@ -80,7 +80,10 @@ const writeWrappedSinglePage = (doc, text, x, y, maxW, lineH, maxY = PRO_CV_PAGE
 };
 
 const safeFilePart = (value, fallback = "document") => {
-  const cleaned = String(value || fallback).replace(/[<>:"/\\|?*]+/g, " ").replace(/\s+/g, " ").trim();
+  const cleaned = String(value || fallback)
+    .replace(/[<>:"/\\|?*]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
   return cleaned || fallback;
 };
 
@@ -111,8 +114,13 @@ export const downloadTailoredCV = async ({
 
   const palette = COLORS[template] || COLORS.modern;
   let y = MARGIN_X;
-  const contactBits = [contact.email, contact.phone, contact.location, contact.linkedin, contact.website]
-    .filter(Boolean);
+  const contactBits = [
+    contact.email,
+    contact.phone,
+    contact.location,
+    contact.linkedin,
+    contact.website,
+  ].filter(Boolean);
 
   if (template === "classic") {
     // Centered serif-style classic
@@ -251,8 +259,12 @@ export const downloadCoverLetter = ({ contact = {}, letter = {}, job, template =
   const doc = newDoc();
   const palette = COLORS.modern;
   const company = safeFilePart(letter.recipient_company || job?.company, "Company");
-  const name = safeFilePart(contact.name || letter.sender_name || letter.signature_name, "Candidate");
-  const useFrench = template === "french_formal" || letter.template === "french_formal" || Boolean(letter.subject);
+  const name = safeFilePart(
+    contact.name || letter.sender_name || letter.signature_name,
+    "Candidate",
+  );
+  const useFrench =
+    template === "french_formal" || letter.template === "french_formal" || Boolean(letter.subject);
   let y = MARGIN_X;
 
   if (useFrench) {
@@ -284,15 +296,25 @@ export const downloadCoverLetter = ({ contact = {}, letter = {}, job, template =
     });
     y = Math.max(y, recipientY) + 18;
 
-    const dateLine = letter.date_line || new Date().toLocaleDateString("fr-FR", {
-      day: "numeric",
-      month: "long",
-      year: "numeric",
-    }).replace(/^/, "À ").replace(/(\d+) ([^ ]+) (\d+)/, "À $2, le $1 $3");
-    doc.text(dateLine.startsWith("À") ? dateLine : `À ${contact.location || "France"}, le ${dateLine}`, MARGIN_X, y);
+    const dateLine =
+      letter.date_line ||
+      new Date()
+        .toLocaleDateString("fr-FR", {
+          day: "numeric",
+          month: "long",
+          year: "numeric",
+        })
+        .replace(/^/, "À ")
+        .replace(/(\d+) ([^ ]+) (\d+)/, "À $2, le $1 $3");
+    doc.text(
+      dateLine.startsWith("À") ? dateLine : `À ${contact.location || "France"}, le ${dateLine}`,
+      MARGIN_X,
+      y,
+    );
     y += 22;
 
-    const subject = letter.subject || `Candidature pour le poste de ${job?.title || "ce poste"} - ${company}`;
+    const subject =
+      letter.subject || `Candidature pour le poste de ${job?.title || "ce poste"} - ${company}`;
     doc.setFont("helvetica", "bold");
     doc.setFontSize(11);
     y = writeWrapped(doc, `Objet : ${subject}`, MARGIN_X, y, PAGE_W - MARGIN_X * 2, 16);
@@ -312,7 +334,8 @@ export const downloadCoverLetter = ({ contact = {}, letter = {}, job, template =
     y += 4;
     y = writeWrapped(
       doc,
-      letter.sign_off || "Je vous prie de recevoir, Madame, Monsieur, l'expression de mes sincères salutations.",
+      letter.sign_off ||
+        "Je vous prie de recevoir, Madame, Monsieur, l'expression de mes sincères salutations.",
       MARGIN_X,
       y,
       PAGE_W - MARGIN_X * 2,
@@ -345,7 +368,11 @@ export const downloadCoverLetter = ({ contact = {}, letter = {}, job, template =
   doc.line(MARGIN_X, y, PAGE_W - MARGIN_X, y);
   y += 22;
 
-  const today = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+  const today = new Date().toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
   doc.setFontSize(10);
   setText(doc, palette.muted);
   doc.text(today, MARGIN_X, y);

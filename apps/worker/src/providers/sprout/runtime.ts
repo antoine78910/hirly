@@ -1,12 +1,5 @@
-import {
-  nextSproutCheckpoint,
-  sproutCheckpointSchema,
-  type SproutCheckpoint,
-} from "./checkpoint";
-import {
-  assertSproutActivationReady,
-  type SproutActivation,
-} from "./registration";
+import { nextSproutCheckpoint, sproutCheckpointSchema, type SproutCheckpoint } from "./checkpoint";
+import { assertSproutActivationReady, type SproutActivation } from "./registration";
 
 export interface SproutRuntimePage<RawJob> {
   items: readonly RawJob[];
@@ -116,9 +109,7 @@ export async function runSproutPageTask<RawJob>(input: {
   // The intentionally broad country query can include rows whose locations are
   // unknown or cross-border. They advance pagination but never cross this
   // source boundary into a canonical write.
-  const countryItems = page.items.filter((raw) =>
-    hasCountryLocation(raw, countryCode),
-  );
+  const countryItems = page.items.filter((raw) => hasCountryLocation(raw, countryCode));
 
   const advanced = nextSproutCheckpoint({
     current: checkpointIn,
@@ -137,9 +128,7 @@ export async function runSproutPageTask<RawJob>(input: {
     complete: advanced.complete,
     fetchedAt: input.now?.() ?? new Date(),
   });
-  const committedCheckpoint = sproutCheckpointSchema.parse(
-    committed.committedCheckpoint,
-  );
+  const committedCheckpoint = sproutCheckpointSchema.parse(committed.committedCheckpoint);
   if (!sameCheckpoint(checkpointOut, committedCheckpoint)) {
     throw new Error("sprout_runtime_checkpoint_commit_mismatch");
   }
@@ -154,10 +143,7 @@ export async function runSproutPageTask<RawJob>(input: {
   };
 }
 
-function sameCheckpoint(
-  left: SproutCheckpoint,
-  right: SproutCheckpoint,
-): boolean {
+function sameCheckpoint(left: SproutCheckpoint, right: SproutCheckpoint): boolean {
   return (
     left.version === right.version &&
     left.offset === right.offset &&

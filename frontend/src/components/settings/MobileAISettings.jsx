@@ -19,13 +19,19 @@ export default function MobileAISettings() {
 
   return (
     <section className="mt-7" data-testid="settings-ai-mobile">
-      <h2 className="mb-1 px-1 text-xs uppercase tracking-[0.16em] text-sprout-muted">{t("aiSettings.title")}</h2>
+      <h2 className="mb-1 px-1 text-xs uppercase tracking-[0.16em] text-sprout-muted">
+        {t("aiSettings.title")}
+      </h2>
       <p className="mb-3 px-1 text-sm text-sprout-muted">{t("aiSettings.mobileIntro")}</p>
       <div className="divide-y divide-sprout-border overflow-hidden rounded-2xl border border-sprout-border bg-sprout-surface">
         {rows.map((row) => {
           const Icon = MOBILE_ICONS[row.id];
           return (
-            <div key={row.id} className="flex items-start gap-3 px-4 py-4" data-testid={`ai-setting-row-${row.id}`}>
+            <div
+              key={row.id}
+              className="flex items-start gap-3 px-4 py-4"
+              data-testid={`ai-setting-row-${row.id}`}
+            >
               <div className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-sprout-border bg-sprout-surface-2 text-zinc-300">
                 <Icon className="h-4 w-4" strokeWidth={1.9} />
               </div>

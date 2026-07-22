@@ -68,10 +68,9 @@ function toChartRows(series, lang) {
   return (series || []).map(({ date, count }) => ({
     date,
     applications: count,
-    label: new Date(`${date}T12:00:00`).toLocaleDateString(
-      lang === "fr" ? "fr-FR" : "en-US",
-      { weekday: "short" },
-    ),
+    label: new Date(`${date}T12:00:00`).toLocaleDateString(lang === "fr" ? "fr-FR" : "en-US", {
+      weekday: "short",
+    }),
   }));
 }
 
@@ -93,9 +92,7 @@ function UsageChartTooltip({ active, payload, lang, label }) {
 
   return (
     <div className="rounded-lg border border-zinc-200 bg-white px-3 py-2.5 text-xs shadow-lg">
-      <p className="mb-1.5 font-medium text-zinc-900">
-        {formatChartTooltipDate(row?.date, lang)}
-      </p>
+      <p className="mb-1.5 font-medium text-zinc-900">{formatChartTooltipDate(row?.date, lang)}</p>
       <div className="flex items-center gap-2 text-zinc-600">
         <span
           className="inline-block size-2.5 shrink-0 rounded-sm"
@@ -122,7 +119,11 @@ function UsageChart({ data, label, lang }) {
       style={{ "--color-applications": BRAND_VIOLET }}
     >
       <ResponsiveContainer width="100%" height="100%" minWidth={0}>
-        <BarChart data={data} margin={{ top: 12, right: 4, left: -8, bottom: 0 }} barCategoryGap="18%">
+        <BarChart
+          data={data}
+          margin={{ top: 12, right: 4, left: -8, bottom: 0 }}
+          barCategoryGap="18%"
+        >
           <CartesianGrid vertical={false} stroke="#e4e4e7" strokeDasharray="3 3" />
           <XAxis
             dataKey="label"
@@ -147,10 +148,7 @@ function UsageChart({ data, label, lang }) {
           />
           <Bar dataKey="applications" radius={[4, 4, 0, 0]} maxBarSize={32}>
             {data.map((entry) => (
-              <Cell
-                key={entry.date}
-                fill={entry.applications > 0 ? BRAND_VIOLET : "#e4e4e7"}
-              />
+              <Cell key={entry.date} fill={entry.applications > 0 ? BRAND_VIOLET : "#e4e4e7"} />
             ))}
           </Bar>
         </BarChart>
@@ -292,7 +290,6 @@ export default function Billing() {
                     </Button>
                   </div>
                 )}
-
               </CardContent>
             </Card>
           </BillingSection>
@@ -304,7 +301,9 @@ export default function Billing() {
             <div className="min-w-0 space-y-8">
               <Card className="min-w-0 overflow-hidden border-zinc-200 shadow-sm">
                 <CardHeader className="grid auto-rows-min grid-rows-[auto_auto] items-start gap-2 px-4 sm:px-6">
-                  <CardTitle className="text-zinc-900">{t("billingPage.currentCreditPeriod")}</CardTitle>
+                  <CardTitle className="text-zinc-900">
+                    {t("billingPage.currentCreditPeriod")}
+                  </CardTitle>
                   <div className="break-words text-sm text-zinc-500">{periodLabel}</div>
                 </CardHeader>
                 <CardContent className="space-y-6 px-4 sm:px-6">
@@ -410,11 +409,7 @@ export default function Billing() {
                   </div>
                 </CardHeader>
                 <CardContent className="p-4 pt-2 sm:p-6">
-                  <UsageChart
-                    data={chartData}
-                    label={t("billingPage.applications")}
-                    lang={lang}
-                  />
+                  <UsageChart data={chartData} label={t("billingPage.applications")} lang={lang} />
                 </CardContent>
               </Card>
             </div>

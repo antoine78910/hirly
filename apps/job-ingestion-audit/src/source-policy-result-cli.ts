@@ -27,10 +27,7 @@ function parseArgs(argv: string[]): { input: string; output: string } {
 const root = resolve(import.meta.dir, "../../..");
 const args = parseArgs(Bun.argv.slice(2));
 const value = JSON.parse(await readFile(resolve(root, args.input), "utf8"));
-const result = await persistSourcePolicyResult(
-  resolve(root, args.output),
-  value,
-);
+const result = await persistSourcePolicyResult(resolve(root, args.output), value);
 console.log(
   JSON.stringify({
     status: result.status,

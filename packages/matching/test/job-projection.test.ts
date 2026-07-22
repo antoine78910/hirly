@@ -86,7 +86,8 @@ describe("job search-document projection", () => {
     expect(first.action).toBe("upsert");
     expect(preferred.action).toBe("upsert");
     expect(route.action).toBe("upsert");
-    if (first.action !== "upsert" || preferred.action !== "upsert" || route.action !== "upsert") return;
+    if (first.action !== "upsert" || preferred.action !== "upsert" || route.action !== "upsert")
+      return;
     expect(preferred.canonicalGroupId).toBe(first.canonicalGroupId);
     expect(preferred.sourceContentHash).not.toBe(first.sourceContentHash);
     expect(preferred.row.job_version).toBe(first.row.job_version);

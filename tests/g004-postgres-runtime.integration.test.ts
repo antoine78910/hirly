@@ -2,40 +2,23 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
 import { createJsonLogger } from "../packages/observability/src/index";
-import {
-  createDatabase,
-  WorkerRepository,
-} from "../packages/db/src/index";
+import { createDatabase, WorkerRepository } from "../packages/db/src/index";
 import { PostgresRuntimeStore } from "../apps/worker/src/runtime/store";
 import { createTaskHandlers } from "../apps/worker/src/runtime/handlers";
 import { Consumer } from "../apps/worker/src/runtime/consumer";
-import {
-  providerModules,
-} from "../apps/worker/src/providers";
+import { providerModules } from "../apps/worker/src/providers";
 import type { ProviderCore } from "../apps/worker/src/providers/core";
 import type { Provider } from "../packages/contracts/src/index";
 import { stableJobId } from "../packages/ingestion/src/index";
 
-const databaseUrl =
-  process.env.G004_TEST_DATABASE_URL ?? process.env.G002_TEST_DATABASE_URL;
+const databaseUrl = process.env.G004_TEST_DATABASE_URL ?? process.env.G002_TEST_DATABASE_URL;
 const repoRoot = join(import.meta.dir, "..");
 const runIntegration = databaseUrl ? test : test.skip;
 
 async function psql(sql: string): Promise<string> {
   if (!databaseUrl) throw new Error("G004_TEST_DATABASE_URL is required");
   const process = Bun.spawn(
-    [
-      "psql",
-      databaseUrl,
-      "-X",
-      "-v",
-      "ON_ERROR_STOP=1",
-      "-A",
-      "-t",
-      "-q",
-      "-c",
-      sql,
-    ],
+    ["psql", databaseUrl, "-X", "-v", "ON_ERROR_STOP=1", "-A", "-t", "-q", "-c", sql],
     { stdout: "pipe", stderr: "pipe" },
   );
   const [exitCode, stdout, stderr] = await Promise.all([
@@ -50,16 +33,7 @@ async function psql(sql: string): Promise<string> {
 async function applyFile(relativePath: string): Promise<void> {
   if (!databaseUrl) throw new Error("G004_TEST_DATABASE_URL is required");
   const process = Bun.spawn(
-    [
-      "psql",
-      databaseUrl,
-      "-X",
-      "-v",
-      "ON_ERROR_STOP=1",
-      "-q",
-      "-f",
-      join(repoRoot, relativePath),
-    ],
+    ["psql", databaseUrl, "-X", "-v", "ON_ERROR_STOP=1", "-q", "-f", join(repoRoot, relativePath)],
     { stdout: "ignore", stderr: "pipe" },
   );
   const [exitCode, stderr] = await Promise.all([
@@ -74,9 +48,7 @@ async function applyFile(relativePath: string): Promise<void> {
 function foundationMigrationPath(): string {
   const directory = join(repoRoot, "backend", "db", "migrations");
   const migration = readdirSync(directory).find(
-    (name) =>
-      name.endsWith("_typescript_worker_foundation.sql") &&
-      !name.endsWith(".down.sql"),
+    (name) => name.endsWith("_typescript_worker_foundation.sql") && !name.endsWith(".down.sql"),
   );
   if (!migration) throw new Error("worker foundation migration is missing");
   return join("backend", "db", "migrations", migration);
@@ -85,9 +57,7 @@ function foundationMigrationPath(): string {
 function runtimeMigrationPath(): string {
   const directory = join(repoRoot, "backend", "db", "migrations");
   const migration = readdirSync(directory).find(
-    (name) =>
-      name.endsWith("_bun_worker_runtime.sql") &&
-      !name.endsWith(".down.sql"),
+    (name) => name.endsWith("_bun_worker_runtime.sql") && !name.endsWith(".down.sql"),
   );
   if (!migration) throw new Error("worker runtime migration is missing");
   return join("backend", "db", "migrations", migration);
@@ -96,9 +66,7 @@ function runtimeMigrationPath(): string {
 function providerOwnershipMigrationPath(): string {
   const directory = join(repoRoot, "backend", "db", "migrations");
   const migration = readdirSync(directory).find(
-    (name) =>
-      name.endsWith("_provider_ownership_epochs.sql") &&
-      !name.endsWith(".down.sql"),
+    (name) => name.endsWith("_provider_ownership_epochs.sql") && !name.endsWith(".down.sql"),
   );
   if (!migration) throw new Error("provider ownership migration is missing");
   return join("backend", "db", "migrations", migration);
@@ -146,9 +114,7 @@ if (databaseUrl) {
     `);
     await applyFile(foundationMigrationPath());
     await applyFile(runtimeMigrationPath());
-    await applyFile(
-      "backend/db/migrations/20260720000500_job_dedup_linkage.sql",
-    );
+    await applyFile("backend/db/migrations/20260720000500_job_dedup_linkage.sql");
     await applyFile(providerOwnershipMigrationPath());
     await resetFixtures();
   });
@@ -165,8 +131,7 @@ describe("G004 real-Postgres Consumer/runtime boundary", () => {
         schemaVersion: "hirly.provider-fixture.v1" as const,
         provenance: {
           kind: "synthetic_sanitized" as const,
-          approvalRef:
-            ".omx/plans/prd-nextjs-bun-foundation.md#phase-4" as const,
+          approvalRef: ".omx/plans/prd-nextjs-bun-foundation.md#phase-4" as const,
           containsPersonalData: false as const,
         },
         provider: "apec" as const,

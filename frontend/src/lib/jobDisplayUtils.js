@@ -1,13 +1,19 @@
 import { isFrench, translateJobTitle } from "./localizedDisplay";
 import { formatMoney } from "./currency";
 
-const DESCRIPTION_TITLE_START_RE = /^(nous |vous |votre |le candidat|missions?\s*:|profil\s*:|description\s*:|contexte\s*:|ce poste )/i;
+const DESCRIPTION_TITLE_START_RE =
+  /^(nous |vous |votre |le candidat|missions?\s*:|profil\s*:|description\s*:|contexte\s*:|ce poste )/i;
 
 function cleanDisplayTitleText(value) {
-  const text = stripHtml(String(value || "")).replace(/\s+/g, " ").trim();
+  const text = stripHtml(String(value || ""))
+    .replace(/\s+/g, " ")
+    .trim();
   if (!text) return "";
   if (text.includes("\n")) {
-    const firstLine = text.split(/\n+/).map((line) => line.trim()).find(Boolean);
+    const firstLine = text
+      .split(/\n+/)
+      .map((line) => line.trim())
+      .find(Boolean);
     return firstLine || text;
   }
   return text;
@@ -31,7 +37,9 @@ function shortenDisplayTitle(text, { maxLen = 90, maxWords = 14 } = {}) {
   if (words.length > maxWords) return words.slice(0, maxWords).join(" ");
   if (text.length > maxLen) {
     const clipped = text.slice(0, maxLen);
-    return (clipped.includes(" ") ? clipped.replace(/\s+\S*$/, "") : clipped).trim().replace(/[.,;:-]+$/, "");
+    return (clipped.includes(" ") ? clipped.replace(/\s+\S*$/, "") : clipped)
+      .trim()
+      .replace(/[.,;:-]+$/, "");
   }
   return text;
 }
@@ -65,9 +73,15 @@ export function stripHtml(value = "") {
   const textarea = typeof document !== "undefined" ? document.createElement("textarea") : null;
   if (textarea) {
     textarea.innerHTML = withoutTags;
-    return textarea.value.replace(/[ \t]+/g, " ").replace(/\n\s*\n+/g, "\n\n").trim();
+    return textarea.value
+      .replace(/[ \t]+/g, " ")
+      .replace(/\n\s*\n+/g, "\n\n")
+      .trim();
   }
-  return withoutTags.replace(/[ \t]+/g, " ").replace(/\n\s*\n+/g, "\n\n").trim();
+  return withoutTags
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n\s*\n+/g, "\n\n")
+    .trim();
 }
 
 export function humanizeLabel(value, lang = "en") {
@@ -75,55 +89,57 @@ export function humanizeLabel(value, lang = "en") {
   const normalized = String(value).trim();
   const map = isFrench(lang)
     ? {
-      high_school: "Lycée",
-      lycee: "Lycée",
-      cap: "CAP",
-      bepa: "BEPA",
-      seasonal: "Saisonnier",
-      cdd: "CDD",
-      full_time: "Temps plein",
-      part_time: "Temps partiel",
-      internship: "Stage",
-      contract: "Contrat",
-    }
+        high_school: "Lycée",
+        lycee: "Lycée",
+        cap: "CAP",
+        bepa: "BEPA",
+        seasonal: "Saisonnier",
+        cdd: "CDD",
+        full_time: "Temps plein",
+        part_time: "Temps partiel",
+        internship: "Stage",
+        contract: "Contrat",
+      }
     : {
-      high_school: "High School",
-      lycee: "High School",
-      cap: "CAP",
-      bepa: "BEPA",
-      seasonal: "Seasonal",
-      cdd: "Fixed-Term",
-      full_time: "Full Time",
-      part_time: "Part Time",
-    };
+        high_school: "High School",
+        lycee: "High School",
+        cap: "CAP",
+        bepa: "BEPA",
+        seasonal: "Seasonal",
+        cdd: "Fixed-Term",
+        full_time: "Full Time",
+        part_time: "Part Time",
+      };
   const key = normalized.toLowerCase().replace(/\s+/g, "_");
   if (map[key]) return map[key];
-  return normalized
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (char) => char.toUpperCase());
+  return normalized.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 export function seniorityLabel(job, lang = "en") {
   const m = isFrench(lang)
     ? {
-      junior: "Junior",
-      mid: "Intermédiaire",
-      senior: "Senior",
-      lead: "Lead",
-      principal: "Principal",
-      entry: "Junior",
-      executive: "Direction",
-    }
+        junior: "Junior",
+        mid: "Intermédiaire",
+        senior: "Senior",
+        lead: "Lead",
+        principal: "Principal",
+        entry: "Junior",
+        executive: "Direction",
+      }
     : {
-      junior: "Entry Level",
-      mid: "Mid Level",
-      senior: "Senior Level",
-      lead: "Lead",
-      principal: "Principal",
-      entry: "Entry Level",
-      executive: "Executive Level",
-    };
-  return m[job?.seniority] || humanizeLabel(job?.seniority, lang) || (isFrench(lang) ? "Junior" : "Entry Level");
+        junior: "Entry Level",
+        mid: "Mid Level",
+        senior: "Senior Level",
+        lead: "Lead",
+        principal: "Principal",
+        entry: "Entry Level",
+        executive: "Executive Level",
+      };
+  return (
+    m[job?.seniority] ||
+    humanizeLabel(job?.seniority, lang) ||
+    (isFrench(lang) ? "Junior" : "Entry Level")
+  );
 }
 
 export function workModelLabel(remote, lang = "en") {
@@ -145,7 +161,8 @@ function industryFallback(job, lang = "en") {
 }
 
 function inferEducationLevel(job) {
-  const text = `${job?.title || ""} ${job?.description || ""} ${job?.clean_description || ""}`.toLowerCase();
+  const text =
+    `${job?.title || ""} ${job?.description || ""} ${job?.clean_description || ""}`.toLowerCase();
   if (/high school|lycée|lycee|niveau cap|bepa\b/.test(text)) return "High School";
   if (/\bbac\s*\+\s*[2-5]\b/.test(text)) return "Bachelor+";
   return "";
@@ -158,14 +175,23 @@ export function getJobTags(job, { lang = "en" } = {}) {
     if (text && !tags.includes(text)) tags.push(text);
   };
 
-  push(job?.education_level || job?.min_education || job?.education_requirement || inferEducationLevel(job));
+  push(
+    job?.education_level ||
+      job?.min_education ||
+      job?.education_requirement ||
+      inferEducationLevel(job),
+  );
   push(seniorityLabel(job, lang));
   push(workModelLabel(job?.remote, lang));
   push(job?.industry || job?.sector || industryFallback(job, lang));
 
   const jobType = job?.job_type || job?.employment_type || job?.contract_type;
   const description = `${job?.description || ""} ${job?.clean_description || ""}`.toLowerCase();
-  if (description.includes("saisonnier") || description.includes("seasonal") || description.includes("cdd saisonnier")) {
+  if (
+    description.includes("saisonnier") ||
+    description.includes("seasonal") ||
+    description.includes("cdd saisonnier")
+  ) {
     push(isFrench(lang) ? "Saisonnier" : "Seasonal");
   }
   if (jobType) {
@@ -189,7 +215,11 @@ export function getJobBadgeItems(job, { lang = "en" } = {}) {
   };
 
   const description = `${job?.description || ""} ${job?.clean_description || ""}`.toLowerCase();
-  if (description.includes("saisonnier") || description.includes("seasonal") || description.includes("cdd saisonnier")) {
+  if (
+    description.includes("saisonnier") ||
+    description.includes("seasonal") ||
+    description.includes("cdd saisonnier")
+  ) {
     add(isFrench(lang) ? "Saisonnier" : "Seasonal", "contract");
   }
 
@@ -201,7 +231,11 @@ export function getJobBadgeItems(job, { lang = "en" } = {}) {
     add(isFrench(lang) ? "Temps plein" : "Full Time", "contract");
   }
 
-  const education = job?.education_level || job?.min_education || job?.education_requirement || inferEducationLevel(job);
+  const education =
+    job?.education_level ||
+    job?.min_education ||
+    job?.education_requirement ||
+    inferEducationLevel(job);
   if (education) add(education, "graduation");
 
   add(seniorityLabel(job, lang), "chart");
@@ -220,7 +254,9 @@ export function formatJobSalaryLabel(job, { lang = "en" } = {}) {
     const complement = [
       job?.offer_details?.find?.((item) => item?.key === "salary_complement_1")?.value,
       job?.offer_details?.find?.((item) => item?.key === "salary_complement_2")?.value,
-    ].filter(Boolean).join(" · ");
+    ]
+      .filter(Boolean)
+      .join(" · ");
     if (complement) return complement;
     return "";
   }
@@ -389,11 +425,14 @@ export function getJobCardHighlightRows(job, { t, lang = "en", max = 3 } = {}) {
     return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
   });
 
-  return sorted.slice(0, Math.max(1, max)).map((row) => ({
-    key: row.key,
-    label: row.label,
-    value: row.value || (row.items || []).slice(0, 2).join(" · "),
-  })).filter((row) => row.value);
+  return sorted
+    .slice(0, Math.max(1, max))
+    .map((row) => ({
+      key: row.key,
+      label: row.label,
+      value: row.value || (row.items || []).slice(0, 2).join(" · "),
+    }))
+    .filter((row) => row.value);
 }
 
 export function getJobMatchScore(job) {
@@ -409,9 +448,7 @@ function sectionTitleMatches(title, patterns) {
 }
 
 function cleanBullets(bullets) {
-  return (bullets || [])
-    .map((bullet) => stripHtml(bullet))
-    .filter(Boolean);
+  return (bullets || []).map((bullet) => stripHtml(bullet)).filter(Boolean);
 }
 
 function findSection(sections, patterns) {
@@ -477,9 +514,10 @@ export function getJobDisplayContent(job) {
   const fullDescription = stripHtml(job?.clean_description || job?.description || "");
 
   const snippetSource = stripHtml(job?.summary || job?.tagline || "");
-  const snippet = snippetSource
-    || cleanBullets(aboutSection?.bullets).slice(0, 1).join(" ")
-    || fullDescription.split(/\n\n/)[0]?.slice(0, 280);
+  const snippet =
+    snippetSource ||
+    cleanBullets(aboutSection?.bullets).slice(0, 1).join(" ") ||
+    fullDescription.split(/\n\n/)[0]?.slice(0, 280);
 
   let about = "";
   if (aboutSection?.bullets?.length) {
@@ -521,12 +559,12 @@ export function getJobDisplayContent(job) {
 
 export function jobExternalUrl(job) {
   return (
-    job?.apply_url
-    || job?.application_url
-    || job?.selected_apply_url
-    || job?.url
-    || job?.external_url
-    || null
+    job?.apply_url ||
+    job?.application_url ||
+    job?.selected_apply_url ||
+    job?.url ||
+    job?.external_url ||
+    null
   );
 }
 
@@ -535,9 +573,7 @@ export function openExternalUrl(url) {
   const target = String(url || "").trim();
   if (!target) return false;
   try {
-    const browser = typeof window !== "undefined"
-      ? window.Capacitor?.Plugins?.Browser
-      : null;
+    const browser = typeof window !== "undefined" ? window.Capacitor?.Plugins?.Browser : null;
     if (browser && typeof browser.open === "function") {
       browser.open({ url: target });
       return true;
@@ -554,9 +590,5 @@ export function openExternalUrl(url) {
 
 /** Best employer apply URL from a public application payload. */
 export function applicationApplyUrl(application) {
-  return (
-    application?.apply_url
-    || jobExternalUrl(application?.job)
-    || null
-  );
+  return application?.apply_url || jobExternalUrl(application?.job) || null;
 }

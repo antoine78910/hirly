@@ -18,7 +18,8 @@ export const creatorVideos = [
     platform: "TikTok",
     url: "https://www.tiktok.com/@eloworks0/video/7661332402953915680",
     thumbnail: "/creators/taff-en-deux-jours.jpg",
-    caption: "J'ai rencontré un mec qui a trouvé un taff en deux jours et il m'a montré ça, je suis choquée",
+    caption:
+      "J'ai rencontré un mec qui a trouvé un taff en deux jours et il m'a montré ça, je suis choquée",
     views: 235700,
     likes: 8529,
     comments: 30,
@@ -46,7 +47,8 @@ export const creatorVideos = [
     platform: "TikTok",
     url: "https://www.tiktok.com/@eloworks0/video/7663172127675174176",
     thumbnail: "/creators/mec-ou-taff.jpg",
-    caption: "Pourquoi ça fait 6 mois je cherche un taff et c'est que maintenant que je découvre ce site ?",
+    caption:
+      "Pourquoi ça fait 6 mois je cherche un taff et c'est que maintenant que je découvre ce site ?",
     views: 54400,
     likes: 1399,
     comments: 5,
@@ -60,7 +62,8 @@ export const creatorVideos = [
     platform: "TikTok",
     url: "https://www.tiktok.com/@eloworks0/video/7663562868763151648",
     thumbnail: "/creators/environnement-toxique.jpg",
-    caption: "Environnement de travail toxique ? Démission. Ici on est comme une famille ? Démission.",
+    caption:
+      "Environnement de travail toxique ? Démission. Ici on est comme une famille ? Démission.",
     views: 49800,
     likes: 3457,
     comments: 9,
@@ -102,7 +105,8 @@ export const creatorVideos = [
     platform: "TikTok",
     url: "https://www.tiktok.com/@hirlyjob/video/7659115983663058209",
     thumbnail: "/creators/potes-diplomes.jpg",
-    caption: "Mes potes diplômés, deux stages en big tech, qui n'ont toujours pas trouvé d'emploi...",
+    caption:
+      "Mes potes diplômés, deux stages en big tech, qui n'ont toujours pas trouvé d'emploi...",
     views: 3942,
     likes: 88,
     comments: 6,

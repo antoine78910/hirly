@@ -1,9 +1,4 @@
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "../ui/accordion";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "../ui/accordion";
 
 function FoldBody({ blocks, renderBlock }) {
   if (!blocks?.length) return null;
@@ -48,9 +43,7 @@ function ScriptFolds({ items, renderBlock }) {
 export default function TrainingContentBankFolds({ folds, renderBlock }) {
   if (!folds?.length) return null;
 
-  const defaultOpen = folds
-    .filter((fold) => fold.defaultOpen)
-    .map((fold) => fold.id);
+  const defaultOpen = folds.filter((fold) => fold.defaultOpen).map((fold) => fold.id);
 
   return (
     <Accordion

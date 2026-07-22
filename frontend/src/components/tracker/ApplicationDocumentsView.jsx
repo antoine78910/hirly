@@ -22,16 +22,16 @@ export default function ApplicationDocumentsView({
   onDownloadCoverLetter,
   compact = false,
 }) {
-  const [docTab, setDocTab] = useState(() => (
-    hasApplicationResume(application) ? "cv" : "cover"
-  ));
+  const [docTab, setDocTab] = useState(() => (hasApplicationResume(application) ? "cv" : "cover"));
 
   const resume = getApplicationResume(application);
   const coverLetter = getApplicationCoverLetter(application);
   const hasCv = hasApplicationResume(application);
   const hasCover = hasApplicationCoverLetter(application);
   const generating = isApplicationGenerating(application);
-  const template = resolveCvDisplayTemplate(resume?.template_recommendation || profile?.template_style);
+  const template = resolveCvDisplayTemplate(
+    resume?.template_recommendation || profile?.template_style,
+  );
   const contact = withContactPhoto(profile?.contact || {}, cvPhotoDataUrl(profile));
   const job = application?.job;
 
@@ -110,14 +110,11 @@ export default function ApplicationDocumentsView({
 
         <TabsContent value="cover" className="mt-3">
           {hasCover ? (
-            <CoverLetterPreview
-              contact={contact}
-              letter={coverLetter}
-              job={job}
-              theme="light"
-            />
+            <CoverLetterPreview contact={contact} letter={coverLetter} job={job} theme="light" />
           ) : (
-            <p className="py-6 text-center text-sm text-zinc-500">{t("tracker.coverUnavailable")}</p>
+            <p className="py-6 text-center text-sm text-zinc-500">
+              {t("tracker.coverUnavailable")}
+            </p>
           )}
         </TabsContent>
       </Tabs>

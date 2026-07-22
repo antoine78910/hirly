@@ -17,9 +17,9 @@ export function storeOnboardingReturnPath(path) {
 export function readOnboardingReturnPath() {
   try {
     return (
-      sessionStorage.getItem("swiipr_onboarding_return")
-      || localStorage.getItem(ONBOARDING_RETURN_STORAGE_KEY)
-      || ""
+      sessionStorage.getItem("swiipr_onboarding_return") ||
+      localStorage.getItem(ONBOARDING_RETURN_STORAGE_KEY) ||
+      ""
     );
   } catch {
     return "";
@@ -41,7 +41,9 @@ export function splitAppPath(rawPath) {
 }
 
 /** Bare callback URL — must match Supabase redirect allow-list exactly (no query string). */
-export function authCallbackBaseUrl(origin = typeof window !== "undefined" ? window.location.origin : "") {
+export function authCallbackBaseUrl(
+  origin = typeof window !== "undefined" ? window.location.origin : "",
+) {
   return `${origin}/auth/callback`;
 }
 
@@ -73,7 +75,8 @@ export async function resolveSupabaseAuthSession(
 
   const authError = searchParams.get("error") || hashParams.get("error");
   if (authError) {
-    const description = searchParams.get("error_description") || hashParams.get("error_description");
+    const description =
+      searchParams.get("error_description") || hashParams.get("error_description");
     throw new Error(description || authError);
   }
 
@@ -116,7 +119,11 @@ export function supabaseSessionPayload(session) {
   return {
     access_token: session?.access_token || "",
     provider_token: session?.provider_token || "",
-    provider_refresh_token: session?.provider_refresh_token || identityData.provider_refresh_token || identityData.refresh_token || "",
+    provider_refresh_token:
+      session?.provider_refresh_token ||
+      identityData.provider_refresh_token ||
+      identityData.refresh_token ||
+      "",
     provider_token_expires_at: session?.expires_at || null,
   };
 }
@@ -146,7 +153,9 @@ export async function startGoogleLogin(returnPath = "/swipe", opts = {}) {
   }
 
   if (!supabaseConfigured || !supabase) {
-    console.error("Supabase auth is not configured. Set REACT_APP_SUPABASE_URL and REACT_APP_SUPABASE_ANON_KEY.");
+    console.error(
+      "Supabase auth is not configured. Set REACT_APP_SUPABASE_URL and REACT_APP_SUPABASE_ANON_KEY.",
+    );
     return false;
   }
 

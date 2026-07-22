@@ -6,7 +6,10 @@ const GENDER_DEFS = [
 ];
 
 const ETHNICITY_DEFS = [
-  { value: "Alaskan Native / American Indian / Indigenous American / Native American", key: "indigenousAmerican" },
+  {
+    value: "Alaskan Native / American Indian / Indigenous American / Native American",
+    key: "indigenousAmerican",
+  },
   { value: "Black / Of African descent", key: "blackAfrican" },
   { value: "Central Asian", key: "centralAsian" },
   { value: "East Asian", key: "eastAsian" },
@@ -103,7 +106,10 @@ export const VETERAN_OPTIONS = VETERAN_DEFS.map(({ value }) => value);
 export const CITIZENSHIP_STATUS_OPTIONS = CITIZENSHIP_DEFS.map(({ value }) => value);
 
 export function splitFullName(name) {
-  const parts = String(name || "").trim().split(/\s+/).filter(Boolean);
+  const parts = String(name || "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
   if (!parts.length) return { first_name: "", last_name: "" };
   if (parts.length === 1) return { first_name: parts[0], last_name: "" };
   return { first_name: parts[0], last_name: parts.slice(1).join(" ") };
@@ -121,7 +127,11 @@ export function buildPersonalInfoState(profile, userEmail) {
     email: userEmail || contact.email || "",
     phone: contact.phone || "",
     address: contact.location || profile?.target_location || onboarding.onboarding_location || "",
-    addressData: contact.location_data || profile?.target_location_data || onboarding.onboarding_location_data || null,
+    addressData:
+      contact.location_data ||
+      profile?.target_location_data ||
+      onboarding.onboarding_location_data ||
+      null,
     salaryMin: onboarding.salary_min ?? 50_000,
     salaryMax: onboarding.salary_max ?? 100_000,
     dateOfBirth: demographics.date_of_birth || "",

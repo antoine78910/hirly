@@ -1,10 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
 import type { SourceRegistryEntry } from "../packages/contracts/src";
-import {
-  toCanonicalJob,
-  type SourceContext,
-} from "../packages/ingestion/src";
+import { toCanonicalJob, type SourceContext } from "../packages/ingestion/src";
 import {
   createGreenhouseFixtureSourceAdapter,
   createGreenhouseShadowTransport,
@@ -33,9 +30,7 @@ describe("G019 Greenhouse shadow migration", () => {
     const transport = createGreenhouseShadowTransport({
       approvedTenantId: "vaulttec",
       fetch: async (input, init) => {
-        expect(input).toBe(
-          "https://boards-api.greenhouse.io/v1/boards/vaulttec/jobs?content=true",
-        );
+        expect(input).toBe("https://boards-api.greenhouse.io/v1/boards/vaulttec/jobs?content=true");
         expect(init.method).toBe("GET");
         expect(init.credentials).toBe("omit");
         expect(init.redirect).toBe("error");
@@ -55,16 +50,19 @@ describe("G019 Greenhouse shadow migration", () => {
   test("rejects a response whose documented total is not a complete snapshot", async () => {
     const transport = createGreenhouseShadowTransport({
       approvedTenantId: "vaulttec",
-      fetch: async () => Response.json({
-        jobs: [{
-          id: "127817",
-          title: "Incomplete snapshot",
-          location: { name: "Paris, France" },
-          absolute_url: "https://boards.greenhouse.io/vaulttec/jobs/127817",
-          content: "Read-only shadow fixture",
-        }],
-        meta: { total: 2 },
-      }),
+      fetch: async () =>
+        Response.json({
+          jobs: [
+            {
+              id: "127817",
+              title: "Incomplete snapshot",
+              location: { name: "Paris, France" },
+              absolute_url: "https://boards.greenhouse.io/vaulttec/jobs/127817",
+              content: "Read-only shadow fixture",
+            },
+          ],
+          meta: { total: 2 },
+        }),
     });
 
     await expect(transport.fetch(new AbortController().signal)).rejects.toMatchObject({
@@ -75,10 +73,7 @@ describe("G019 Greenhouse shadow migration", () => {
 
   test("matches the frozen Python/TypeScript parity fixture", async () => {
     const parity = JSON.parse(
-      await readFile(
-        new URL("./fixtures/g019/greenhouse-parity.json", import.meta.url),
-        "utf8",
-      ),
+      await readFile(new URL("./fixtures/g019/greenhouse-parity.json", import.meta.url), "utf8"),
     );
     const raw = greenhouseRawJobSchema.parse(parity.raw);
     const entry: SourceRegistryEntry = {

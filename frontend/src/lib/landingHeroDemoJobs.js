@@ -147,8 +147,7 @@ const ENGLISH_JOBS = [
     benefits: "Meal vouchers · Health insurance · Occasional remote",
     workContext: "Civil and defense programs, Toulouse site",
     skills: ["C++", "Python", "Git", "Linux"],
-    summary:
-      "Contribute to mission-critical software for Airbus civil and defense programs.",
+    summary: "Contribute to mission-critical software for Airbus civil and defense programs.",
     swipe: "skip",
   },
 ];

@@ -13,7 +13,9 @@ describe("landing reviews localization", () => {
     expect(getLandingReviewsCopy(locale).badge).toBe(badge);
     expect(getLandingReviewColumns(locale)).toHaveLength(2);
     expect(getLandingReviewsAll(locale)).toHaveLength(14);
-    const localizedVerifiedReview = getLandingReviewsAll(locale).find(({ id }) => id === "verified");
+    const localizedVerifiedReview = getLandingReviewsAll(locale).find(
+      ({ id }) => id === "verified",
+    );
     const englishVerifiedReview = getLandingReviewsAll("en").find(({ id }) => id === "verified");
     expect(localizedVerifiedReview.name).not.toBe(englishVerifiedReview.name);
     expect(localizedVerifiedReview).toMatchObject({
@@ -32,7 +34,7 @@ describe("landing reviews localization", () => {
   it.each(["de", "es", "it"])("keeps %s testimonial quotes and sublines verbatim", (locale) => {
     const englishReviews = getLandingReviewsAll("en");
     expect(getLandingReviewsAll(locale).map(({ subline, quote }) => ({ subline, quote }))).toEqual(
-      englishReviews.map(({ subline, quote }) => ({ subline, quote }))
+      englishReviews.map(({ subline, quote }) => ({ subline, quote })),
     );
   });
 });

@@ -4,12 +4,12 @@ import path from "path";
 const readSource = (relativePath) =>
   fs.readFileSync(path.join(process.cwd(), "src", relativePath), "utf8");
 
-const EN_FR_ONLY_LOCALE_LIST = /\[\s*["']en["']\s*,\s*["']fr["']\s*\]|\[\s*["']fr["']\s*,\s*["']en["']\s*\]/;
+const EN_FR_ONLY_LOCALE_LIST =
+  /\[\s*["']en["']\s*,\s*["']fr["']\s*\]|\[\s*["']fr["']\s*,\s*["']en["']\s*\]/;
 const EN_FR_ONLY_LOCALE_CONDITIONAL = /\b(?:lang|locale|language)\s*===\s*["'](?:en|fr)["']\s*\?/;
 
 function hasEnFrOnlyLocaleSelector(source) {
-  return EN_FR_ONLY_LOCALE_LIST.test(source)
-    || EN_FR_ONLY_LOCALE_CONDITIONAL.test(source);
+  return EN_FR_ONLY_LOCALE_LIST.test(source) || EN_FR_ONLY_LOCALE_CONDITIONAL.test(source);
 }
 
 // Deliberately narrow: these are the landing modules migrated to five-locale
@@ -25,7 +25,7 @@ const MIGRATED_LANDING_LOCALE_MODULES = [
   },
   {
     path: "lib/landingReviews.js",
-    requiredMarkers: ["locale === \"de\"", "locale === \"es\"", "locale === \"it\""],
+    requiredMarkers: ['locale === "de"', 'locale === "es"', 'locale === "it"'],
   },
   {
     path: "lib/landingFaq.js",
@@ -60,7 +60,7 @@ describe("migrated landing locale static guard", () => {
       });
 
       expect(hasEnFrOnlyLocaleSelector(source)).toBe(false);
-    }
+    },
   );
 
   it.each([
@@ -85,7 +85,8 @@ describe("migrated landing locale static guard", () => {
         rationale: expect.any(String),
       }),
     ]);
-    expect(MIGRATED_LANDING_LOCALE_MODULES.map(({ path: relativePath }) => relativePath))
-      .not.toContain("pages/Landing.jsx");
+    expect(
+      MIGRATED_LANDING_LOCALE_MODULES.map(({ path: relativePath }) => relativePath),
+    ).not.toContain("pages/Landing.jsx");
   });
 });

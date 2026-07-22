@@ -78,7 +78,11 @@ export default function SuggestFeatureDialog({ open, onClose, isDark = false, au
         toast.error(t("suggestFeature.fileTooLarge"));
         continue;
       }
-      next.push({ file, preview: readFilePreview(file), id: `${file.name}-${file.size}-${Date.now()}` });
+      next.push({
+        file,
+        preview: readFilePreview(file),
+        id: `${file.name}-${file.size}-${Date.now()}`,
+      });
     }
     setFiles(next);
   };
@@ -115,7 +119,9 @@ export default function SuggestFeatureDialog({ open, onClose, isDark = false, au
       setCategory("feature");
       onClose?.();
     } catch (error) {
-      toast.error(error?.response?.data?.detail || t("suggestFeature.error", { email: BRAND.SUPPORT_EMAIL }));
+      toast.error(
+        error?.response?.data?.detail || t("suggestFeature.error", { email: BRAND.SUPPORT_EMAIL }),
+      );
     } finally {
       setSending(false);
     }
@@ -134,10 +140,14 @@ export default function SuggestFeatureDialog({ open, onClose, isDark = false, au
         className={`relative z-10 flex max-h-[min(90vh,720px)] w-full max-w-lg flex-col overflow-hidden rounded-2xl border shadow-2xl ${panel}`}
         data-testid="suggest-feature-dialog"
       >
-        <div className={`flex items-start justify-between gap-4 border-b px-5 py-4 sm:px-6 ${isDark ? "border-zinc-800" : "border-zinc-100"}`}>
+        <div
+          className={`flex items-start justify-between gap-4 border-b px-5 py-4 sm:px-6 ${isDark ? "border-zinc-800" : "border-zinc-100"}`}
+        >
           <div>
             <div className="flex items-center gap-2">
-              <span className={`grid h-8 w-8 place-items-center rounded-xl ${isDark ? "bg-violet-500/15 text-violet-300" : "bg-violet-100 text-violet-600"}`}>
+              <span
+                className={`grid h-8 w-8 place-items-center rounded-xl ${isDark ? "bg-violet-500/15 text-violet-300" : "bg-violet-100 text-violet-600"}`}
+              >
                 <Sparkles className="h-4 w-4" />
               </span>
               <h2 className="font-display text-lg font-bold tracking-tight sm:text-xl">
@@ -175,7 +185,9 @@ export default function SuggestFeatureDialog({ open, onClose, isDark = false, au
             ))}
           </div>
 
-          <label className={`mt-5 block text-sm font-semibold ${isDark ? "text-zinc-200" : "text-zinc-800"}`}>
+          <label
+            className={`mt-5 block text-sm font-semibold ${isDark ? "text-zinc-200" : "text-zinc-800"}`}
+          >
             {t("suggestFeature.detailsLabel")}
             <textarea
               value={message}
@@ -248,7 +260,9 @@ export default function SuggestFeatureDialog({ open, onClose, isDark = false, au
           ) : null}
         </div>
 
-        <div className={`flex items-center justify-end gap-2 border-t px-5 py-4 sm:px-6 ${isDark ? "border-zinc-800" : "border-zinc-100"}`}>
+        <div
+          className={`flex items-center justify-end gap-2 border-t px-5 py-4 sm:px-6 ${isDark ? "border-zinc-800" : "border-zinc-100"}`}
+        >
           <button
             type="button"
             onClick={onClose}

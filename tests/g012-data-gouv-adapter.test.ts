@@ -1,11 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { describe, expect, test } from "bun:test";
 import type { SourceRegistryEntry } from "../packages/contracts/src";
-import {
-  stableJobId,
-  toCanonicalJob,
-  type SourceContext,
-} from "../packages/ingestion/src";
+import { stableJobId, toCanonicalJob, type SourceContext } from "../packages/ingestion/src";
 import {
   DATA_GOUV_FIXTURE_CURSOR_VERSION,
   DataGouvFixtureHttpError,
@@ -24,10 +20,7 @@ const fixturePolicyId = "00000000-0000-4000-8000-000000000012";
 
 async function fixture(): Promise<{ raw: DataGouvRawJob[] }> {
   return JSON.parse(
-    await readFile(
-      new URL("./fixtures/g012/data-gouv-resource.json", import.meta.url),
-      "utf8",
-    ),
+    await readFile(new URL("./fixtures/g012/data-gouv-resource.json", import.meta.url), "utf8"),
   ) as { raw: DataGouvRawJob[] };
 }
 
@@ -80,25 +73,16 @@ describe("G012 generic data.gouv fixture boundary", () => {
   test("derives stable provider identity and preserves raw provenance", async () => {
     const data = await fixture();
     const entry = source();
-    const occurrence = adapter(data.raw).normalize(
-      data.raw[0],
-      context(entry),
-    );
+    const occurrence = adapter(data.raw).normalize(data.raw[0], context(entry));
     const externalId = "dataset-fixture:resource-fixture:record-001";
 
-    expect(
-      stableDataGouvExternalId(
-        "dataset-fixture",
-        "resource-fixture",
-        "record-001",
-      ),
-    ).toBe(externalId);
+    expect(stableDataGouvExternalId("dataset-fixture", "resource-fixture", "record-001")).toBe(
+      externalId,
+    );
     expect(occurrence).toMatchObject({
       externalId,
-      canonicalSourceUrl:
-        "https://www.data.gouv.fr/fr/datasets/dataset-fixture/",
-      canonicalApplyUrl:
-        "https://apply.example.org/jobs/record-001",
+      canonicalSourceUrl: "https://www.data.gouv.fr/fr/datasets/dataset-fixture/",
+      canonicalApplyUrl: "https://apply.example.org/jobs/record-001",
       atsPostingId: null,
       job: {
         countryCode: "FR",
@@ -112,21 +96,16 @@ describe("G012 generic data.gouv fixture boundary", () => {
             sourceDocument: {
               record_id: "record-001",
               title: "Ingénieure plateforme",
-              apply_url:
-                "https://apply.example.org/jobs/record-001",
+              apply_url: "https://apply.example.org/jobs/record-001",
             },
           },
         },
       },
     });
-    const canonical = toCanonicalJob(
-      occurrence.job,
-      context(entry).fetchedAt,
-    );
+    const canonical = toCanonicalJob(occurrence.job, context(entry).fetchedAt);
     expect(canonical.jobId).toBe(stableJobId("data_gouv", externalId));
     expect(canonical).toMatchObject({
-      selectedApplyUrl:
-        "https://apply.example.org/jobs/record-001",
+      selectedApplyUrl: "https://apply.example.org/jobs/record-001",
       validationStatus: "unknown",
       applyabilityTier: "C",
       applyFulfillmentStatus: "needs_validation",
@@ -137,12 +116,14 @@ describe("G012 generic data.gouv fixture boundary", () => {
   test("uses digest-bound checkpoints and complete resource scopes", async () => {
     const data = await fixture();
     const sourceAdapter = adapter(data.raw);
-    const firstIterator = sourceAdapter.discover({
-      source: source(),
-      mode: "full",
-      cursor: null,
-      signal: new AbortController().signal,
-    })[Symbol.asyncIterator]();
+    const firstIterator = sourceAdapter
+      .discover({
+        source: source(),
+        mode: "full",
+        cursor: null,
+        signal: new AbortController().signal,
+      })
+      [Symbol.asyncIterator]();
     const first = await firstIterator.next();
 
     expect(first.value).toMatchObject({
@@ -214,24 +195,16 @@ describe("G012 generic data.gouv fixture boundary", () => {
       state: "expired",
       reason: expect.stringContaining("explicit"),
     });
-    expect(
-      classifyDataGouvSourceError(new DataGouvFixtureHttpError(429)),
-    ).toBe("rate_limited");
-    expect(
-      classifyDataGouvSourceError(new DataGouvFixtureHttpError(503)),
-    ).toBe("retryable");
-    expect(
-      classifyDataGouvSourceError(new DataGouvFixtureHttpError(403)),
-    ).toBe("authorization");
-    expect(classifyDataGouvSourceError(new SyntaxError("bad fixture"))).toBe(
-      "malformed",
-    );
+    expect(classifyDataGouvSourceError(new DataGouvFixtureHttpError(429))).toBe("rate_limited");
+    expect(classifyDataGouvSourceError(new DataGouvFixtureHttpError(503))).toBe("retryable");
+    expect(classifyDataGouvSourceError(new DataGouvFixtureHttpError(403))).toBe("authorization");
+    expect(classifyDataGouvSourceError(new SyntaxError("bad fixture"))).toBe("malformed");
   });
 
   test("rejects identity collisions and enabled source configurations", async () => {
-    expect(() =>
-      stableDataGouvExternalId("dataset:collision", "resource", "record"),
-    ).toThrow("colon-free stable identifier");
+    expect(() => stableDataGouvExternalId("dataset:collision", "resource", "record")).toThrow(
+      "colon-free stable identifier",
+    );
     const data = await fixture();
     const sourceAdapter = adapter(data.raw);
     await expect(async () => {

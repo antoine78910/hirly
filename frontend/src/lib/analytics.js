@@ -5,10 +5,7 @@ import {
   sanitizeAnalyticsProperties,
   stripUrlSecrets,
 } from "./posthogClient";
-import {
-  registryPropertiesForEvent,
-  resolveAnalyticsEvent,
-} from "./analyticsRegistry";
+import { registryPropertiesForEvent, resolveAnalyticsEvent } from "./analyticsRegistry";
 
 const ANONYMOUS_ID_KEY = "hirly.analytics.anonymous_id";
 const getAnonymousId = () => {
@@ -16,7 +13,8 @@ const getAnonymousId = () => {
   try {
     let id = window.localStorage.getItem(ANONYMOUS_ID_KEY);
     if (!id) {
-      const random = window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const random =
+        window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
       id = `anon_${random}`;
       window.localStorage.setItem(ANONYMOUS_ID_KEY, id);
     }
@@ -38,16 +36,14 @@ export const trackEvent = (event, properties = {}) => {
     occurred_at: occurredAt,
     anonymous_id: getAnonymousId(),
     page: typeof window !== "undefined" ? window.location.pathname : undefined,
-    source: typeof document !== "undefined" && document.referrer
-      ? stripUrlSecrets(document.referrer)
-      : undefined,
+    source:
+      typeof document !== "undefined" && document.referrer
+        ? stripUrlSecrets(document.referrer)
+        : undefined,
   };
   if (
     resolved?.definition.authoritativeSource === "frontend" &&
-    (
-      resolved.definition.identityPolicy !== "identified" ||
-      hasIdentifiedPostHogUser()
-    ) &&
+    (resolved.definition.identityPolicy !== "identified" || hasIdentifiedPostHogUser()) &&
     canonicalProperties
   ) {
     try {

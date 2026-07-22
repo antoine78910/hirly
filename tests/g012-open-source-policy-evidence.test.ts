@@ -43,9 +43,7 @@ describe("G012 immutable open-source policy evidence", () => {
       expect(artifact.productionEligible).toBeFalse();
       expect(artifact.qualificationStatus).not.toBe("approved");
       expect(artifact.unresolvedRights).toHaveLength(8);
-      expect(artifact.activationConstraints.join(" ")).toMatch(
-        /disabled|required|qualification/i,
-      );
+      expect(artifact.activationConstraints.join(" ")).toMatch(/disabled|required|qualification/i);
       const digest = createHash("sha256").update(raw).digest("hex");
       expect(digest).toMatch(/^[0-9a-f]{64}$/);
       expect(migration).toContain(`'${sourceKey}'`);

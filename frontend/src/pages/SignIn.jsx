@@ -14,10 +14,7 @@ import { useAuth } from "../context/AuthContext";
 import { trackEvent } from "../lib/analytics";
 import { setDemoAccountFromUser } from "../lib/demoAccount";
 import { goToApp } from "../lib/appDomains";
-import {
-  openJobSeekerDestination,
-  resolveJobSeekerEntryDestination,
-} from "../lib/jobSeekerEntry";
+import { openJobSeekerDestination, resolveJobSeekerEntryDestination } from "../lib/jobSeekerEntry";
 import { useAppLocale } from "../context/AppLocaleContext";
 
 const COPY = {
@@ -57,13 +54,7 @@ export default function SignIn() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const returnPath = resolveAuthReturnPath(searchParams.get("next"));
-  const {
-    user,
-    loading: authLoading,
-    setUser,
-    setHasProfile,
-    setHasPreferences,
-  } = useAuth();
+  const { user, loading: authLoading, setUser, setHasProfile, setHasPreferences } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -86,10 +77,7 @@ export default function SignIn() {
           goToApp(returnPath);
           return;
         }
-        openJobSeekerDestination(
-          { ...dest, search: dest.search || "?step=jobSearch" },
-          navigate,
-        );
+        openJobSeekerDestination({ ...dest, search: dest.search || "?step=jobSearch" }, navigate);
       } catch {
         if (!cancelled) navigate("/onboarding?step=jobSearch", { replace: true });
       }
@@ -128,10 +116,7 @@ export default function SignIn() {
         goToApp(returnPath);
         return;
       }
-      openJobSeekerDestination(
-        { ...dest, search: dest.search || "?step=jobSearch" },
-        navigate,
-      );
+      openJobSeekerDestination({ ...dest, search: dest.search || "?step=jobSearch" }, navigate);
     } catch {
       navigate("/onboarding?step=jobSearch", { replace: true });
     }
@@ -182,16 +167,19 @@ export default function SignIn() {
   return (
     <div className="min-h-dvh bg-white px-6 py-10 text-zinc-900 sm:py-16">
       <div className="mx-auto flex w-full max-w-sm flex-col items-center">
-        <Link to="/" className="flex items-center gap-2 font-display text-lg font-black tracking-tight">
+        <Link
+          to="/"
+          className="flex items-center gap-2 font-display text-lg font-black tracking-tight"
+        >
           <Logo size={30} />
           <span>{BRAND.NAME}</span>
         </Link>
 
         <div className="mt-10 w-full">
-          <h1 className="text-center font-display text-3xl font-bold tracking-tight">{copy.title}</h1>
-          <p className="mt-2 text-center text-sm text-zinc-500">
-            {copy.subtitle}
-          </p>
+          <h1 className="text-center font-display text-3xl font-bold tracking-tight">
+            {copy.title}
+          </h1>
+          <p className="mt-2 text-center text-sm text-zinc-500">{copy.subtitle}</p>
 
           <div className="mt-8 space-y-4">
             <GoogleSignInButton
@@ -243,13 +231,13 @@ export default function SignIn() {
 
               {error ? <p className="text-sm font-medium text-red-600">{error}</p> : null}
 
-              <div className='flex justify-end'>
+              <div className="flex justify-end">
                 <Link
-                  to='/reset-password'
-                  className='text-sm font-semibold text-linkedin hover:text-linkedin-dark'
-                  data-testid='signin-forgot-password'
+                  to="/reset-password"
+                  className="text-sm font-semibold text-linkedin hover:text-linkedin-dark"
+                  data-testid="signin-forgot-password"
                 >
-                  {lang === 'fr' ? 'Mot de passe oublie ?' : 'Forgot password?'}
+                  {lang === "fr" ? "Mot de passe oublie ?" : "Forgot password?"}
                 </Link>
               </div>
 

@@ -1,8 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  getLandingHeroJobLabel,
-  getLandingHeroRotatingLabels,
-} from "../../lib/landingHeroCopy";
+import { getLandingHeroJobLabel, getLandingHeroRotatingLabels } from "../../lib/landingHeroCopy";
 
 const WIDTH_BUFFER = 6;
 
@@ -22,9 +19,7 @@ function getSlotMargins(width, widths, stacked = false) {
   const ratio = (width - minW) / (maxW - minW);
   const maxPull = isMobileViewport() ? 10 : 14;
   const mr = Math.round(-maxPull * (1 - ratio));
-  const ml = ratio >= 0.85
-    ? Math.round(baseMl + 4 + ratio * 6)
-    : baseMl;
+  const ml = ratio >= 0.85 ? Math.round(baseMl + 4 + ratio * 6) : baseMl;
 
   return { ml, mr };
 }
@@ -72,7 +67,8 @@ export default function LandingHeroRotatingWord({
     const wrapper = wordWrapperRef.current;
     if (!track || !wrapper) return;
 
-    const scaledMargin = (index, widths) => getSlotMargins(widths[index] ?? 0, widths, stackedLayoutRef.current);
+    const scaledMargin = (index, widths) =>
+      getSlotMargins(widths[index] ?? 0, widths, stackedLayoutRef.current);
 
     const applySlot = (index, widths, itemHeight) => {
       const w = Math.ceil(widths[index] ?? 0) + WIDTH_BUFFER;
@@ -106,7 +102,8 @@ export default function LandingHeroRotatingWord({
         const children = Array.from(track.children);
         const measureEl = firstChild.cloneNode(false);
         measureEl.className = firstChild.className;
-        measureEl.style.cssText = "position:absolute;visibility:hidden;pointer-events:none;white-space:nowrap;";
+        measureEl.style.cssText =
+          "position:absolute;visibility:hidden;pointer-events:none;white-space:nowrap;";
         wrapper.appendChild(measureEl);
 
         const widths = children.map((el) => {
@@ -117,10 +114,8 @@ export default function LandingHeroRotatingWord({
         wrapper.removeChild(measureEl);
         const itemHeight =
           Math.max(
-            ...children.map(
-              (el) => el.offsetHeight || el.getBoundingClientRect().height || 0
-            ),
-            firstChild.getBoundingClientRect().height
+            ...children.map((el) => el.offsetHeight || el.getBoundingClientRect().height || 0),
+            firstChild.getBoundingClientRect().height,
           ) || 0;
 
         if (itemHeight === 0 || widths.every((w) => w === 0)) return;
@@ -170,17 +165,20 @@ export default function LandingHeroRotatingWord({
             .to({}, { duration: pause });
         }
 
-        tl.set(track, { y: 0 }).set(wrapper, stackedLayoutRef.current
-          ? {
-              width: Math.ceil(widths[0] ?? 0) + WIDTH_BUFFER,
-              marginLeft: "auto",
-              marginRight: "auto",
-            }
-          : {
-              width: Math.ceil(widths[0] ?? 0) + WIDTH_BUFFER,
-              marginLeft: `${scaledMargin(0, widths).ml}px`,
-              marginRight: `${scaledMargin(0, widths).mr}px`,
-            });
+        tl.set(track, { y: 0 }).set(
+          wrapper,
+          stackedLayoutRef.current
+            ? {
+                width: Math.ceil(widths[0] ?? 0) + WIDTH_BUFFER,
+                marginLeft: "auto",
+                marginRight: "auto",
+              }
+            : {
+                width: Math.ceil(widths[0] ?? 0) + WIDTH_BUFFER,
+                marginLeft: `${scaledMargin(0, widths).ml}px`,
+                marginRight: `${scaledMargin(0, widths).mr}px`,
+              },
+        );
 
         tlRef.current = tl;
       } catch {

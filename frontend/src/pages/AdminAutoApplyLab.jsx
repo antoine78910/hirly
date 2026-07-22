@@ -41,13 +41,26 @@ const fmtDate = (value) => {
   if (!value) return "—";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return String(value);
-  return date.toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  return date.toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 };
 
 function notifyRunResult(result) {
-  const failed = new Set(["error", "submit_failed", "verification_failed", "unsupported", "needs_user_input"]);
+  const failed = new Set([
+    "error",
+    "submit_failed",
+    "verification_failed",
+    "unsupported",
+    "needs_user_input",
+  ]);
   if (failed.has(result?.status)) {
-    toast.error(result.reason?.replaceAll("_", " ") || result.error?.message || "Auto-apply failed");
+    toast.error(
+      result.reason?.replaceAll("_", " ") || result.error?.message || "Auto-apply failed",
+    );
     return;
   }
   if (result?.status === "in_flight") return;
@@ -92,16 +105,22 @@ function reportFromAttempt(attempt) {
     driver_version: attempt?.driver_version || null,
     blueprint_signature: attempt?.blueprint_signature || null,
     debug: {
-      timeline: [{
-        stage: attempt?.stage_reached || "driver",
-        status: attempt?.status === "in_flight" ? "ok" : "error",
-        detail: attempt?.reason || attempt?.status || "—",
-      }],
+      timeline: [
+        {
+          stage: attempt?.stage_reached || "driver",
+          status: attempt?.status === "in_flight" ? "ok" : "error",
+          detail: attempt?.reason || attempt?.status || "—",
+        },
+      ],
       execution: attempt?.evidence || null,
     },
-    error: attempt?.status === "error"
-      ? { message: attempt?.reason || "Execution failed", phase: attempt?.stage_reached || "execute" }
-      : null,
+    error:
+      attempt?.status === "error"
+        ? {
+            message: attempt?.reason || "Execution failed",
+            phase: attempt?.stage_reached || "execute",
+          }
+        : null,
   };
 }
 
@@ -182,11 +201,14 @@ async function runAutoApplyWithPolling({ jobId, userId, dryRun }) {
           stage_reached: attempt.stage_reached || "driver",
           reason: "still_running_after_poll_deadline",
           debug: {
-            timeline: [{
-              stage: "driver",
-              status: "ok",
-              detail: "Browser still running after 10 minutes — open Railway logs or refresh status shortly.",
-            }],
+            timeline: [
+              {
+                stage: "driver",
+                status: "ok",
+                detail:
+                  "Browser still running after 10 minutes — open Railway logs or refresh status shortly.",
+              },
+            ],
           },
         };
       }
@@ -318,7 +340,9 @@ export default function AdminAutoApplyLab() {
       if (coverFile) {
         payload.cover_letter_text = await fileToText(coverFile);
       }
-      const { data } = await api.post("/admin/auto-apply-lab/execute", payload, { timeout: 180000 });
+      const { data } = await api.post("/admin/auto-apply-lab/execute", payload, {
+        timeout: 180000,
+      });
       finishConsole(data);
       notifyRunResult(data);
     } catch (err) {
@@ -338,7 +362,7 @@ export default function AdminAutoApplyLab() {
     <AdminShell
       title="Auto-Apply Lab"
       subtitle="Replay user right swipes through the production auto-apply pipeline, or validate a pasted job URL."
-      actions={(
+      actions={
         <>
           {report && !consoleOpen ? (
             <Button variant="outline" onClick={() => setConsoleOpen(true)}>
@@ -347,15 +371,21 @@ export default function AdminAutoApplyLab() {
             </Button>
           ) : null}
           <Button variant="outline" onClick={loadSwipes} disabled={swipesLoading}>
-            {swipesLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+            {swipesLoading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <RefreshCw className="h-4 w-4" />
+            )}
             Refresh
           </Button>
         </>
-      )}
+      }
     >
       {accessDenied ? <AdminAccessDenied /> : null}
       {error && !accessDenied && !consoleOpen ? (
-        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
+        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {error}
+        </div>
       ) : null}
 
       {!accessDenied ? (
@@ -384,7 +414,10 @@ export default function AdminAutoApplyLab() {
           ) : swipes.length === 0 ? (
             <p className="text-sm text-zinc-500">No right swipes found yet.</p>
           ) : visibleSwipes.length === 0 ? (
-            <p className="text-sm text-zinc-500">No unapplied jobs — everything has an application record. Uncheck the filter to see all.</p>
+            <p className="text-sm text-zinc-500">
+              No unapplied jobs — everything has an application record. Uncheck the filter to see
+              all.
+            </p>
           ) : (
             <div className="overflow-x-auto rounded-xl border border-zinc-200">
               <table className="min-w-full text-left text-sm">
@@ -405,9 +438,13 @@ export default function AdminAutoApplyLab() {
                     const busy = runningRow === key;
                     return (
                       <tr key={key} className="border-t border-zinc-100">
-                        <td className="px-3 py-2 whitespace-nowrap text-zinc-500">{fmtDate(row.swiped_at || row.created_at)}</td>
+                        <td className="px-3 py-2 whitespace-nowrap text-zinc-500">
+                          {fmtDate(row.swiped_at || row.created_at)}
+                        </td>
                         <td className="px-3 py-2">
-                          <div className="font-medium text-zinc-900">{row.user_name || row.user_email || row.user_id}</div>
+                          <div className="font-medium text-zinc-900">
+                            {row.user_name || row.user_email || row.user_id}
+                          </div>
                           <div className="text-xs text-zinc-400">{row.user_email}</div>
                         </td>
                         <td className="px-3 py-2">
@@ -437,7 +474,9 @@ export default function AdminAutoApplyLab() {
                           })()}
                         </td>
                         <td className="px-3 py-2">
-                          <span className={row.driver_supported ? "text-emerald-700" : "text-amber-700"}>
+                          <span
+                            className={row.driver_supported ? "text-emerald-700" : "text-amber-700"}
+                          >
                             {row.ats_provider || "—"}
                           </span>
                         </td>
@@ -446,9 +485,10 @@ export default function AdminAutoApplyLab() {
                             className={
                               row.submission_status === "submitted"
                                 ? "text-emerald-700"
-                                : row.submission_status === "failed" || row.submission_status === "blocked_captcha"
-                                ? "text-red-700"
-                                : "text-zinc-500"
+                                : row.submission_status === "failed" ||
+                                    row.submission_status === "blocked_captcha"
+                                  ? "text-red-700"
+                                  : "text-zinc-500"
                             }
                           >
                             {(row.submission_status || "not_submitted").replaceAll("_", " ")}
@@ -468,7 +508,11 @@ export default function AdminAutoApplyLab() {
                               onClick={() => runForSwipe(row, true)}
                               title="Plan only — does not open Bright Data / browser"
                             >
-                              {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
+                              {busy ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <Play className="h-3.5 w-3.5" />
+                              )}
                               Dry run
                             </Button>
                             <Button
@@ -504,11 +548,19 @@ export default function AdminAutoApplyLab() {
             <div className="flex flex-wrap gap-3">
               <label className="text-sm text-zinc-600">
                 Resume
-                <input type="file" className="mt-1 block text-xs" onChange={(e) => setResumeFile(e.target.files?.[0] || null)} />
+                <input
+                  type="file"
+                  className="mt-1 block text-xs"
+                  onChange={(e) => setResumeFile(e.target.files?.[0] || null)}
+                />
               </label>
               <label className="text-sm text-zinc-600">
                 Cover letter
-                <input type="file" className="mt-1 block text-xs" onChange={(e) => setCoverFile(e.target.files?.[0] || null)} />
+                <input
+                  type="file"
+                  className="mt-1 block text-xs"
+                  onChange={(e) => setCoverFile(e.target.files?.[0] || null)}
+                />
               </label>
             </div>
             <textarea
@@ -519,11 +571,19 @@ export default function AdminAutoApplyLab() {
               onChange={(e) => setAnswersText(e.target.value)}
             />
             <label className="flex items-center gap-2 text-sm text-zinc-700">
-              <input type="checkbox" checked={dryRun} onChange={(e) => setDryRun(e.target.checked)} />
+              <input
+                type="checkbox"
+                checked={dryRun}
+                onChange={(e) => setDryRun(e.target.checked)}
+              />
               Dry run (stop before browser submit)
             </label>
             <Button onClick={run} disabled={running}>
-              {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+              {running ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Play className="h-4 w-4" />
+              )}
               Run URL harness
             </Button>
           </div>

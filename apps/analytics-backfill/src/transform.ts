@@ -7,8 +7,7 @@ import {
 } from "@hirly/contracts";
 import { createHash } from "node:crypto";
 
-export const ANALYTICS_BACKFILL_TRANSFORM_VERSION =
-  "hirly.analytics-backfill.v2" as const;
+export const ANALYTICS_BACKFILL_TRANSFORM_VERSION = "hirly.analytics-backfill.v2" as const;
 
 export type LegacyIdentityResolution =
   | "canonical_uuid"
@@ -81,9 +80,7 @@ export function parseLegacyAnalyticsRows(value: unknown): LegacyAnalyticsRow[] {
     if (
       entry.identityResolution !== undefined &&
       (typeof entry.identityResolution !== "string" ||
-        !legacyIdentityResolutions.has(
-          entry.identityResolution as LegacyIdentityResolution,
-        ))
+        !legacyIdentityResolutions.has(entry.identityResolution as LegacyIdentityResolution))
     ) {
       throw new Error(`invalid_input_row:${index}:identityResolution`);
     }
@@ -227,11 +224,10 @@ function identity(row: LegacyAnalyticsRow): {
   };
 }
 
-const denylistedProperty = /(?:^|_)(?:email|name|phone|cv|resume|token|secret|password|free_?text)(?:_|$)/i;
+const denylistedProperty =
+  /(?:^|_)(?:email|name|phone|cv|resume|token|secret|password|free_?text)(?:_|$)/i;
 
-export function transformLegacyAnalyticsRow(
-  row: LegacyAnalyticsRow,
-): BackfillDisposition {
+export function transformLegacyAnalyticsRow(row: LegacyAnalyticsRow): BackfillDisposition {
   const sourceCreatedAt = validInstant(row.createdAt);
   const canonicalEventName = resolveAnalyticsEventName(row.eventName);
   const occurrence = validInstant(row.exactBusinessTimestamp);
@@ -276,14 +272,9 @@ export function transformLegacyAnalyticsRow(
   if (Object.keys(row.properties).some((key) => denylistedProperty.test(key))) {
     return quarantine("denylisted_property");
   }
-  const sanitized = sanitizeAnalyticsProperties(
-    canonicalEventName,
-    row.properties,
-  );
+  const sanitized = sanitizeAnalyticsProperties(canonicalEventName, row.properties);
   if (sanitized.rejectedProperties.length > 0) {
-    return quarantine(
-      `rejected_properties:${sanitized.rejectedProperties.join(",")}`,
-    );
+    return quarantine(`rejected_properties:${sanitized.rejectedProperties.join(",")}`);
   }
   if (sanitized.missingRequiredProperties.length > 0) {
     return quarantine(
@@ -301,9 +292,7 @@ export function transformLegacyAnalyticsRow(
       event_source: "historical-only",
       timestamp_quality: timestampQuality,
       identity_quality: resolvedIdentity.quality,
-      ...(resolvedIdentity.personless
-        ? { $process_person_profile: false }
-        : {}),
+      ...(resolvedIdentity.personless ? { $process_person_profile: false } : {}),
     },
   };
   const value = { ...base, status: "pending", reason: null, payload } as const;
@@ -326,12 +315,9 @@ export function afterCheckpoint(
   );
 }
 
-export function orderLegacyRows(
-  rows: LegacyAnalyticsRow[],
-): LegacyAnalyticsRow[] {
+export function orderLegacyRows(rows: LegacyAnalyticsRow[]): LegacyAnalyticsRow[] {
   return [...rows].sort(
     (left, right) =>
-      left.createdAt.localeCompare(right.createdAt) ||
-      left.eventId.localeCompare(right.eventId),
+      left.createdAt.localeCompare(right.createdAt) || left.eventId.localeCompare(right.eventId),
   );
 }

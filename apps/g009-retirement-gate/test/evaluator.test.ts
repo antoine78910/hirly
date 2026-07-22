@@ -101,9 +101,7 @@ describe("G009 retirement gate", () => {
     });
 
     expect(evidence.retirementStatus).toBe("NOT_AUTHORIZED");
-    expect(evidence.invariantFailures).toEqual([
-      "lower_confidence_bound_exceeds_observed_delta",
-    ]);
+    expect(evidence.invariantFailures).toEqual(["lower_confidence_bound_exceeds_observed_delta"]);
     expect(evidence.unmetReasons).toContain("lower_confidence_bound_exceeds_observed_delta");
   });
 });

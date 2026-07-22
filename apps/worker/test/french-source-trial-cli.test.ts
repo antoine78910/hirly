@@ -48,8 +48,7 @@ describe("G014 French source trial operator CLI", () => {
         policyEvidenceId,
         datasetId: "csp-test-dataset",
         resourceId: "csp-test-resource",
-        resourceUrl:
-          "https://static.data.gouv.fr/resources/csp-test/20260720/offres.csv",
+        resourceUrl: "https://static.data.gouv.fr/resources/csp-test/20260720/offres.csv",
         contentSha256: sha256(csv),
         byteLength,
         sourcePolicyArtifactSha256: "a".repeat(64),
@@ -147,8 +146,7 @@ describe("G014 French source trial operator CLI", () => {
         attribution: {
           licenceName: "Licence Ouverte 2.0",
           attributionText: "Source: qualified publisher via data.gouv.fr",
-          sourceUrl:
-            "https://www.data.gouv.fr/fr/datasets/qualified-employment-dataset/",
+          sourceUrl: "https://www.data.gouv.fr/fr/datasets/qualified-employment-dataset/",
         },
         budgets: {
           maxRequests: 1,
@@ -179,20 +177,14 @@ describe("G014 French source trial operator CLI", () => {
             contractType: "CDI",
             status: "active",
             applyUrls: ["https://apply.example.org/jobs/job-001"],
-            sourceUrl:
-              "https://www.data.gouv.fr/fr/datasets/qualified-employment-dataset/",
+            sourceUrl: "https://www.data.gouv.fr/fr/datasets/qualified-employment-dataset/",
             publishedAt: "2026-07-19T08:00:00.000Z",
             expiresAt: "2026-08-19T08:00:00.000Z",
             sourceDocument: { reference: "job-001" },
           },
         ],
       });
-      const paths = await writeTrialInputs(
-        directory,
-        manifest,
-        resource,
-        fixture,
-      );
+      const paths = await writeTrialInputs(directory, manifest, resource, fixture);
       const command = parseFrenchSourceTrialArgs([
         "data-gouv",
         "preview",
@@ -233,10 +225,7 @@ describe("G014 French source trial operator CLI", () => {
       );
 
       await expect(
-        runFrenchSourceTrialCli(
-          { ...command, approvedManifestDigest: "f".repeat(64) },
-          {},
-        ),
+        runFrenchSourceTrialCli({ ...command, approvedManifestDigest: "f".repeat(64) }, {}),
       ).rejects.toThrow("not allowlisted");
     } finally {
       await rm(directory, { recursive: true, force: true });

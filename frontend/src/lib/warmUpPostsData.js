@@ -38,15 +38,13 @@ export const WARM_UP_POSTS_EN = [
     guidelines: ['Type on laptop and open mouth at the "AHHH" sound'],
     script:
       "When you finally get an email saying you made it to the next round of interviews but you don't want to celebrate just yet until you secure THAT BAG",
-    caption:
-      "I hate doing interviews omfgg\n#recruitment #jobapplication #jobmarket #aihirlyai",
+    caption: "I hate doing interviews omfgg\n#recruitment #jobapplication #jobmarket #aihirlyai",
   },
   {
     title: "Job Market So Bad…",
     exampleLabel: "Sofia's 303K Video",
     exampleUrl: "https://www.tiktok.com/@careerwithsofia/video/7594694796975934751",
-    audioUrl:
-      "https://www.tiktok.com/music/NOT-CUTE-ANYMORE-Sped-up-7574691807540398081",
+    audioUrl: "https://www.tiktok.com/music/NOT-CUTE-ANYMORE-Sped-up-7574691807540398081",
     guidelines: ["Smile, blink a lot, thumbs up"],
     script: "Job market so bad I'm interviewing to be hostess with an ivy league degree",
     caption:
@@ -58,8 +56,7 @@ export const WARM_UP_POSTS_EN = [
     exampleUrl: "https://www.tiktok.com/@careernevie/video/7563375824846507294",
     audioUrl: "https://www.tiktok.com/music/for-the-first-time-7379062173470853934",
     guidelines: ["Look sad while typing on your laptop"],
-    script:
-      "I'm done applying to jobs because clearly everyone hates me and wants me to die",
+    script: "I'm done applying to jobs because clearly everyone hates me and wants me to die",
     caption:
       "I've used Linkedin, Indeed, and Glassdoor for my job search and NO ONE REPLIES TO ME 😭\nBut I have heard that niche job apps are the way to go (from my bestie lol), so far I've tried Hirly, Discord, and those Instagram influencer groupchat things 😂😂\n#recruitment #jobsearch #jobapplication #jobboard #aihirlyai",
   },
@@ -72,8 +69,7 @@ export const WARM_UP_POSTS_EN = [
     guidelines: ["Cross hands/arms and slow video to 0.5–1× speed"],
     script:
       "I'm unemployed. Tell me the craziest thing that actually worked for you while job hunting.",
-    caption:
-      "What is your strategy? 🤔\n#jobsearch #jobhunt #aihirlyai #jobtips #unemployed",
+    caption: "What is your strategy? 🤔\n#jobsearch #jobhunt #aihirlyai #jobtips #unemployed",
   },
   {
     title: "Lost Job After Accepting Offer",
@@ -130,9 +126,7 @@ export function warmUpPostsToBlocks(posts, lang = "en") {
         type: "list",
         style: "bullet",
         items: [
-          post.audioUrl
-            ? { text: labels.linkToAudio, href: post.audioUrl }
-            : labels.linkToAudio,
+          post.audioUrl ? { text: labels.linkToAudio, href: post.audioUrl } : labels.linkToAudio,
           ...post.guidelines,
         ],
       },

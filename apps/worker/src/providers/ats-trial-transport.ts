@@ -110,10 +110,7 @@ export async function fetchBoundedAtsJson<Output>(input: {
   timeoutController.signal.addEventListener("abort", cancelFromTimeout, {
     once: true,
   });
-  const timeout = setTimeout(
-    () => timeoutController.abort(),
-    input.budgets.timeoutMs,
-  );
+  const timeout = setTimeout(() => timeoutController.abort(), input.budgets.timeoutMs);
 
   try {
     let response: Response;
@@ -140,27 +137,20 @@ export async function fetchBoundedAtsJson<Output>(input: {
         );
       }
       if (input.signal.aborted) {
-        throw new AtsTrialTransportError(
-          "cancelled",
-          "ATS trial request cancelled",
-          null,
-          { cause: error },
-        );
+        throw new AtsTrialTransportError("cancelled", "ATS trial request cancelled", null, {
+          cause: error,
+        });
       }
-      throw new AtsTrialTransportError(
-        "retryable",
-        "ATS trial network request failed",
-        null,
-        { cause: error },
-      );
+      throw new AtsTrialTransportError("retryable", "ATS trial network request failed", null, {
+        cause: error,
+      });
     }
 
     if (!response.ok) throw classifyHttpResponse(response.status);
     const declaredLength = response.headers.get("content-length");
     if (
       declaredLength !== null &&
-      (!/^\d+$/.test(declaredLength) ||
-        Number(declaredLength) > input.budgets.maxBytes)
+      (!/^\d+$/.test(declaredLength) || Number(declaredLength) > input.budgets.maxBytes)
     ) {
       throw new AtsTrialTransportError(
         "budget_exceeded",
@@ -171,11 +161,7 @@ export async function fetchBoundedAtsJson<Output>(input: {
 
     let bytes: Uint8Array;
     try {
-      bytes = await readBoundedBody(
-        response,
-        input.budgets.maxBytes,
-        requestController.signal,
-      );
+      bytes = await readBoundedBody(response, input.budgets.maxBytes, requestController.signal);
     } catch (error) {
       if (error instanceof AtsTrialTransportError) throw error;
       if (timeoutController.signal.aborted) {
@@ -253,18 +239,10 @@ function classifyHttpResponse(status: number): AtsTrialTransportError {
     );
   }
   if (status === 429) {
-    return new AtsTrialTransportError(
-      "rate_limited",
-      "ATS trial request was rate limited",
-      status,
-    );
+    return new AtsTrialTransportError("rate_limited", "ATS trial request was rate limited", status);
   }
   if (status >= 500 && status <= 599) {
-    return new AtsTrialTransportError(
-      "retryable",
-      `ATS trial provider failed (${status})`,
-      status,
-    );
+    return new AtsTrialTransportError("retryable", `ATS trial provider failed (${status})`, status);
   }
   return new AtsTrialTransportError(
     "permanent",
@@ -315,10 +293,7 @@ async function readBoundedBody(
   return body;
 }
 
-function awaitWithAbort<T>(
-  promise: Promise<T>,
-  signal: AbortSignal,
-): Promise<T> {
+function awaitWithAbort<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
   if (signal.aborted) return Promise.reject(signal.reason);
   return new Promise<T>((resolve, reject) => {
     const abort = () => reject(signal.reason);

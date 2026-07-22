@@ -79,7 +79,9 @@ export function formatOnboardingAnswerValue(key, value) {
   if (Array.isArray(value)) {
     if (!value.length) return "—";
     return value
-      .map((item) => (typeof item === "object" ? item?.label || item?.id || JSON.stringify(item) : String(item)))
+      .map((item) =>
+        typeof item === "object" ? item?.label || item?.id || JSON.stringify(item) : String(item),
+      )
       .join(", ");
   }
   if (typeof value === "object") return JSON.stringify(value);
@@ -157,7 +159,9 @@ export function buildOnboardingAnswerDistribution(users, { topN = 6 } = {}) {
     }
   }
   if (categoryTotal > 0) {
-    results.push(buildStepResult("categories", "Job categories picked", categoryCounts, categoryTotal, topN));
+    results.push(
+      buildStepResult("categories", "Job categories picked", categoryCounts, categoryTotal, topN),
+    );
   }
 
   const roleCounts = new Map();
@@ -185,7 +189,15 @@ export function buildOnboardingAnswerDistribution(users, { topN = 6 } = {}) {
     locationCounts.set(value, (locationCounts.get(value) || 0) + 1);
   }
   if (locationTotal > 0) {
-    results.push(buildStepResult("onboarding_location", "Where they search", locationCounts, locationTotal, topN));
+    results.push(
+      buildStepResult(
+        "onboarding_location",
+        "Where they search",
+        locationCounts,
+        locationTotal,
+        topN,
+      ),
+    );
   }
 
   return results;
@@ -212,5 +224,10 @@ export function fmtDate(value) {
   if (!value) return "";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return String(value);
-  return date.toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  return date.toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }

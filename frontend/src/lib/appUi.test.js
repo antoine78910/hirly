@@ -1,20 +1,26 @@
 import { APP_LANGUAGES, APP_UI, appT, isAppLanguage, readStoredAppLang } from "./appUi";
 
 function leafEntries(value, path = []) {
-  return Object.entries(value).flatMap(([key, child]) => (
+  return Object.entries(value).flatMap(([key, child]) =>
     typeof child === "string"
       ? [[path.concat(key).join("."), child]]
-      : leafEntries(child, path.concat(key))
-  ));
+      : leafEntries(child, path.concat(key)),
+  );
 }
 
 describe("app UI locales", () => {
   test("provides complete translated catalogs for every supported locale", () => {
-    const englishKeys = leafEntries(APP_UI.en).map(([key]) => key).sort();
+    const englishKeys = leafEntries(APP_UI.en)
+      .map(([key]) => key)
+      .sort();
 
     expect(APP_LANGUAGES).toEqual(["en", "fr", "de", "es", "it"]);
     for (const locale of APP_LANGUAGES) {
-      expect(leafEntries(APP_UI[locale]).map(([key]) => key).sort()).toEqual(englishKeys);
+      expect(
+        leafEntries(APP_UI[locale])
+          .map(([key]) => key)
+          .sort(),
+      ).toEqual(englishKeys);
       expect(appT(locale, "settings.languageTitle")).not.toBe("settings.languageTitle");
     }
   });

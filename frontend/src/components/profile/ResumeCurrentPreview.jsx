@@ -12,7 +12,8 @@ function inferResumeMime(profile) {
   if (profile?.cv_mime) return profile.cv_mime;
   const name = (profile?.cv_filename || "").toLowerCase();
   if (name.endsWith(".pdf")) return "application/pdf";
-  if (name.endsWith(".docx")) return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  if (name.endsWith(".docx"))
+    return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
   if (name.endsWith(".txt")) return "text/plain";
   if (name.endsWith(".png")) return "image/png";
   if (name.endsWith(".jpg") || name.endsWith(".jpeg")) return "image/jpeg";
@@ -118,15 +119,20 @@ export default function ResumeCurrentPreview({
       cancelled = true;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [active, hasResume, profile?.cv_filename, profile?.cv_mime, profile?.cv_text, staticPreviewUrl]);
+  }, [
+    active,
+    hasResume,
+    profile?.cv_filename,
+    profile?.cv_mime,
+    profile?.cv_text,
+    staticPreviewUrl,
+  ]);
 
   if (!hasResume) return null;
 
   return (
     <section className="space-y-2" data-testid="resume-current-preview">
-      <p className="text-xs font-semibold uppercase tracking-wide shell-body">
-        {sectionLabel}
-      </p>
+      <p className="text-xs font-semibold uppercase tracking-wide shell-body">{sectionLabel}</p>
 
       <div className="shell-surface-sm overflow-hidden shadow-sm">
         <div className={`relative ${previewHeight} overflow-hidden bg-zinc-200 dark:bg-zinc-800`}>

@@ -4,11 +4,7 @@ import { useAuth } from "../context/AuthContext";
 import { Loader2 } from "lucide-react";
 import { isDemoAccountEnabled } from "../lib/demoAccount";
 import { devBypassAuth } from "../lib/dev";
-import {
-  domainSplitEnabled,
-  isAppHost,
-  marketingUrl,
-} from "../lib/appDomains";
+import { domainSplitEnabled, isAppHost, marketingUrl } from "../lib/appDomains";
 import { fetchJobSeekerProfile, hasJobSeekerOnboardingComplete } from "../lib/jobSeekerEntry";
 
 // Guards against a cross-domain auth redirect loop (app.tryhirly.com <->
@@ -26,7 +22,8 @@ export default function ProtectedRoute({ children, requireProfile = false }) {
   const [redirectLoopDetected, setRedirectLoopDetected] = useState(false);
   const [onboardingComplete, setOnboardingComplete] = useState(null);
 
-  const isCreator = Boolean(user?.demo_account) || Boolean(hasTrainingAccess) || isDemoAccountEnabled();
+  const isCreator =
+    Boolean(user?.demo_account) || Boolean(hasTrainingAccess) || isDemoAccountEnabled();
   const profileReady = Boolean(hasProfile && hasPreferences);
 
   useEffect(() => {
@@ -64,19 +61,21 @@ export default function ProtectedRoute({ children, requireProfile = false }) {
     let lastAttempt = 0;
     try {
       lastAttempt = Number(sessionStorage.getItem(AUTH_REDIRECT_GUARD_KEY) || 0);
-    } catch (_) { /* ignore */ }
+    } catch (_) {
+      /* ignore */
+    }
     if (lastAttempt && Date.now() - lastAttempt < AUTH_REDIRECT_GUARD_WINDOW_MS) {
       setRedirectLoopDetected(true);
       return;
     }
     try {
       sessionStorage.setItem(AUTH_REDIRECT_GUARD_KEY, String(Date.now()));
-    } catch (_) { /* ignore */ }
+    } catch (_) {
+      /* ignore */
+    }
 
     const returnPath = `${location.pathname}${location.search}${location.hash}` || "/swipe";
-    window.location.replace(
-      marketingUrl(`/signin?next=${encodeURIComponent(returnPath)}`),
-    );
+    window.location.replace(marketingUrl(`/signin?next=${encodeURIComponent(returnPath)}`));
   }, [loading, user, location.pathname, location.search, location.hash]);
 
   if (devBypassAuth) return children;
@@ -114,12 +113,7 @@ export default function ProtectedRoute({ children, requireProfile = false }) {
       );
     }
     const returnPath = `${location.pathname}${location.search}${location.hash}` || "/swipe";
-    return (
-      <Navigate
-        to={`/signin?next=${encodeURIComponent(returnPath)}`}
-        replace
-      />
-    );
+    return <Navigate to={`/signin?next=${encodeURIComponent(returnPath)}`} replace />;
   }
   // Demo and training creators bypass the job-seeker profile requirement.
   if (requireProfile && !isCreator) {
@@ -133,7 +127,10 @@ export default function ProtectedRoute({ children, requireProfile = false }) {
     if (!hasPreferences) {
       if (onboardingComplete === null) {
         return (
-          <div className="min-h-dvh flex items-center justify-center" data-testid="protected-profile-loading">
+          <div
+            className="min-h-dvh flex items-center justify-center"
+            data-testid="protected-profile-loading"
+          >
             <Loader2 className="w-5 h-5 animate-spin text-zinc-400" />
           </div>
         );

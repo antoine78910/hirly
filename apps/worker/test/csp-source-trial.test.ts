@@ -1,10 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { describe, expect, test } from "bun:test";
-import type {
-  SourceTrialManifest,
-  SourceTrialResult,
-} from "@hirly/contracts";
+import type { SourceTrialManifest, SourceTrialResult } from "@hirly/contracts";
 import {
   G016_SOURCE_POLICY_ARTIFACT_SHA256,
   QUALIFIED_CSP_BYTE_LENGTH,
@@ -43,8 +40,7 @@ Administration Exemple;;Sans référence;;Marseille;;01/06/2026;31/07/2026
 `;
 const csvBytes = new TextEncoder().encode(csv);
 const csvDigest = createHash("sha256").update(csvBytes).digest("hex");
-const testResourceUrl =
-  "https://static.data.gouv.fr/resources/csp-test/20260720/csp.csv";
+const testResourceUrl = "https://static.data.gouv.fr/resources/csp-test/20260720/csp.csv";
 
 function resourceManifestInput(
   overrides: Partial<CspTrialResourceManifestInput> = {},
@@ -226,9 +222,7 @@ describe("G014 qualified CSP CSV evidence-only trial", () => {
       containsPersonalData: false,
       blockers: ["no_canonical_apply_route"],
     });
-    expect(JSON.stringify(preview.evidencePage)).not.toContain(
-      "Administration Exemple",
-    );
+    expect(JSON.stringify(preview.evidencePage)).not.toContain("Administration Exemple");
   });
 
   test("validates binding and allowlist before immutable G014 admission or network", async () => {
@@ -308,21 +302,12 @@ describe("G014 qualified CSP CSV evidence-only trial", () => {
       fetch: async () => csvResponse(),
       now: () => new Date("2026-07-20T12:00:00Z"),
     });
-    expect(calls).toEqual([
-      "begin",
-      "page",
-      "candidate",
-      "candidate",
-      "scorecard",
-    ]);
+    expect(calls).toEqual(["begin", "page", "candidate", "candidate", "scorecard"]);
     expect(pages[0]).toContain(sealed.contentSha256);
     expect(pages[0]).not.toContain("Administration Exemple");
-    expect(candidates.every((value) => value.includes("no_canonical_apply_route")))
-      .toBeTrue();
+    expect(candidates.every((value) => value.includes("no_canonical_apply_route"))).toBeTrue();
     expect(candidateHashes).toEqual(
-      candidates.map((value) =>
-        createHash("sha256").update(value).digest("hex"),
-      ),
+      candidates.map((value) => createHash("sha256").update(value).digest("hex")),
     );
     expect(results).toEqual([
       expect.objectContaining({

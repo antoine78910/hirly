@@ -14,10 +14,10 @@ const runIntegration = databaseUrl ? test : test.skip;
 
 async function psql(args: string[]): Promise<string> {
   if (!databaseUrl) throw new Error("G016_COVERAGE_DATABASE_URL is required");
-  const process = Bun.spawn(
-    ["psql", databaseUrl, "-X", "-v", "ON_ERROR_STOP=1", ...args],
-    { stdout: "pipe", stderr: "pipe" },
-  );
+  const process = Bun.spawn(["psql", databaseUrl, "-X", "-v", "ON_ERROR_STOP=1", ...args], {
+    stdout: "pipe",
+    stderr: "pipe",
+  });
   const [exitCode, stdout, stderr] = await Promise.all([
     process.exited,
     new Response(process.stdout).text(),
@@ -37,19 +37,23 @@ const input: PaidCohortCoverageInput = {
   freshnessCutoff: "2026-06-20T14:00:00.000Z",
   freshnessWindowDays: 30,
   evaluatorVersion: "g016.pg.v1",
-  cohort: [{
-    hashedUserId: coverageDigest("integration-paid-user"),
-    cohortDimensions: { country_code: "FR", subscription_tier: "paid" },
-    roleTokens: ["engineer"],
-    countryCodes: ["FR"],
-    seenCanonicalGroupDigests: [],
-  }],
-  trialSources: [{
-    trialRunId: "00000000-0000-4000-8000-000000000020",
-    sourceId: "00000000-0000-4000-8000-000000000010",
-    provider: "greenhouse",
-    tenantKey: "acme",
-  }],
+  cohort: [
+    {
+      hashedUserId: coverageDigest("integration-paid-user"),
+      cohortDimensions: { country_code: "FR", subscription_tier: "paid" },
+      roleTokens: ["engineer"],
+      countryCodes: ["FR"],
+      seenCanonicalGroupDigests: [],
+    },
+  ],
+  trialSources: [
+    {
+      trialRunId: "00000000-0000-4000-8000-000000000020",
+      sourceId: "00000000-0000-4000-8000-000000000010",
+      provider: "greenhouse",
+      tenantKey: "acme",
+    },
+  ],
 };
 
 describe("G016 paid cohort coverage PostgreSQL producer", () => {
@@ -72,7 +76,10 @@ describe("G016 paid cohort coverage PostgreSQL producer", () => {
     ]) {
       await apply(`backend/db/migrations/${migration}`);
     }
-    await psql(["-q", "-c", `
+    await psql([
+      "-q",
+      "-c",
+      `
       TRUNCATE TABLE
         public.source_trial_scorecards,
         public.source_trial_candidates,
@@ -213,7 +220,8 @@ describe("G016 paid cohort coverage PostgreSQL producer", () => {
         'https://example.test/current-1', 'valid', 'A',
         false, false, false, 'current-fingerprint', '{}'::jsonb
       );
-    `]);
+    `,
+    ]);
   });
 
   runIntegration("persists once, replays idempotently, and never mutates jobs", async () => {
@@ -228,14 +236,24 @@ describe("G016 paid cohort coverage PostgreSQL producer", () => {
       expect(second.persistence).toBe("idempotent");
       expect(second.evidenceDigest).toBe(first.evidenceDigest);
       expect(after).toBe(before);
-      expect(await psql([
-        "-A", "-t", "-q", "-c",
-        "SELECT count(*) FROM public.paid_user_inventory_snapshots",
-      ])).toBe("1");
-      expect(await psql([
-        "-A", "-t", "-q", "-c",
-        "SELECT count(*) FROM public.paid_user_source_contributions",
-      ])).toBe("1");
+      expect(
+        await psql([
+          "-A",
+          "-t",
+          "-q",
+          "-c",
+          "SELECT count(*) FROM public.paid_user_inventory_snapshots",
+        ]),
+      ).toBe("1");
+      expect(
+        await psql([
+          "-A",
+          "-t",
+          "-q",
+          "-c",
+          "SELECT count(*) FROM public.paid_user_source_contributions",
+        ]),
+      ).toBe("1");
     } finally {
       await database.end({ timeout: 5 });
     }

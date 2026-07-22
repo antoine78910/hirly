@@ -100,7 +100,9 @@ export async function collectLiveJobSupplyReport(
         ON CONFLICT (manifest_digest) DO NOTHING
         RETURNING id
       `;
-      const [existing] = inserted ? [] : await transaction<{ id: string }[]>`
+      const [existing] = inserted
+        ? []
+        : await transaction<{ id: string }[]>`
         SELECT id
         FROM public.france_travail_census_manifests
         WHERE manifest_digest = ${census.digest}
@@ -117,7 +119,9 @@ export async function collectLiveJobSupplyReport(
     });
   }
   const [sourceBaseline, atsHostBaseline, paidUserBaseline, sourceEnablement] = await Promise.all([
-    sql<Record<string, unknown>[]>`SELECT * FROM public.job_supply_source_baseline ORDER BY provider`,
+    sql<
+      Record<string, unknown>[]
+    >`SELECT * FROM public.job_supply_source_baseline ORDER BY provider`,
     sql<Record<string, unknown>[]>`
       SELECT * FROM public.job_supply_ats_host_baseline
       ORDER BY france_jobs DESC, jobs DESC, apply_host

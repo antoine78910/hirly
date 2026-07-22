@@ -33,20 +33,20 @@ export interface ApplicationCapability {
   noSubmitVerified: boolean;
 }
 
-export const APPLICATION_CAPABILITY_SCHEMA_VERSION =
-  "hirly.application-capabilities.v1" as const;
+export const APPLICATION_CAPABILITY_SCHEMA_VERSION = "hirly.application-capabilities.v1" as const;
 
 if (capabilityCatalogue.schemaVersion !== APPLICATION_CAPABILITY_SCHEMA_VERSION) {
   throw new Error("application capability catalogue version mismatch");
 }
 
-export const APPLICATION_CAPABILITIES =
-  capabilityCatalogue.providers as Readonly<Record<AtsProvider, ApplicationCapability>>;
+export const APPLICATION_CAPABILITIES = capabilityCatalogue.providers as Readonly<
+  Record<AtsProvider, ApplicationCapability>
+>;
 
 const catalogueProviders = Object.keys(APPLICATION_CAPABILITIES);
 if (
-  catalogueProviders.length !== ATS_PROVIDERS.length
-  || ATS_PROVIDERS.some((provider) => !APPLICATION_CAPABILITIES[provider])
+  catalogueProviders.length !== ATS_PROVIDERS.length ||
+  ATS_PROVIDERS.some((provider) => !APPLICATION_CAPABILITIES[provider])
 ) {
   throw new Error("application capability catalogue does not cover every ATS provider");
 }
@@ -56,19 +56,11 @@ export function isStrictAutoApplicableProvider(
 ): provider is AtsProvider {
   if (!provider || !ATS_PROVIDERS.includes(provider as AtsProvider)) return false;
   const capability = APPLICATION_CAPABILITIES[provider as AtsProvider];
-  return capability.driverRegistered
-    && capability.queuePermitted
-    && capability.noSubmitVerified;
+  return capability.driverRegistered && capability.queuePermitted && capability.noSubmitVerified;
 }
 
-export const ATS_PROVIDER_HOST_PATTERNS: Readonly<
-  Record<AtsProvider, readonly string[]>
-> = {
-  greenhouse: [
-    "boards.greenhouse.io",
-    "job-boards.greenhouse.io",
-    "greenhouse.io",
-  ],
+export const ATS_PROVIDER_HOST_PATTERNS: Readonly<Record<AtsProvider, readonly string[]>> = {
+  greenhouse: ["boards.greenhouse.io", "job-boards.greenhouse.io", "greenhouse.io"],
   lever: ["jobs.lever.co", "jobs.eu.lever.co", "api.lever.co", "api.eu.lever.co"],
   ashby: ["jobs.ashbyhq.com", "ashbyhq.com"],
   workable: ["apply.workable.com", "workable.com"],
@@ -140,9 +132,7 @@ const EXACT_HOST_PROVIDERS = new Map<string, AtsProvider>([
   ["grnh.se", "greenhouse"],
 ]);
 
-const SUFFIX_HOST_PROVIDERS: ReadonlyArray<
-  readonly [suffix: string, provider: AtsProvider]
-> = [
+const SUFFIX_HOST_PROVIDERS: ReadonlyArray<readonly [suffix: string, provider: AtsProvider]> = [
   [".greenhouse.io", "greenhouse"],
   [".ashbyhq.com", "ashby"],
   [".workable.com", "workable"],
@@ -229,8 +219,12 @@ function providerForHost(host: string): AtsProvider | null {
 }
 
 function unmanagedProviderHint(host: string): string | null {
-  if (host === "zohorecruit.com" || host.endsWith(".zohorecruit.com") ||
-      host === "zohorecruit.eu" || host.endsWith(".zohorecruit.eu")) {
+  if (
+    host === "zohorecruit.com" ||
+    host.endsWith(".zohorecruit.com") ||
+    host === "zohorecruit.eu" ||
+    host.endsWith(".zohorecruit.eu")
+  ) {
     return "zoho_recruit";
   }
   if (host.endsWith(".oraclecloud.com") && (host.includes(".fa.") || host.startsWith("fa-"))) {
@@ -252,7 +246,13 @@ export function detectAtsEvidence(input: string | null | undefined): AtsDetectio
   try {
     host = new URL(input).hostname.toLowerCase().replace(/^www\./, "");
   } catch {
-    return { status: "invalid_url", host: null, provider: null, providerHint: null, match: "invalid_url" };
+    return {
+      status: "invalid_url",
+      host: null,
+      provider: null,
+      providerHint: null,
+      match: "invalid_url",
+    };
   }
 
   const classification = classifyAtsUrl(input);
@@ -279,16 +279,10 @@ function tenantFromSubdomain(host: string, suffix: string): string | null {
   return normalizeTenant(host.slice(0, -suffix.length));
 }
 
-function tenantForProvider(
-  provider: AtsProvider,
-  url: URL,
-  parts: string[],
-): string | null {
+function tenantForProvider(provider: AtsProvider, url: URL, parts: string[]): string | null {
   switch (provider) {
     case "greenhouse":
-      return ["boards.greenhouse.io", "job-boards.greenhouse.io"].includes(
-        url.hostname,
-      )
+      return ["boards.greenhouse.io", "job-boards.greenhouse.io"].includes(url.hostname)
         ? normalizeTenant(parts[0])
         : null;
     case "lever":
@@ -296,17 +290,13 @@ function tenantForProvider(
         ? normalizeTenant(parts[0])
         : null;
     case "ashby":
-      return url.hostname === "jobs.ashbyhq.com"
-        ? normalizeTenant(parts[0])
-        : null;
+      return url.hostname === "jobs.ashbyhq.com" ? normalizeTenant(parts[0]) : null;
     case "workable":
       return url.hostname === "apply.workable.com" && parts[1] === "j"
         ? normalizeTenant(parts[0])
         : null;
     case "smartrecruiters":
-      return ["jobs.smartrecruiters.com", "careers.smartrecruiters.com"].includes(
-        url.hostname,
-      )
+      return ["jobs.smartrecruiters.com", "careers.smartrecruiters.com"].includes(url.hostname)
         ? normalizeTenant(parts[0])
         : null;
     case "personio":
@@ -331,22 +321,18 @@ function tenantForProvider(
   }
 }
 
-function postingForProvider(
-  provider: AtsProvider,
-  url: URL,
-  parts: string[],
-): string | null {
+function postingForProvider(provider: AtsProvider, url: URL, parts: string[]): string | null {
   switch (provider) {
     case "greenhouse": {
       const jobsIndex = parts.indexOf("jobs");
-      return jobsIndex >= 0 ? parts[jobsIndex + 1] ?? null : null;
+      return jobsIndex >= 0 ? (parts[jobsIndex + 1] ?? null) : null;
     }
     case "lever":
     case "ashby":
       return parts[1] ?? null;
     case "workable": {
       const jobIndex = parts.indexOf("j");
-      return jobIndex >= 0 ? parts[jobIndex + 1] ?? null : null;
+      return jobIndex >= 0 ? (parts[jobIndex + 1] ?? null) : null;
     }
     case "smartrecruiters": {
       const slug = parts[1];
@@ -354,7 +340,7 @@ function postingForProvider(
     }
     case "personio": {
       const jobIndex = parts.indexOf("job");
-      return jobIndex >= 0 ? parts[jobIndex + 1] ?? null : null;
+      return jobIndex >= 0 ? (parts[jobIndex + 1] ?? null) : null;
     }
     case "teamtailor":
     case "flatchr": {

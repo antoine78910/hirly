@@ -109,11 +109,9 @@ const LANDING_HERO_COPY = {
       accent: "postuler.",
     },
     cta: (jobLabel) => `Trouve ton ${jobLabel} maintenant`,
-    subtitle: "L'IA s'occupe de la recherche d'offres, du CV, de la lettre de motivation et des candidatures. Toi, tu n'as qu'à swiper.",
-    bullets: [
-      "Postule jusqu'à 10× plus vite.",
-      "Plus de 500 000 offres d'emploi.",
-    ],
+    subtitle:
+      "L'IA s'occupe de la recherche d'offres, du CV, de la lettre de motivation et des candidatures. Toi, tu n'as qu'à swiper.",
+    bullets: ["Postule jusqu'à 10× plus vite.", "Plus de 500 000 offres d'emploi."],
   },
   en: {
     headline: {
@@ -123,7 +121,8 @@ const LANDING_HERO_COPY = {
       accent: "applying.",
     },
     cta: (jobLabel) => `Find your ${jobLabel} now`,
-    subtitle: "AI handles job search, your CV, cover letters, and applications. All you have to do is swipe.",
+    subtitle:
+      "AI handles job search, your CV, cover letters, and applications. All you have to do is swipe.",
     bullets: ["Apply up to 10× faster.", "Over 500,000 job listings."],
   },
   de: {
@@ -134,11 +133,9 @@ const LANDING_HERO_COPY = {
       accent: "Bewerbungen zu schreiben.",
     },
     cta: (jobLabel) => `Finde jetzt ${jobLabel}`,
-    subtitle: "KI übernimmt die Jobsuche, deinen Lebenslauf, Anschreiben und Bewerbungen. Du musst nur swipen.",
-    bullets: [
-      "Bewirb dich bis zu 10× schneller.",
-      "Über 500.000 Stellenangebote.",
-    ],
+    subtitle:
+      "KI übernimmt die Jobsuche, deinen Lebenslauf, Anschreiben und Bewerbungen. Du musst nur swipen.",
+    bullets: ["Bewirb dich bis zu 10× schneller.", "Über 500.000 Stellenangebote."],
   },
   es: {
     headline: {
@@ -148,11 +145,9 @@ const LANDING_HERO_COPY = {
       accent: "enviando solicitudes.",
     },
     cta: (jobLabel) => `Encuentra tu ${jobLabel} ahora`,
-    subtitle: "La IA se encarga de buscar empleo, tu CV, las cartas de presentación y las solicitudes. Tú solo tienes que deslizar.",
-    bullets: [
-      "Solicita empleos hasta 10× más rápido.",
-      "Más de 500.000 ofertas de empleo.",
-    ],
+    subtitle:
+      "La IA se encarga de buscar empleo, tu CV, las cartas de presentación y las solicitudes. Tú solo tienes que deslizar.",
+    bullets: ["Solicita empleos hasta 10× más rápido.", "Más de 500.000 ofertas de empleo."],
   },
   it: {
     headline: {
@@ -162,16 +157,17 @@ const LANDING_HERO_COPY = {
       accent: "candidarti.",
     },
     cta: (jobLabel) => `Trova il tuo ${jobLabel} ora`,
-    subtitle: "L'IA si occupa della ricerca di lavoro, del CV, delle lettere di presentazione e delle candidature. Tu devi solo scorrere.",
-    bullets: [
-      "Candidati fino a 10× più velocemente.",
-      "Oltre 500.000 offerte di lavoro.",
-    ],
+    subtitle:
+      "L'IA si occupa della ricerca di lavoro, del CV, delle lettere di presentazione e delle candidature. Tu devi solo scorrere.",
+    bullets: ["Candidati fino a 10× più velocemente.", "Oltre 500.000 offerte di lavoro."],
   },
 };
 
 function resolveLandingLocale(lang) {
-  const locale = String(lang || "").trim().toLowerCase().split("-")[0];
+  const locale = String(lang || "")
+    .trim()
+    .toLowerCase()
+    .split("-")[0];
   return LANDING_HERO_COPY[locale] ? locale : "en";
 }
 
@@ -187,9 +183,7 @@ export function resolveLandingContractType(raw) {
 
 export function resolveLandingContractFromLocation(pathname, searchParams) {
   const fromQuery =
-    searchParams?.get("contract")
-    || searchParams?.get("type")
-    || searchParams?.get("job");
+    searchParams?.get("contract") || searchParams?.get("type") || searchParams?.get("job");
   if (fromQuery) return resolveLandingContractType(fromQuery);
 
   const segments = String(pathname || "")
@@ -212,9 +206,8 @@ export function getLandingContractSlug(contractKey) {
 export function getLandingHeroJobLabel(lang, contractType) {
   const locale = resolveLandingLocale(lang);
   const labels = HERO_JOB_LABELS[locale];
-  const resolved = contractType && labels[contractType]
-    ? contractType
-    : resolveLandingContractType(contractType);
+  const resolved =
+    contractType && labels[contractType] ? contractType : resolveLandingContractType(contractType);
   if (resolved && labels[resolved]) return labels[resolved];
   return labels.default;
 }
@@ -225,10 +218,7 @@ export function getLandingHeroRotatingLabels(lang) {
 
 /** Fixed slot width so the hero line does not jump between words. */
 export function getLandingHeroHighlightWidthCh(lang) {
-  const labels = [
-    ...getLandingHeroRotatingLabels(lang),
-    getLandingHeroJobLabel(lang, null),
-  ];
+  const labels = [...getLandingHeroRotatingLabels(lang), getLandingHeroJobLabel(lang, null)];
   const maxLen = Math.max(...labels.map((label) => label.length), 3);
   return maxLen + 0.75;
 }

@@ -5,7 +5,7 @@ import { AuthProvider, useAuth } from "./AuthContext";
 import { goToMarketing } from "../lib/appDomains";
 import { resetPostHog } from "../lib/posthogClient";
 
-(globalThis).IS_REACT_ACT_ENVIRONMENT = true;
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 jest.mock("../lib/api", () => ({
   api: { get: jest.fn(), post: jest.fn() },

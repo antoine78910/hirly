@@ -1,10 +1,6 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import {
-  DEFAULT_AI_SETTINGS,
-  readAiSettings,
-  saveAiSettings,
-} from "../lib/aiSettings";
+import { DEFAULT_AI_SETTINGS, readAiSettings, saveAiSettings } from "../lib/aiSettings";
 import { api } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 
@@ -39,7 +35,8 @@ export function useAiSettings() {
     toast.success(value ? "AI feature enabled" : "AI feature disabled", { duration: 1800 });
 
     if (key === "reviewDocuments") {
-      api.put("/account/settings", { require_review_before_send: value })
+      api
+        .put("/account/settings", { require_review_before_send: value })
         .then(() => {
           setUser?.((prev) => (prev ? { ...prev, require_review_before_send: value } : prev));
         })

@@ -5,10 +5,7 @@ import {
   type JobProjectionResult,
   type JobProjectionSource,
 } from "@hirly/matching";
-import type {
-  JobProjectionLease,
-  JobProjectionRepository,
-} from "@hirly/db";
+import type { JobProjectionLease, JobProjectionRepository } from "@hirly/db";
 
 export type JobProjectionStore = Pick<
   JobProjectionRepository,
@@ -33,10 +30,7 @@ export interface JobProjectionConsumerOptions {
   reconciliationBatchSize: number;
 }
 
-type Project = (
-  source: JobProjectionSource,
-  projectedAt: Date,
-) => Promise<JobProjectionResult>;
+type Project = (source: JobProjectionSource, projectedAt: Date) => Promise<JobProjectionResult>;
 
 const wait = (milliseconds: number, signal: AbortSignal) =>
   new Promise<void>((resolve) => {
@@ -87,9 +81,7 @@ export class JobProjectionConsumer {
     while (!this.controller.signal.aborted) {
       if (this.options.reconciliationEnabled) {
         try {
-          await this.store.enqueueReconciliation(
-            this.options.reconciliationBatchSize,
-          );
+          await this.store.enqueueReconciliation(this.options.reconciliationBatchSize);
         } catch {
           // A failed reconciliation scan must not bypass the durable task loop.
         }
@@ -124,9 +116,7 @@ export class JobProjectionConsumer {
         continue;
       }
       for (const task of tasks) {
-        const execution = this.execute(task).finally(() =>
-          this.active.delete(execution),
-        );
+        const execution = this.execute(task).finally(() => this.active.delete(execution));
         this.active.add(execution);
       }
     }
@@ -136,9 +126,7 @@ export class JobProjectionConsumer {
     const startedAt = performance.now();
     if (task.taskKind === "projection.reconcile") {
       try {
-        await this.store.enqueueReconciliation(
-          this.options.reconciliationBatchSize,
-        );
+        await this.store.enqueueReconciliation(this.options.reconciliationBatchSize);
         const current = await this.store.finish(task, "succeeded", {
           durationMs: performance.now() - startedAt,
         });
@@ -156,10 +144,7 @@ export class JobProjectionConsumer {
       if (heartbeatRunning || controller.signal.aborted) return;
       heartbeatRunning = true;
       try {
-        const current = await this.store.heartbeat(
-          task,
-          this.options.leaseSeconds,
-        );
+        const current = await this.store.heartbeat(task, this.options.leaseSeconds);
         if (!current) controller.abort(new Error("projection_lease_lost"));
       } catch {
         controller.abort(new Error("projection_lease_lost"));
@@ -238,8 +223,8 @@ export class JobProjectionConsumer {
     this.stopClaiming();
     const drain = () =>
       Promise.allSettled(
-        [...this.active, this.runPromise].filter(
-          (promise): promise is Promise<void> => Boolean(promise),
+        [...this.active, this.runPromise].filter((promise): promise is Promise<void> =>
+          Boolean(promise),
         ),
       );
     const drained = await Promise.race([

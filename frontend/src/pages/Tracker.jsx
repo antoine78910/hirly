@@ -6,8 +6,18 @@ import { applyFromPassedJob } from "../lib/applyFromPassed";
 import { FINANCE_DEMO_CHANGED } from "../lib/financeDemoApi";
 import { DEMO_ACCOUNT_CHANGED } from "../lib/demoAccount";
 import {
-  Loader2, Search, AlertCircle, ArrowRight, BriefcaseBusiness, Send, Zap,
-  Clock3, Sparkles, CheckCircle2, FileSearch, ListOrdered,
+  Loader2,
+  Search,
+  AlertCircle,
+  ArrowRight,
+  BriefcaseBusiness,
+  Send,
+  Zap,
+  Clock3,
+  Sparkles,
+  CheckCircle2,
+  FileSearch,
+  ListOrdered,
 } from "lucide-react";
 import { BrandHeader } from "../components/app/AppScreenHeader";
 import { AppPage, AppPageScroll, SHELL_PAGE_CLASS } from "../components/app/AppPageShell";
@@ -27,7 +37,12 @@ import { trackEvent } from "../lib/analytics";
 import { useAuth } from "../context/AuthContext";
 import { useAppLocale } from "../context/AppLocaleContext";
 import { resolveDisplayStatus } from "../lib/applicationReview";
-import { getApplicationCoverLetter, getApplicationResume, hasApplicationDocuments, isApplicationGenerating } from "../lib/applicationDocuments";
+import {
+  getApplicationCoverLetter,
+  getApplicationResume,
+  hasApplicationDocuments,
+  isApplicationGenerating,
+} from "../lib/applicationDocuments";
 import {
   getApplicationDisplayStatuses,
   getTrackerEmptyCopy,
@@ -100,7 +115,12 @@ function TrackerApplicationRow({ application, onOpen, t, lang }) {
       data-testid={`application-${application.application_id}`}
     >
       <div className="flex items-center gap-3">
-        <CompanyLogo company={application.job?.company} size="sm" rounded="xl" className="shrink-0" />
+        <CompanyLogo
+          company={application.job?.company}
+          size="sm"
+          rounded="xl"
+          className="shrink-0"
+        />
         <div className="min-w-0 flex-1">
           <p className="shell-title truncate text-[15px] font-semibold leading-snug">{title}</p>
           <p className="truncate text-sm text-zinc-500">{company}</p>
@@ -108,8 +128,7 @@ function TrackerApplicationRow({ application, onOpen, t, lang }) {
             <span className="truncate">{date || t("tracker.recently")}</span>
             <span aria-hidden="true">·</span>
             <span className="inline-flex shrink-0 items-center gap-0.5 font-semibold text-linkedin">
-              <Zap className="h-3 w-3" fill="currentColor" />
-              1
+              <Zap className="h-3 w-3" fill="currentColor" />1
             </span>
             {!expired ? (
               <>
@@ -121,7 +140,11 @@ function TrackerApplicationRow({ application, onOpen, t, lang }) {
         </div>
       </div>
       {expired ? (
-        <OfferExpiredNotice application={application} compact testId={`application-expired-${application.application_id}`} />
+        <OfferExpiredNotice
+          application={application}
+          compact
+          testId={`application-expired-${application.application_id}`}
+        />
       ) : null}
     </button>
   );
@@ -148,8 +171,7 @@ function TrackerPassedRow({ row, onApplyNow, applyingId, t, lang }) {
           <span className="truncate">{date || t("tracker.recently")}</span>
           <span aria-hidden="true">·</span>
           <span className="inline-flex shrink-0 items-center gap-0.5 font-semibold text-linkedin">
-            <Zap className="h-3 w-3" fill="currentColor" />
-            1
+            <Zap className="h-3 w-3" fill="currentColor" />1
           </span>
           <span aria-hidden="true">·</span>
           <span className="truncate font-medium text-zinc-600">{t("history.passed")}</span>
@@ -184,15 +206,18 @@ const ApplicationStatusPill = ({ application, variant = "light", displayStatuses
   );
 };
 
-const statusMeta = (application, displayStatuses) => (
-  displayStatuses[resolveDisplayStatus(application)] || displayStatuses.pending
-);
+const statusMeta = (application, displayStatuses) =>
+  displayStatuses[resolveDisplayStatus(application)] || displayStatuses.pending;
 
 const isApplicationPrepared = (application) => {
   const status = resolveDisplayStatus(application);
-  return ["prepared", "pending", "action_required", "blocked_captcha", "submitted", "failed"].includes(status)
-    || ["ready", "prepared"].includes(application.submission_status)
-    || (application.package_status && application.package_status !== "not_generated");
+  return (
+    ["prepared", "pending", "action_required", "blocked_captcha", "submitted", "failed"].includes(
+      status,
+    ) ||
+    ["ready", "prepared"].includes(application.submission_status) ||
+    (application.package_status && application.package_status !== "not_generated")
+  );
 };
 
 const applicationProgress = (application, t) => {
@@ -204,40 +229,58 @@ const applicationProgress = (application, t) => {
     {
       key: "pending",
       label: t("tracker.pending"),
-      state: status === "submitted" ? "done" : ["pending", "action_required", "blocked_captcha", "failed"].includes(status) ? "current" : "todo",
+      state:
+        status === "submitted"
+          ? "done"
+          : ["pending", "action_required", "blocked_captcha", "failed"].includes(status)
+            ? "current"
+            : "todo",
     },
     {
       key: "submitted",
       label: t("tracker.submitted"),
-      state: status === "submitted" ? "done" : status === "failed" || status === "expired" ? "blocked" : "todo",
+      state:
+        status === "submitted"
+          ? "done"
+          : status === "failed" || status === "expired"
+            ? "blocked"
+            : "todo",
     },
   ];
 };
 
 const atsLabel = (application, t) => {
-  const provider = application.job?.ats_provider || application.ats_provider || application.job?.source;
+  const provider =
+    application.job?.ats_provider || application.ats_provider || application.job?.source;
   if (!provider) return t("tracker.atsUnknown");
-  return String(provider).replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
+  return String(provider)
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
 };
 
 const workModeLabel = (application, t) => {
   const job = application.job || {};
   const raw = job.work_location || job.work_mode || job.workplace_type || job.location_type;
-  if (raw) return String(raw).replace(/[_-]/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
-  if (job.remote === true || String(job.remote || "").toLowerCase() === "true") return t("swipe.remote");
+  if (raw)
+    return String(raw)
+      .replace(/[_-]/g, " ")
+      .replace(/\b\w/g, (char) => char.toUpperCase());
+  if (job.remote === true || String(job.remote || "").toLowerCase() === "true")
+    return t("swipe.remote");
   return null;
 };
 
-const envEmailSet = (value) => new Set(
-  String(value || "")
-    .split(",")
-    .map((item) => item.trim().toLowerCase())
-    .filter(Boolean)
-);
+const envEmailSet = (value) =>
+  new Set(
+    String(value || "")
+      .split(",")
+      .map((item) => item.trim().toLowerCase())
+      .filter(Boolean),
+  );
 
 const internalSubmitTestEnabled = process.env.REACT_APP_ENABLE_INTERNAL_SUBMIT_TEST === "true";
 const internalSubmitEmails = envEmailSet(
-  process.env.REACT_APP_REAL_SUBMIT_ALLOWED_EMAILS || process.env.REACT_APP_ADMIN_EMAILS
+  process.env.REACT_APP_REAL_SUBMIT_ALLOWED_EMAILS || process.env.REACT_APP_ADMIN_EMAILS,
 );
 
 const fmtDate = (iso) => {
@@ -261,11 +304,12 @@ const relativeDate = (iso, t) => {
 const matchesSearch = (application, query) => {
   const q = query.trim().toLowerCase();
   if (!q) return true;
-  return [
-    application.job?.company,
-    application.job?.title,
-    application.job?.location,
-  ].some((value) => String(value || "").toLowerCase().includes(q));
+  return [application.job?.company, application.job?.title, application.job?.location].some(
+    (value) =>
+      String(value || "")
+        .toLowerCase()
+        .includes(q),
+  );
 };
 
 const missingFieldsForForm = (items = []) => {
@@ -328,7 +372,11 @@ export default function Tracker() {
   const [passedRows, setPassedRows] = useState([]);
   const [passedLoading, setPassedLoading] = useState(false);
   const [applyingPassedId, setApplyingPassedId] = useState(null);
-  const [autoApplyQueue, setAutoApplyQueue] = useState({ items: [], active_count: 0, enabled: false });
+  const [autoApplyQueue, setAutoApplyQueue] = useState({
+    items: [],
+    active_count: 0,
+    enabled: false,
+  });
   const openedFromUrlRef = useRef(null);
 
   const setActiveTab = (tab) => {
@@ -466,8 +514,8 @@ export default function Tracker() {
   }, [selected]);
 
   useEffect(() => {
-    const generating = apps.some(isApplicationGenerating)
-      || (selected && isApplicationGenerating(selected));
+    const generating =
+      apps.some(isApplicationGenerating) || (selected && isApplicationGenerating(selected));
     if (!generating) return undefined;
     const timer = window.setInterval(() => {
       refreshApplications();
@@ -496,7 +544,8 @@ export default function Tracker() {
       contact: profile?.contact || {},
       letter,
       job: selected.job,
-      template: letter.template || (letter.subject ? "french_formal" : (profile?.template_style || "modern")),
+      template:
+        letter.template || (letter.subject ? "french_formal" : profile?.template_style || "modern"),
     });
     toast.success(t("tracker.coverDownloaded"));
   };
@@ -509,7 +558,7 @@ export default function Tracker() {
       const { data } = await api.get(`/applications/${app.application_id}`);
       setSelected(data);
       setDetailTab(hasApplicationDocuments(data) ? "documents" : "application");
-      setApps((prev) => prev.map((a) => a.application_id === data.application_id ? data : a));
+      setApps((prev) => prev.map((a) => (a.application_id === data.application_id ? data : a)));
     } catch {
       // Keep the list record visible if refresh fails.
     }
@@ -526,7 +575,9 @@ export default function Tracker() {
       const { data } = await api.get(`/applications/${selected.application_id}`);
       const updated = data;
       setSelected(updated);
-      setApps((prev) => prev.map((a) => a.application_id === updated.application_id ? updated : a));
+      setApps((prev) =>
+        prev.map((a) => (a.application_id === updated.application_id ? updated : a)),
+      );
       trackEvent("action_required_answer_saved", {
         application_id: selected.application_id,
         save_to_profile: saveMissingToProfile,
@@ -534,7 +585,9 @@ export default function Tracker() {
       toast.success(updated.submission_status === "ready" ? "Ready to submit" : "Answers saved");
     } catch (e) {
       const detail = e?.response?.data?.detail;
-      toast.error(detail?.message || (typeof detail === "string" ? detail : "Could not save answers"));
+      toast.error(
+        detail?.message || (typeof detail === "string" ? detail : "Could not save answers"),
+      );
     } finally {
       setSavingMissing(false);
     }
@@ -543,7 +596,7 @@ export default function Tracker() {
   const refreshApplication = async (applicationId) => {
     const { data } = await api.get(`/applications/${applicationId}`);
     setSelected(data);
-    setApps((prev) => prev.map((a) => a.application_id === data.application_id ? data : a));
+    setApps((prev) => prev.map((a) => (a.application_id === data.application_id ? data : a)));
     return data;
   };
 
@@ -556,15 +609,21 @@ export default function Tracker() {
       ats_provider: selected.job?.ats_provider,
     });
     try {
-      const { data } = await api.post("/applications/greenhouse/prepare-browser-fill", { job_id: selected.job_id });
+      const { data } = await api.post("/applications/greenhouse/prepare-browser-fill", {
+        job_id: selected.job_id,
+      });
       const status = data?.submission_status;
-      toast.success(status === "prepared" || status === "ready" ? "Application prepared" : "Prepare finished");
+      toast.success(
+        status === "prepared" || status === "ready" ? "Application prepared" : "Prepare finished",
+      );
       await refreshApplication(selected.application_id);
       await load();
     } catch (e) {
       const detail = e?.response?.data?.detail;
       toast.error(detail?.message || (typeof detail === "string" ? detail : "Prepare failed"));
-      try { await refreshApplication(selected.application_id); } catch {}
+      try {
+        await refreshApplication(selected.application_id);
+      } catch {}
     } finally {
       setPreparingAgain(false);
     }
@@ -576,25 +635,41 @@ export default function Tracker() {
     if (!confirmed) return;
     setSubmittingFinal(true);
     try {
-      const { data } = await api.post("/applications/greenhouse/browser-submit", { job_id: selected.job_id });
+      const { data } = await api.post("/applications/greenhouse/browser-submit", {
+        job_id: selected.job_id,
+      });
       const status = data?.submission_status;
       if (data?.dry_run) {
-        toast.success("Dry run completed", { description: "The application was filled but submit was not clicked." });
+        toast.success("Dry run completed", {
+          description: "The application was filled but submit was not clicked.",
+        });
       } else if (status === "submitted") {
         toast.success("Application submitted");
       } else if (status === "action_required") {
-        toast("Action required", { description: "A few answers are needed before this can be completed." });
-      } else if (status === "blocked_captcha" || data?.manual_fallback_triggered || status === "unknown") {
+        toast("Action required", {
+          description: "A few answers are needed before this can be completed.",
+        });
+      } else if (
+        status === "blocked_captcha" ||
+        data?.manual_fallback_triggered ||
+        status === "unknown"
+      ) {
         toast("Application pending", { description: "We are finalizing this application." });
       } else {
-        toast.error("Submit did not complete", { description: "The application has been saved for review." });
+        toast.error("Submit did not complete", {
+          description: "The application has been saved for review.",
+        });
       }
       await refreshApplication(selected.application_id);
       await load();
     } catch (e) {
       const detail = e?.response?.data?.detail;
-      toast.error(detail?.message || (typeof detail === "string" ? detail : "Final submit test failed"));
-      try { await refreshApplication(selected.application_id); } catch {}
+      toast.error(
+        detail?.message || (typeof detail === "string" ? detail : "Final submit test failed"),
+      );
+      try {
+        await refreshApplication(selected.application_id);
+      } catch {}
     } finally {
       setSubmittingFinal(false);
     }
@@ -604,12 +679,20 @@ export default function Tracker() {
   const hasResume = Boolean(profile?.cv_text);
   const showResumeBanner = profileLoaded && !hasResume;
   const summary = useMemo(() => {
-    const counts = { total: apps.length, submitted: 0, pending: 0, attention: 0, actionRequired: 0, successRate: 0 };
+    const counts = {
+      total: apps.length,
+      submitted: 0,
+      pending: 0,
+      attention: 0,
+      actionRequired: 0,
+      successRate: 0,
+    };
     apps.forEach((app) => {
       const status = resolveDisplayStatus(app);
       if (status === "submitted") counts.submitted += 1;
       if (status === "pending") counts.pending += 1;
-      if (["action_required", "failed", "blocked_captcha", "expired"].includes(status)) counts.attention += 1;
+      if (["action_required", "failed", "blocked_captcha", "expired"].includes(status))
+        counts.attention += 1;
       if (status === "action_required" || status === "blocked_captcha") counts.actionRequired += 1;
     });
     counts.successRate = counts.total ? Math.round((counts.submitted / counts.total) * 100) : 0;
@@ -628,21 +711,25 @@ export default function Tracker() {
     return counts;
   }, [apps, filters]);
 
-  const filteredApps = useMemo(() => (
-    apps.filter((app) => {
-      const status = resolveDisplayStatus(app);
-      const statusMatch = statusFilter === "all" || status === statusFilter;
-      return statusMatch && matchesSearch(app, searchQuery);
-    })
-  ), [apps, statusFilter, searchQuery]);
+  const filteredApps = useMemo(
+    () =>
+      apps.filter((app) => {
+        const status = resolveDisplayStatus(app);
+        const statusMatch = statusFilter === "all" || status === statusFilter;
+        return statusMatch && matchesSearch(app, searchQuery);
+      }),
+    [apps, statusFilter, searchQuery],
+  );
 
   const filteredPassed = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     if (!q) return passedRows;
     return passedRows.filter((row) => {
       const job = row.job || {};
-      return [job.company, job.title, job.location].some(
-        (value) => String(value || "").toLowerCase().includes(q),
+      return [job.company, job.title, job.location].some((value) =>
+        String(value || "")
+          .toLowerCase()
+          .includes(q),
       );
     });
   }, [passedRows, searchQuery]);
@@ -650,7 +737,8 @@ export default function Tracker() {
   const pageLoading = activeTab === "passed" ? passedLoading : loading;
   const hasActiveListFilters = statusFilter !== "all" || searchQuery.trim();
   const userEmail = (user?.email || "").trim().toLowerCase();
-  const canShowInternalSubmitTest = internalSubmitTestEnabled && userEmail && internalSubmitEmails.has(userEmail);
+  const canShowInternalSubmitTest =
+    internalSubmitTestEnabled && userEmail && internalSubmitEmails.has(userEmail);
 
   return (
     <AppPage className={SHELL_PAGE_CLASS}>
@@ -658,357 +746,424 @@ export default function Tracker() {
 
       <AppPageScroll>
         <div className={APP_CONTENT_WIDTH}>
-        <DesktopPageHeader
-          title={t("tracker.title")}
-          subtitle={t("tracker.subtitle")}
-        />
+          <DesktopPageHeader title={t("tracker.title")} subtitle={t("tracker.subtitle")} />
 
-        {/* Sprout-style primary tabs (mobile-first) */}
-        <div className="shell-border-b flex md:mt-2">
-          <button
-            type="button"
-            onClick={() => setActiveTab("applications")}
-            className={`relative flex-1 py-3 text-sm font-semibold transition-colors ${
-              activeTab === "applications" ? "text-linkedin" : "shell-tab-inactive hover:text-zinc-600 dark:hover:text-zinc-300"
-            }`}
-            data-testid="tracker-tab-applications"
-          >
-            {t("tracker.title")}
-            {activeTab === "applications" ? (
-              <span className="absolute inset-x-4 bottom-0 h-0.5 rounded-full bg-linkedin" />
-            ) : null}
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab("passed")}
-            className={`relative flex-1 py-3 text-sm font-semibold transition-colors ${
-              activeTab === "passed" ? "text-linkedin" : "shell-tab-inactive hover:text-zinc-600 dark:hover:text-zinc-300"
-            }`}
-            data-testid="tracker-tab-skipped"
-          >
-            {t("tracker.skippedJobs")}
-            {activeTab === "passed" ? (
-              <span className="absolute inset-x-4 bottom-0 h-0.5 rounded-full bg-linkedin" />
-            ) : null}
-          </button>
-        </div>
-
-        {activeTab === "applications" && showResumeBanner ? (
-          <section className="py-8 text-center">
-            <div className="mx-auto grid h-20 w-20 place-items-center rounded-2xl border-2 border-linkedin/30 bg-violet-50">
-              <FileSearch className="h-10 w-10 text-linkedin" strokeWidth={1.5} />
-            </div>
-            <h2 className="mt-6 font-display text-2xl font-bold tracking-tight">{t("tracker.addResume")}</h2>
-            <p className="mx-auto mt-2 max-w-xs text-sm leading-relaxed shell-body">
-              {t("tracker.addResumeBody")}
-            </p>
+          {/* Sprout-style primary tabs (mobile-first) */}
+          <div className="shell-border-b flex md:mt-2">
             <button
               type="button"
-              onClick={() => setResumeOpen(true)}
-              className="mt-8 w-full rounded-full gradient-linkedin py-3.5 text-base font-semibold text-white hover:opacity-90"
-              data-testid="applications-upload-resume"
-            >
-              {t("tracker.uploadResume")}
-            </button>
-          </section>
-        ) : null}
-
-        <section className={activeTab === "applications" && showResumeBanner ? "mt-6 border-t shell-border-b pt-6 pb-8 md:mt-10 md:pt-8" : "pb-8 pt-3 md:pt-4"}>
-          {activeTab === "applications" ? (
-          <>
-          <div
-            className="mb-4 rounded-2xl border shell-border shell-inset p-3 md:p-4"
-            data-testid="auto-apply-queue"
-          >
-            <div className="flex items-start gap-2">
-              <div className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-linkedin/10 text-linkedin">
-                <ListOrdered className="h-4 w-4" strokeWidth={2} />
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="shell-title text-sm font-semibold">{t("tracker.autoApplyQueueTitle")}</p>
-                <p className="mt-0.5 text-xs shell-body">
-                  {t("tracker.autoApplyQueueSubtitle", { n: autoApplyQueue.active_count || 0 })}
-                </p>
-              </div>
-            </div>
-            {(autoApplyQueue.items || []).filter((item) =>
-              ["queued", "running", "awaiting_review"].includes(item.queue_status)
-            ).length === 0 ? (
-              <p className="mt-3 text-xs shell-body" data-testid="auto-apply-queue-empty">
-                {t("tracker.autoApplyQueueEmpty")}
-              </p>
-            ) : (
-              <ul className="mt-3 space-y-2" data-testid="auto-apply-queue-list">
-                {(autoApplyQueue.items || [])
-                  .filter((item) => ["queued", "running", "awaiting_review"].includes(item.queue_status))
-                  .map((item) => {
-                    const app = apps.find((a) => a.application_id === item.application_id);
-                    return (
-                      <li key={item.application_id}>
-                        <button
-                          type="button"
-                          onClick={() => app && openApplication(app)}
-                          className="flex w-full items-center gap-2 rounded-xl border shell-border bg-white/50 px-3 py-2 text-left transition-colors hover:bg-zinc-50 dark:bg-zinc-900/40 dark:hover:bg-zinc-800/60"
-                          data-testid={`auto-apply-queue-item-${item.application_id}`}
-                        >
-                          <span className="shrink-0 rounded-full bg-linkedin/10 px-2 py-0.5 text-[10px] font-bold text-linkedin">
-                            {item.position
-                              ? t("tracker.autoApplyQueuePosition", { n: item.position })
-                              : "·"}
-                          </span>
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate text-sm font-semibold shell-title">
-                              {item.title || t("tracker.untitledRole")}
-                            </p>
-                            <p className="truncate text-xs text-zinc-500">
-                              {item.company || t("tracker.unknownCompany")}
-                              {item.provider ? ` · ${item.provider}` : ""}
-                            </p>
-                          </div>
-                          <span className="shrink-0 text-[11px] font-semibold text-linkedin">
-                            {queueStatusLabel(item.queue_status, t)}
-                          </span>
-                        </button>
-                      </li>
-                    );
-                  })}
-              </ul>
-            )}
-          </div>
-
-          {/* Status filter chips — horizontal scroll with counts */}
-          <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar" data-testid="tracker-status-filters">
-            <button
-              type="button"
-              onClick={() => setStatusFilter("all")}
-              className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-2 text-sm font-semibold transition-colors ${
-                statusFilter === "all"
-                  ? "border-linkedin bg-linkedin text-white"
-                  : "shell-chip-idle"
+              onClick={() => setActiveTab("applications")}
+              className={`relative flex-1 py-3 text-sm font-semibold transition-colors ${
+                activeTab === "applications"
+                  ? "text-linkedin"
+                  : "shell-tab-inactive hover:text-zinc-600 dark:hover:text-zinc-300"
               }`}
+              data-testid="tracker-tab-applications"
             >
-              {t("tracker.all")}
-              <span className={`rounded-full px-1.5 py-0.5 text-[10px] ${
-                statusFilter === "all" ? "bg-white/20" : "shell-chip-count"
-              }`}>
-                {filterCounts.all || 0}
-              </span>
+              {t("tracker.title")}
+              {activeTab === "applications" ? (
+                <span className="absolute inset-x-4 bottom-0 h-0.5 rounded-full bg-linkedin" />
+              ) : null}
             </button>
-            {quickFilters.map((item) => {
-              const Icon = QUICK_FILTER_ICONS[item.key] || Clock3;
-              const active = statusFilter === item.key;
-              const count = filterCounts[item.key] || 0;
-              return (
-                <button
-                  key={item.key}
-                  type="button"
-                  onClick={() => setStatusFilter(item.key)}
-                  className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-2 text-sm font-semibold transition-colors ${
-                    active ? "border-linkedin bg-linkedin text-white" : "shell-chip-idle"
-                  }`}
-                  data-testid={`tracker-filter-${item.key}`}
-                >
-                  <Icon className="h-3.5 w-3.5 shrink-0" strokeWidth={2} />
-                  {item.label}
-                  <span className={`rounded-full px-1.5 py-0.5 text-[10px] ${
-                    active ? "bg-white/20" : "shell-chip-count"
-                  }`}>
-                    {count}
-                  </span>
-                </button>
-              );
-            })}
+            <button
+              type="button"
+              onClick={() => setActiveTab("passed")}
+              className={`relative flex-1 py-3 text-sm font-semibold transition-colors ${
+                activeTab === "passed"
+                  ? "text-linkedin"
+                  : "shell-tab-inactive hover:text-zinc-600 dark:hover:text-zinc-300"
+              }`}
+              data-testid="tracker-tab-skipped"
+            >
+              {t("tracker.skippedJobs")}
+              {activeTab === "passed" ? (
+                <span className="absolute inset-x-4 bottom-0 h-0.5 rounded-full bg-linkedin" />
+              ) : null}
+            </button>
           </div>
 
-          <label className="shell-search mt-2 flex h-10 items-center gap-2 rounded-xl px-3 md:h-11 md:rounded-2xl">
-            <Search className="h-4 w-4 shrink-0 text-zinc-500" />
-            <input
-              value={searchQuery}
-              onChange={(event) => setSearchQuery(event.target.value)}
-              placeholder={t("tracker.searchPlaceholder")}
-              className="min-w-0 flex-1 bg-transparent text-sm shell-title outline-none placeholder:shell-body"
-              data-testid="applications-search"
-            />
-            {searchQuery ? (
+          {activeTab === "applications" && showResumeBanner ? (
+            <section className="py-8 text-center">
+              <div className="mx-auto grid h-20 w-20 place-items-center rounded-2xl border-2 border-linkedin/30 bg-violet-50">
+                <FileSearch className="h-10 w-10 text-linkedin" strokeWidth={1.5} />
+              </div>
+              <h2 className="mt-6 font-display text-2xl font-bold tracking-tight">
+                {t("tracker.addResume")}
+              </h2>
+              <p className="mx-auto mt-2 max-w-xs text-sm leading-relaxed shell-body">
+                {t("tracker.addResumeBody")}
+              </p>
               <button
                 type="button"
-                onClick={() => setSearchQuery("")}
-                className="text-xs font-semibold text-linkedin"
+                onClick={() => setResumeOpen(true)}
+                className="mt-8 w-full rounded-full gradient-linkedin py-3.5 text-base font-semibold text-white hover:opacity-90"
+                data-testid="applications-upload-resume"
               >
-                {t("common.clear")}
+                {t("tracker.uploadResume")}
               </button>
-            ) : null}
-          </label>
+            </section>
+          ) : null}
 
-          {/* Summary stats — desktop only */}
-          <div className="mt-6 hidden md:block">
-            <div className="flex items-center justify-between">
-              <h4 className="font-display text-lg font-bold tracking-tight">{t("tracker.summary")}</h4>
-              {hasActiveListFilters ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setStatusFilter("all");
-                    setSearchQuery("");
-                  }}
-                  className="text-sm font-semibold text-linkedin"
+          <section
+            className={
+              activeTab === "applications" && showResumeBanner
+                ? "mt-6 border-t shell-border-b pt-6 pb-8 md:mt-10 md:pt-8"
+                : "pb-8 pt-3 md:pt-4"
+            }
+          >
+            {activeTab === "applications" ? (
+              <>
+                <div
+                  className="mb-4 rounded-2xl border shell-border shell-inset p-3 md:p-4"
+                  data-testid="auto-apply-queue"
                 >
-                  {t("common.clear")}
-                </button>
-              ) : null}
-            </div>
-            <div className="mt-3 grid grid-cols-2 gap-2.5 md:grid-cols-4">
-              {[
-                { label: t("tracker.totalApplications"), value: summary.total, Icon: BriefcaseBusiness, tone: "shell-surface-sm text-zinc-900 dark:text-zinc-100", sub: t("tracker.submittedCount", { n: summary.submitted }) },
-                { label: t("tracker.successRate"), value: `${summary.successRate}%`, Icon: CheckCircle2, tone: "border-emerald-100 bg-emerald-50 text-emerald-800", sub: t("tracker.submittedOverTotal") },
-                { label: t("tracker.pending"), value: summary.pending, Icon: Clock3, tone: "border-amber-100 bg-amber-50 text-amber-800", sub: t("tracker.beingFinalized") },
-                { label: t("tracker.actionRequired"), value: summary.actionRequired, Icon: AlertCircle, tone: "border-orange-100 bg-orange-50 text-orange-800", sub: t("tracker.needAttentionCount", { n: summary.attention }) },
-              ].map(({ label, value, Icon, tone, sub }) => (
-                <div key={label} className={`rounded-2xl border p-3 ${tone}`}>
-                  <div className="flex items-center gap-1.5">
-                    <Icon className="h-4 w-4 shrink-0" />
-                    <p className="truncate text-[11px] font-semibold">{label}</p>
+                  <div className="flex items-start gap-2">
+                    <div className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-linkedin/10 text-linkedin">
+                      <ListOrdered className="h-4 w-4" strokeWidth={2} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="shell-title text-sm font-semibold">
+                        {t("tracker.autoApplyQueueTitle")}
+                      </p>
+                      <p className="mt-0.5 text-xs shell-body">
+                        {t("tracker.autoApplyQueueSubtitle", {
+                          n: autoApplyQueue.active_count || 0,
+                        })}
+                      </p>
+                    </div>
                   </div>
-                  <p className="mt-2 font-display text-3xl font-black leading-none">{value}</p>
-                  <p className="mt-1 truncate text-[11px] font-medium">{sub}</p>
+                  {(autoApplyQueue.items || []).filter((item) =>
+                    ["queued", "running", "awaiting_review"].includes(item.queue_status),
+                  ).length === 0 ? (
+                    <p className="mt-3 text-xs shell-body" data-testid="auto-apply-queue-empty">
+                      {t("tracker.autoApplyQueueEmpty")}
+                    </p>
+                  ) : (
+                    <ul className="mt-3 space-y-2" data-testid="auto-apply-queue-list">
+                      {(autoApplyQueue.items || [])
+                        .filter((item) =>
+                          ["queued", "running", "awaiting_review"].includes(item.queue_status),
+                        )
+                        .map((item) => {
+                          const app = apps.find((a) => a.application_id === item.application_id);
+                          return (
+                            <li key={item.application_id}>
+                              <button
+                                type="button"
+                                onClick={() => app && openApplication(app)}
+                                className="flex w-full items-center gap-2 rounded-xl border shell-border bg-white/50 px-3 py-2 text-left transition-colors hover:bg-zinc-50 dark:bg-zinc-900/40 dark:hover:bg-zinc-800/60"
+                                data-testid={`auto-apply-queue-item-${item.application_id}`}
+                              >
+                                <span className="shrink-0 rounded-full bg-linkedin/10 px-2 py-0.5 text-[10px] font-bold text-linkedin">
+                                  {item.position
+                                    ? t("tracker.autoApplyQueuePosition", { n: item.position })
+                                    : "·"}
+                                </span>
+                                <div className="min-w-0 flex-1">
+                                  <p className="truncate text-sm font-semibold shell-title">
+                                    {item.title || t("tracker.untitledRole")}
+                                  </p>
+                                  <p className="truncate text-xs text-zinc-500">
+                                    {item.company || t("tracker.unknownCompany")}
+                                    {item.provider ? ` · ${item.provider}` : ""}
+                                  </p>
+                                </div>
+                                <span className="shrink-0 text-[11px] font-semibold text-linkedin">
+                                  {queueStatusLabel(item.queue_status, t)}
+                                </span>
+                              </button>
+                            </li>
+                          );
+                        })}
+                    </ul>
+                  )}
                 </div>
-              ))}
-            </div>
 
-            <div className="mt-4 flex gap-2 overflow-x-auto pb-1 no-scrollbar">
-              {filters.map((item) => {
-                const active = statusFilter === item.key;
-                return (
+                {/* Status filter chips — horizontal scroll with counts */}
+                <div
+                  className="flex gap-2 overflow-x-auto pb-2 no-scrollbar"
+                  data-testid="tracker-status-filters"
+                >
                   <button
-                    key={item.key}
                     type="button"
-                    onClick={() => setStatusFilter(item.key)}
-                    className={`shrink-0 rounded-full border px-3 py-1.5 text-sm font-semibold transition-colors ${
-                      active ? "border-linkedin bg-linkedin text-white" : "shell-chip-idle"
+                    onClick={() => setStatusFilter("all")}
+                    className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-2 text-sm font-semibold transition-colors ${
+                      statusFilter === "all"
+                        ? "border-linkedin bg-linkedin text-white"
+                        : "shell-chip-idle"
                     }`}
                   >
-                    {item.label}
-                    <span className={`ml-1.5 rounded-full px-1.5 py-0.5 text-[10px] ${
-                      active ? "bg-white/20 text-white" : "shell-chip-count text-zinc-700 dark:text-zinc-300"
-                    }`}>
-                      {filterCounts[item.key] || 0}
+                    {t("tracker.all")}
+                    <span
+                      className={`rounded-full px-1.5 py-0.5 text-[10px] ${
+                        statusFilter === "all" ? "bg-white/20" : "shell-chip-count"
+                      }`}
+                    >
+                      {filterCounts.all || 0}
                     </span>
                   </button>
-                );
-              })}
-            </div>
-          </div>
+                  {quickFilters.map((item) => {
+                    const Icon = QUICK_FILTER_ICONS[item.key] || Clock3;
+                    const active = statusFilter === item.key;
+                    const count = filterCounts[item.key] || 0;
+                    return (
+                      <button
+                        key={item.key}
+                        type="button"
+                        onClick={() => setStatusFilter(item.key)}
+                        className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-2 text-sm font-semibold transition-colors ${
+                          active ? "border-linkedin bg-linkedin text-white" : "shell-chip-idle"
+                        }`}
+                        data-testid={`tracker-filter-${item.key}`}
+                      >
+                        <Icon className="h-3.5 w-3.5 shrink-0" strokeWidth={2} />
+                        {item.label}
+                        <span
+                          className={`rounded-full px-1.5 py-0.5 text-[10px] ${
+                            active ? "bg-white/20" : "shell-chip-count"
+                          }`}
+                        >
+                          {count}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
 
-          {pageLoading ? (
-            <div className="mt-12 flex justify-center">
-              <Loader2 className="h-5 w-5 animate-spin text-zinc-600" />
-            </div>
-          ) : filteredApps.length === 0 ? (
-            <div className="mt-6 rounded-3xl border border-dashed shell-dashed shell-inset px-5 py-8 text-center">
-              <div className="shell-surface mx-auto grid h-12 w-12 place-items-center rounded-2xl text-sprout-muted">
-                <BriefcaseBusiness className="h-5 w-5" />
-              </div>
-              <p className="shell-title font-display text-lg font-bold">{t("tracker.nothingYet")}</p>
-              <p className="mx-auto mt-2 max-w-xs text-sm leading-relaxed shell-body">
-                {searchQuery.trim() ? t("tracker.noSearchMatch") : getTrackerEmptyCopy(t, statusFilter)}
-              </p>
-              <button
-                type="button"
-                onClick={() => { window.location.href = "/swipe"; }}
-                className="mt-5 inline-flex items-center justify-center gap-1.5 rounded-full bg-linkedin px-4 py-2 text-sm font-semibold text-white"
-              >
-                {t("tracker.backToSwipe")} <ArrowRight className="h-4 w-4" />
-              </button>
-            </div>
-          ) : (
-            <ul className="mt-3 space-y-2 md:mt-4 md:space-y-3" data-testid="applications-list">
-              {filteredApps.map((a) => (
-                <motion.li
-                  key={a.application_id}
-                  initial={{ opacity: 0, y: 4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                >
-                  <TrackerApplicationRow
-                    application={a}
-                    onOpen={openApplication}
-                    t={t}
-                    lang={lang}
+                <label className="shell-search mt-2 flex h-10 items-center gap-2 rounded-xl px-3 md:h-11 md:rounded-2xl">
+                  <Search className="h-4 w-4 shrink-0 text-zinc-500" />
+                  <input
+                    value={searchQuery}
+                    onChange={(event) => setSearchQuery(event.target.value)}
+                    placeholder={t("tracker.searchPlaceholder")}
+                    className="min-w-0 flex-1 bg-transparent text-sm shell-title outline-none placeholder:shell-body"
+                    data-testid="applications-search"
                   />
-                </motion.li>
-              ))}
-            </ul>
-          )}
-          </>
-          ) : (
-          <>
-          <label className="shell-search mt-2 flex h-10 items-center gap-2 rounded-xl px-3 md:h-11 md:rounded-2xl">
-            <Search className="h-4 w-4 shrink-0 text-zinc-500" />
-            <input
-              value={searchQuery}
-              onChange={(event) => setSearchQuery(event.target.value)}
-              placeholder={t("tracker.searchPlaceholder")}
-              className="min-w-0 flex-1 bg-transparent text-sm shell-title outline-none placeholder:shell-body"
-              data-testid="passed-search"
-            />
-            {searchQuery ? (
-              <button
-                type="button"
-                onClick={() => setSearchQuery("")}
-                className="text-xs font-semibold text-linkedin"
-              >
-                {t("common.clear")}
-              </button>
-            ) : null}
-          </label>
+                  {searchQuery ? (
+                    <button
+                      type="button"
+                      onClick={() => setSearchQuery("")}
+                      className="text-xs font-semibold text-linkedin"
+                    >
+                      {t("common.clear")}
+                    </button>
+                  ) : null}
+                </label>
 
-          <p className="mt-3 text-xs leading-relaxed shell-body md:mt-4">
-            {t("history.generatePackageHint")}
-          </p>
+                {/* Summary stats — desktop only */}
+                <div className="mt-6 hidden md:block">
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-display text-lg font-bold tracking-tight">
+                      {t("tracker.summary")}
+                    </h4>
+                    {hasActiveListFilters ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setStatusFilter("all");
+                          setSearchQuery("");
+                        }}
+                        className="text-sm font-semibold text-linkedin"
+                      >
+                        {t("common.clear")}
+                      </button>
+                    ) : null}
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-2.5 md:grid-cols-4">
+                    {[
+                      {
+                        label: t("tracker.totalApplications"),
+                        value: summary.total,
+                        Icon: BriefcaseBusiness,
+                        tone: "shell-surface-sm text-zinc-900 dark:text-zinc-100",
+                        sub: t("tracker.submittedCount", { n: summary.submitted }),
+                      },
+                      {
+                        label: t("tracker.successRate"),
+                        value: `${summary.successRate}%`,
+                        Icon: CheckCircle2,
+                        tone: "border-emerald-100 bg-emerald-50 text-emerald-800",
+                        sub: t("tracker.submittedOverTotal"),
+                      },
+                      {
+                        label: t("tracker.pending"),
+                        value: summary.pending,
+                        Icon: Clock3,
+                        tone: "border-amber-100 bg-amber-50 text-amber-800",
+                        sub: t("tracker.beingFinalized"),
+                      },
+                      {
+                        label: t("tracker.actionRequired"),
+                        value: summary.actionRequired,
+                        Icon: AlertCircle,
+                        tone: "border-orange-100 bg-orange-50 text-orange-800",
+                        sub: t("tracker.needAttentionCount", { n: summary.attention }),
+                      },
+                    ].map(({ label, value, Icon, tone, sub }) => (
+                      <div key={label} className={`rounded-2xl border p-3 ${tone}`}>
+                        <div className="flex items-center gap-1.5">
+                          <Icon className="h-4 w-4 shrink-0" />
+                          <p className="truncate text-[11px] font-semibold">{label}</p>
+                        </div>
+                        <p className="mt-2 font-display text-3xl font-black leading-none">
+                          {value}
+                        </p>
+                        <p className="mt-1 truncate text-[11px] font-medium">{sub}</p>
+                      </div>
+                    ))}
+                  </div>
 
-          {pageLoading ? (
-            <div className="mt-12 flex justify-center" data-testid="passed-loading">
-              <Loader2 className="h-5 w-5 animate-spin text-zinc-600" />
-            </div>
-          ) : filteredPassed.length === 0 ? (
-            <div className="mt-6 rounded-3xl border border-dashed shell-dashed shell-inset px-5 py-8 text-center" data-testid="passed-empty">
-              <div className="shell-surface mx-auto grid h-12 w-12 place-items-center rounded-2xl text-sprout-muted">
-                <BriefcaseBusiness className="h-5 w-5" />
-              </div>
-              <p className="shell-title font-display text-lg font-bold">{t("tracker.nothingYet")}</p>
-              <p className="mx-auto mt-2 max-w-xs text-sm leading-relaxed shell-body">
-                {searchQuery.trim() ? t("tracker.noSearchMatch") : t("history.noPassed")}
-              </p>
-              <button
-                type="button"
-                onClick={() => navigate("/swipe")}
-                className="mt-5 inline-flex items-center justify-center gap-1.5 rounded-full bg-linkedin px-4 py-2 text-sm font-semibold text-white"
-              >
-                {t("tracker.backToSwipe")} <ArrowRight className="h-4 w-4" />
-              </button>
-            </div>
-          ) : (
-            <ul className="mt-3 space-y-2 md:mt-4 md:space-y-3" data-testid="passed-list">
-              {filteredPassed.map((row) => (
-                <motion.li
-                  key={row.swipe_id || row.job_id}
-                  initial={{ opacity: 0, y: 4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                >
-                  <TrackerPassedRow
-                    row={row}
-                    onApplyNow={applyPassedJob}
-                    applyingId={applyingPassedId}
-                    t={t}
-                    lang={lang}
+                  <div className="mt-4 flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+                    {filters.map((item) => {
+                      const active = statusFilter === item.key;
+                      return (
+                        <button
+                          key={item.key}
+                          type="button"
+                          onClick={() => setStatusFilter(item.key)}
+                          className={`shrink-0 rounded-full border px-3 py-1.5 text-sm font-semibold transition-colors ${
+                            active ? "border-linkedin bg-linkedin text-white" : "shell-chip-idle"
+                          }`}
+                        >
+                          {item.label}
+                          <span
+                            className={`ml-1.5 rounded-full px-1.5 py-0.5 text-[10px] ${
+                              active
+                                ? "bg-white/20 text-white"
+                                : "shell-chip-count text-zinc-700 dark:text-zinc-300"
+                            }`}
+                          >
+                            {filterCounts[item.key] || 0}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {pageLoading ? (
+                  <div className="mt-12 flex justify-center">
+                    <Loader2 className="h-5 w-5 animate-spin text-zinc-600" />
+                  </div>
+                ) : filteredApps.length === 0 ? (
+                  <div className="mt-6 rounded-3xl border border-dashed shell-dashed shell-inset px-5 py-8 text-center">
+                    <div className="shell-surface mx-auto grid h-12 w-12 place-items-center rounded-2xl text-sprout-muted">
+                      <BriefcaseBusiness className="h-5 w-5" />
+                    </div>
+                    <p className="shell-title font-display text-lg font-bold">
+                      {t("tracker.nothingYet")}
+                    </p>
+                    <p className="mx-auto mt-2 max-w-xs text-sm leading-relaxed shell-body">
+                      {searchQuery.trim()
+                        ? t("tracker.noSearchMatch")
+                        : getTrackerEmptyCopy(t, statusFilter)}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        window.location.href = "/swipe";
+                      }}
+                      className="mt-5 inline-flex items-center justify-center gap-1.5 rounded-full bg-linkedin px-4 py-2 text-sm font-semibold text-white"
+                    >
+                      {t("tracker.backToSwipe")} <ArrowRight className="h-4 w-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <ul
+                    className="mt-3 space-y-2 md:mt-4 md:space-y-3"
+                    data-testid="applications-list"
+                  >
+                    {filteredApps.map((a) => (
+                      <motion.li
+                        key={a.application_id}
+                        initial={{ opacity: 0, y: 4 }}
+                        animate={{ opacity: 1, y: 0 }}
+                      >
+                        <TrackerApplicationRow
+                          application={a}
+                          onOpen={openApplication}
+                          t={t}
+                          lang={lang}
+                        />
+                      </motion.li>
+                    ))}
+                  </ul>
+                )}
+              </>
+            ) : (
+              <>
+                <label className="shell-search mt-2 flex h-10 items-center gap-2 rounded-xl px-3 md:h-11 md:rounded-2xl">
+                  <Search className="h-4 w-4 shrink-0 text-zinc-500" />
+                  <input
+                    value={searchQuery}
+                    onChange={(event) => setSearchQuery(event.target.value)}
+                    placeholder={t("tracker.searchPlaceholder")}
+                    className="min-w-0 flex-1 bg-transparent text-sm shell-title outline-none placeholder:shell-body"
+                    data-testid="passed-search"
                   />
-                </motion.li>
-              ))}
-            </ul>
-          )}
-          </>
-          )}
-        </section>
+                  {searchQuery ? (
+                    <button
+                      type="button"
+                      onClick={() => setSearchQuery("")}
+                      className="text-xs font-semibold text-linkedin"
+                    >
+                      {t("common.clear")}
+                    </button>
+                  ) : null}
+                </label>
 
+                <p className="mt-3 text-xs leading-relaxed shell-body md:mt-4">
+                  {t("history.generatePackageHint")}
+                </p>
+
+                {pageLoading ? (
+                  <div className="mt-12 flex justify-center" data-testid="passed-loading">
+                    <Loader2 className="h-5 w-5 animate-spin text-zinc-600" />
+                  </div>
+                ) : filteredPassed.length === 0 ? (
+                  <div
+                    className="mt-6 rounded-3xl border border-dashed shell-dashed shell-inset px-5 py-8 text-center"
+                    data-testid="passed-empty"
+                  >
+                    <div className="shell-surface mx-auto grid h-12 w-12 place-items-center rounded-2xl text-sprout-muted">
+                      <BriefcaseBusiness className="h-5 w-5" />
+                    </div>
+                    <p className="shell-title font-display text-lg font-bold">
+                      {t("tracker.nothingYet")}
+                    </p>
+                    <p className="mx-auto mt-2 max-w-xs text-sm leading-relaxed shell-body">
+                      {searchQuery.trim() ? t("tracker.noSearchMatch") : t("history.noPassed")}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => navigate("/swipe")}
+                      className="mt-5 inline-flex items-center justify-center gap-1.5 rounded-full bg-linkedin px-4 py-2 text-sm font-semibold text-white"
+                    >
+                      {t("tracker.backToSwipe")} <ArrowRight className="h-4 w-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <ul className="mt-3 space-y-2 md:mt-4 md:space-y-3" data-testid="passed-list">
+                    {filteredPassed.map((row) => (
+                      <motion.li
+                        key={row.swipe_id || row.job_id}
+                        initial={{ opacity: 0, y: 4 }}
+                        animate={{ opacity: 1, y: 0 }}
+                      >
+                        <TrackerPassedRow
+                          row={row}
+                          onApplyNow={applyPassedJob}
+                          applyingId={applyingPassedId}
+                          t={t}
+                          lang={lang}
+                        />
+                      </motion.li>
+                    ))}
+                  </ul>
+                )}
+              </>
+            )}
+          </section>
         </div>
       </AppPageScroll>
 
@@ -1026,41 +1181,40 @@ export default function Tracker() {
         >
           {selected && (
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            <ApplicationDetailPanel
-              application={selected}
-              profile={profile}
-              userPicture={user?.picture}
-              displayStatuses={displayStatuses}
-              statusMeta={statusMeta}
-              applicationStatusMessage={applicationStatusMessage}
-              ApplicationStatusPill={ApplicationStatusPill}
-              t={t}
-              lang={lang}
-              onDownloadCV={handleDownloadCV}
-              onDownloadCoverLetter={handleDownloadCoverLetter}
-              missingAnswers={missingAnswers}
-              setMissingAnswers={setMissingAnswers}
-              saveMissingToProfile={saveMissingToProfile}
-              setSaveMissingToProfile={setSaveMissingToProfile}
-              savingMissing={savingMissing}
-              resolveMissingInfo={resolveMissingInfo}
-              preparingAgain={preparingAgain}
-              prepareGreenhouseAgain={prepareGreenhouseAgain}
-              submittingFinal={submittingFinal}
-              testFinalSubmit={testFinalSubmit}
-              canShowInternalSubmitTest={canShowInternalSubmitTest}
-              missingFieldsForForm={missingFieldsForForm}
-              optionValue={optionValue}
-              optionLabel={optionLabel}
-              onBack={() => setOpen(false)}
-              activeTab={detailTab}
-              onTabChange={setDetailTab}
-            />
+              <ApplicationDetailPanel
+                application={selected}
+                profile={profile}
+                userPicture={user?.picture}
+                displayStatuses={displayStatuses}
+                statusMeta={statusMeta}
+                applicationStatusMessage={applicationStatusMessage}
+                ApplicationStatusPill={ApplicationStatusPill}
+                t={t}
+                lang={lang}
+                onDownloadCV={handleDownloadCV}
+                onDownloadCoverLetter={handleDownloadCoverLetter}
+                missingAnswers={missingAnswers}
+                setMissingAnswers={setMissingAnswers}
+                saveMissingToProfile={saveMissingToProfile}
+                setSaveMissingToProfile={setSaveMissingToProfile}
+                savingMissing={savingMissing}
+                resolveMissingInfo={resolveMissingInfo}
+                preparingAgain={preparingAgain}
+                prepareGreenhouseAgain={prepareGreenhouseAgain}
+                submittingFinal={submittingFinal}
+                testFinalSubmit={testFinalSubmit}
+                canShowInternalSubmitTest={canShowInternalSubmitTest}
+                missingFieldsForForm={missingFieldsForForm}
+                optionValue={optionValue}
+                optionLabel={optionLabel}
+                onBack={() => setOpen(false)}
+                activeTab={detailTab}
+                onTabChange={setDetailTab}
+              />
             </div>
           )}
         </DialogContent>
       </Dialog>
-
     </AppPage>
   );
 }

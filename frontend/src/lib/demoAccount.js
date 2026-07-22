@@ -178,12 +178,14 @@ export function getCachedDemoJob(jobId) {
 }
 
 function resolveJob(jobId) {
-  return jobCache.get(jobId) || {
-    job_id: jobId,
-    title: "Role",
-    company: "Company",
-    location: "",
-  };
+  return (
+    jobCache.get(jobId) || {
+      job_id: jobId,
+      title: "Role",
+      company: "Company",
+      location: "",
+    }
+  );
 }
 
 export function buildDemoApplication(job, variantIndex = 0) {
@@ -223,11 +225,46 @@ export function seedDemoShowcaseIfEmpty() {
   if (getDemoApplications().length > 0) return;
 
   const TECH_SHOWCASE_JOBS = [
-    { job_id: "demo_showcase_linear", title: "Senior Frontend Engineer", company: "Linear", location: "Paris, France", match_score: 92, provider: "demo" },
-    { job_id: "demo_showcase_stripe", title: "Backend Engineer", company: "Stripe", location: "Paris, France", match_score: 89, provider: "demo" },
-    { job_id: "demo_showcase_vercel", title: "DevRel Engineer", company: "Vercel", location: "Remote, France", match_score: 87, provider: "demo" },
-    { job_id: "demo_showcase_notion", title: "Staff Engineer", company: "Notion", location: "Paris, France", match_score: 94, provider: "demo" },
-    { job_id: "demo_showcase_figma", title: "Product Engineer", company: "Figma", location: "Paris, France", match_score: 90, provider: "demo" },
+    {
+      job_id: "demo_showcase_linear",
+      title: "Senior Frontend Engineer",
+      company: "Linear",
+      location: "Paris, France",
+      match_score: 92,
+      provider: "demo",
+    },
+    {
+      job_id: "demo_showcase_stripe",
+      title: "Backend Engineer",
+      company: "Stripe",
+      location: "Paris, France",
+      match_score: 89,
+      provider: "demo",
+    },
+    {
+      job_id: "demo_showcase_vercel",
+      title: "DevRel Engineer",
+      company: "Vercel",
+      location: "Remote, France",
+      match_score: 87,
+      provider: "demo",
+    },
+    {
+      job_id: "demo_showcase_notion",
+      title: "Staff Engineer",
+      company: "Notion",
+      location: "Paris, France",
+      match_score: 94,
+      provider: "demo",
+    },
+    {
+      job_id: "demo_showcase_figma",
+      title: "Product Engineer",
+      company: "Figma",
+      location: "Paris, France",
+      match_score: 90,
+      provider: "demo",
+    },
   ];
 
   const jobs = TECH_SHOWCASE_JOBS;
@@ -315,7 +352,12 @@ export function handleDemoAccountSwipe(body = {}) {
       window.dispatchEvent(new CustomEvent(DEMO_ACCOUNT_CHANGED));
     }
 
-    return { ok: true, applied: true, application_id: application.application_id, demo_local: true };
+    return {
+      ok: true,
+      applied: true,
+      application_id: application.application_id,
+      demo_local: true,
+    };
   }
 
   const row = buildSwipeRow(job, "left");
@@ -457,9 +499,10 @@ export function patchDemoAccountResponse(response) {
   }
 
   if (method === "get" && path === "/swipes/history") {
-    const direction = new URLSearchParams(requestUrl.split("?")[1] || "").get("direction") === "left"
-      ? "left"
-      : "right";
+    const direction =
+      new URLSearchParams(requestUrl.split("?")[1] || "").get("direction") === "left"
+        ? "left"
+        : "right";
     response.data = {
       ...response.data,
       swipes: mergeSwipeHistory(response.data?.swipes || [], direction),

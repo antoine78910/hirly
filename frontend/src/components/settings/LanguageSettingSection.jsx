@@ -34,7 +34,11 @@ export default function LanguageSettingSection({ variant = "profile" }) {
               <Globe className="h-4 w-4" strokeWidth={1.9} />
             </div>
             <div className="min-w-0 flex-1">
-              <LanguageSwitcher variant="dark" className="w-full justify-start" onLangChange={handleLang} />
+              <LanguageSwitcher
+                variant="dark"
+                className="w-full justify-start"
+                onLangChange={handleLang}
+              />
             </div>
           </div>
         </div>
@@ -47,10 +51,14 @@ export default function LanguageSettingSection({ variant = "profile" }) {
     return (
       <section className="mt-10" data-testid="settings-language-section">
         <div className="mb-4">
-          <h2 className={`text-[11px] font-semibold uppercase tracking-[0.16em] ${isDark ? "text-zinc-500" : "text-zinc-400"}`}>
+          <h2
+            className={`text-[11px] font-semibold uppercase tracking-[0.16em] ${isDark ? "text-zinc-500" : "text-zinc-400"}`}
+          >
             {t("settings.languageTitle")}
           </h2>
-          <p className={`mt-2 text-sm leading-relaxed ${isDark ? "text-zinc-500" : "text-zinc-500"}`}>
+          <p
+            className={`mt-2 text-sm leading-relaxed ${isDark ? "text-zinc-500" : "text-zinc-500"}`}
+          >
             {t("settings.languageDesc")}
           </p>
         </div>
@@ -62,10 +70,7 @@ export default function LanguageSettingSection({ variant = "profile" }) {
   }
 
   return (
-    <section
-      className="shell-surface p-4"
-      data-testid="profile-language-section"
-    >
+    <section className="shell-surface p-4" data-testid="profile-language-section">
       <div className="flex items-start gap-3">
         <div className="shell-icon-box grid h-10 w-10 shrink-0 place-items-center rounded-xl shell-border">
           <Globe className="h-4 w-4" strokeWidth={1.9} />
@@ -75,7 +80,11 @@ export default function LanguageSettingSection({ variant = "profile" }) {
           <p className="mt-1 text-sm shell-body">{t("settings.languageDesc")}</p>
           <div className="mt-3">
             <LanguageSwitcher variant="light" className="dark:hidden" onLangChange={handleLang} />
-            <LanguageSwitcher variant="dark" className="hidden dark:inline-flex" onLangChange={handleLang} />
+            <LanguageSwitcher
+              variant="dark"
+              className="hidden dark:inline-flex"
+              onLangChange={handleLang}
+            />
           </div>
         </div>
       </div>

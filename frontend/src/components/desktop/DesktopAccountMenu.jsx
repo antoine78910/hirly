@@ -83,7 +83,11 @@ export default function DesktopAccountMenu({ triggerClassName = "" }) {
         >
           <div className="flex items-center gap-3 px-3 py-3">
             <AccountAvatar />
-            <AccountEmailLabel email={email} blurred={emailBlurred} className="text-sm text-zinc-900" />
+            <AccountEmailLabel
+              email={email}
+              blurred={emailBlurred}
+              className="text-sm text-zinc-900"
+            />
           </div>
 
           <DropdownMenuSeparator className="my-0 bg-zinc-200" />
@@ -139,7 +143,11 @@ export default function DesktopAccountMenu({ triggerClassName = "" }) {
         title={emailBlurred ? t("accountMenu.showEmail") : t("accountMenu.blurEmail")}
         data-testid="desktop-account-email-blur-toggle"
       >
-        {emailBlurred ? <EyeOff className="h-4 w-4" strokeWidth={1.75} /> : <Eye className="h-4 w-4" strokeWidth={1.75} />}
+        {emailBlurred ? (
+          <EyeOff className="h-4 w-4" strokeWidth={1.75} />
+        ) : (
+          <Eye className="h-4 w-4" strokeWidth={1.75} />
+        )}
       </button>
     </div>
   );

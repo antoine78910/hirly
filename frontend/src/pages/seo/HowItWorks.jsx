@@ -60,40 +60,67 @@ const integrations = [
 ];
 
 const faq = [
-  { id: 1, question: "Hirly fonctionne-t-il pour tous les secteurs ?", answer: "Hirly est principalement optimisé pour la tech, les startups, le SaaS et le marketing digital. Les secteurs qui utilisent Greenhouse ou Lever sont bien couverts. Les secteurs très traditionnels (industrie lourde, administration, santé) sont moins bien représentés." },
-  { id: 2, question: "Ma candidature est-elle vraiment personnalisée à chaque offre ?", answer: "Oui. Pour chaque offre que vous swipez à droite, Hirly génère un CV qui met en avant les compétences et expériences les plus pertinentes pour ce poste spécifique, et une lettre de motivation adaptée à l'entreprise et au contexte. Ce n'est pas un template générique." },
-  { id: 3, question: "Les recruteurs voient-ils que j'utilise Hirly ?", answer: "Non. La candidature est soumise via l'API officielle de l'ATS, exactement comme si vous l'aviez remplie manuellement. L'outil est invisible côté recruteur." },
-  { id: 4, question: "Peut-on modifier la candidature avant qu'elle soit envoyée ?", answer: "Oui. Hirly propose un mode prévisualisation pour revoir le CV et la LM générés avant l'envoi. Vous pouvez modifier ou annuler chaque candidature avant soumission." },
-  { id: 5, question: "Combien d'offres peut-on voir par jour ?", answer: "Le nombre d'offres proposées dépend de votre profil et de vos critères. Le volume de candidatures automatiques envoyées dépend de votre plan (gratuit ou payant)." },
+  {
+    id: 1,
+    question: "Hirly fonctionne-t-il pour tous les secteurs ?",
+    answer:
+      "Hirly est principalement optimisé pour la tech, les startups, le SaaS et le marketing digital. Les secteurs qui utilisent Greenhouse ou Lever sont bien couverts. Les secteurs très traditionnels (industrie lourde, administration, santé) sont moins bien représentés.",
+  },
+  {
+    id: 2,
+    question: "Ma candidature est-elle vraiment personnalisée à chaque offre ?",
+    answer:
+      "Oui. Pour chaque offre que vous swipez à droite, Hirly génère un CV qui met en avant les compétences et expériences les plus pertinentes pour ce poste spécifique, et une lettre de motivation adaptée à l'entreprise et au contexte. Ce n'est pas un template générique.",
+  },
+  {
+    id: 3,
+    question: "Les recruteurs voient-ils que j'utilise Hirly ?",
+    answer:
+      "Non. La candidature est soumise via l'API officielle de l'ATS, exactement comme si vous l'aviez remplie manuellement. L'outil est invisible côté recruteur.",
+  },
+  {
+    id: 4,
+    question: "Peut-on modifier la candidature avant qu'elle soit envoyée ?",
+    answer:
+      "Oui. Hirly propose un mode prévisualisation pour revoir le CV et la LM générés avant l'envoi. Vous pouvez modifier ou annuler chaque candidature avant soumission.",
+  },
+  {
+    id: 5,
+    question: "Combien d'offres peut-on voir par jour ?",
+    answer:
+      "Le nombre d'offres proposées dépend de votre profil et de vos critères. Le volume de candidatures automatiques envoyées dépend de votre plan (gratuit ou payant).",
+  },
 ];
 
 const jsonLd = {
   "@context": "https://schema.org",
   "@type": "WebPage",
-  "name": "Comment fonctionne Hirly — Matching IA et candidature automatique",
-  "description": "Hirly : importez votre CV, swipez les offres compatibles, et l'IA génère et soumet vos candidatures automatiquement via Greenhouse et Lever.",
-  "url": "https://tryhirly.com/how-it-works",
-  "publisher": { "@type": "Organization", "name": "Hirly", "url": "https://tryhirly.com" },
+  name: "Comment fonctionne Hirly — Matching IA et candidature automatique",
+  description:
+    "Hirly : importez votre CV, swipez les offres compatibles, et l'IA génère et soumet vos candidatures automatiquement via Greenhouse et Lever.",
+  url: "https://tryhirly.com/how-it-works",
+  publisher: { "@type": "Organization", name: "Hirly", url: "https://tryhirly.com" },
 };
 
 const appLd = {
   "@context": "https://schema.org",
   "@type": "SoftwareApplication",
-  "name": "Hirly",
-  "applicationCategory": "BusinessApplication",
-  "operatingSystem": "Web",
-  "description": "Application de job matching et de candidature automatique. Swipez les offres, l'IA génère et soumet vos candidatures via ATS en 1 tap.",
-  "url": "https://tryhirly.com",
-  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "EUR" },
+  name: "Hirly",
+  applicationCategory: "BusinessApplication",
+  operatingSystem: "Web",
+  description:
+    "Application de job matching et de candidature automatique. Swipez les offres, l'IA génère et soumet vos candidatures via ATS en 1 tap.",
+  url: "https://tryhirly.com",
+  offers: { "@type": "Offer", price: "0", priceCurrency: "EUR" },
 };
 
 const faqLd = {
   "@context": "https://schema.org",
   "@type": "FAQPage",
-  "mainEntity": faq.map((q) => ({
+  mainEntity: faq.map((q) => ({
     "@type": "Question",
-    "name": q.question,
-    "acceptedAnswer": { "@type": "Answer", "text": q.answer },
+    name: q.question,
+    acceptedAnswer: { "@type": "Answer", text: q.answer },
   })),
 };
 
@@ -110,13 +137,20 @@ export default function HowItWorks() {
       {/* Hero */}
       <section className="gradient-linkedin-soft border-b border-zinc-100">
         <div className="max-w-5xl mx-auto px-6 py-20 lg:py-28 text-center">
-          <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
-            <p className="text-xs font-semibold text-zinc-400 uppercase tracking-widest mb-4">Comment ça marche</p>
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+          >
+            <p className="text-xs font-semibold text-zinc-400 uppercase tracking-widest mb-4">
+              Comment ça marche
+            </p>
             <h1 className="font-display font-black text-4xl sm:text-5xl lg:text-6xl tracking-tight leading-[1.05] mb-5">
               Swipe. Match. <span className="italic text-swiipr-gradient">Get hired.</span>
             </h1>
             <p className="text-zinc-600 text-lg sm:text-xl leading-relaxed max-w-2xl mx-auto mb-8">
-              Hirly combine le matching IA et la candidature automatique pour vous faire postuler à 10 offres pertinentes en 10 minutes — sans remplir un seul formulaire.
+              Hirly combine le matching IA et la candidature automatique pour vous faire postuler à
+              10 offres pertinentes en 10 minutes — sans remplir un seul formulaire.
             </p>
             <Link
               to="/onboarding"
@@ -145,12 +179,16 @@ export default function HowItWorks() {
               >
                 <div>
                   <div className="flex items-center gap-3 mb-4">
-                    <span className="text-xs font-mono font-semibold text-zinc-300">{step.step}</span>
+                    <span className="text-xs font-mono font-semibold text-zinc-300">
+                      {step.step}
+                    </span>
                     <div className="w-9 h-9 rounded-xl gradient-linkedin text-white grid place-items-center">
                       <Icon className="w-4.5 h-4.5" />
                     </div>
                   </div>
-                  <h2 className="font-display font-bold text-2xl sm:text-3xl tracking-tight mb-3">{step.title}</h2>
+                  <h2 className="font-display font-bold text-2xl sm:text-3xl tracking-tight mb-3">
+                    {step.title}
+                  </h2>
                   <p className="text-zinc-500 leading-relaxed mb-5">{step.body}</p>
                   <ul className="space-y-2">
                     {step.details.map((d, j) => (
@@ -161,7 +199,9 @@ export default function HowItWorks() {
                     ))}
                   </ul>
                 </div>
-                <div className={`rounded-3xl border border-zinc-200 bg-zinc-50 h-52 grid place-items-center ${isEven ? "gradient-linkedin-soft" : ""}`}>
+                <div
+                  className={`rounded-3xl border border-zinc-200 bg-zinc-50 h-52 grid place-items-center ${isEven ? "gradient-linkedin-soft" : ""}`}
+                >
                   <div className="text-center">
                     <div className="w-14 h-14 rounded-2xl gradient-linkedin text-white grid place-items-center mx-auto mb-3">
                       <Icon className="w-7 h-7" />
@@ -207,7 +247,9 @@ export default function HowItWorks() {
             <h2 className="font-display font-black text-3xl sm:text-4xl tracking-tight mb-3">
               Prêt à postuler en 1 swipe ?
             </h2>
-            <p className="text-zinc-500 mb-7">Créez votre profil en 2 minutes. Commencez à swiper.</p>
+            <p className="text-zinc-500 mb-7">
+              Créez votre profil en 2 minutes. Commencez à swiper.
+            </p>
             <Link
               to="/onboarding"
               className="inline-flex items-center gap-2 rounded-full gradient-linkedin text-white font-semibold px-7 py-3 text-base hover:opacity-90 transition-opacity"

@@ -31,8 +31,12 @@ function matchesApplicationEmail(email, application) {
   if (!email || !application) return false;
   if (email.application_id && email.application_id === application.application_id) return true;
   if (email.job_id && email.job_id === application.job_id) return true;
-  const company = String(application.job?.company || "").trim().toLowerCase();
-  const emailCompany = String(email.company || "").trim().toLowerCase();
+  const company = String(application.job?.company || "")
+    .trim()
+    .toLowerCase();
+  const emailCompany = String(email.company || "")
+    .trim()
+    .toLowerCase();
   return Boolean(company && emailCompany && company === emailCompany);
 }
 
@@ -44,8 +48,8 @@ function offsetIso(baseIso, minutesAfter) {
 
 function hasGeneratedPackage(application) {
   return Boolean(
-    (application.package_status && application.package_status !== "not_generated")
-    || hasApplicationDocuments(application),
+    (application.package_status && application.package_status !== "not_generated") ||
+      hasApplicationDocuments(application),
   );
 }
 
@@ -75,7 +79,9 @@ export function buildApplicationTimeline(application, emails = [], t, lang = "en
   }
 
   if (application.status === "offer") {
-    const offerEmail = linkedEmails.find((row) => row.category === "offer" || row.filter === "offer");
+    const offerEmail = linkedEmails.find(
+      (row) => row.category === "offer" || row.filter === "offer",
+    );
     events.push({
       key: "offer",
       at: offerEmail?.received_at || offerEmail?.date || application.updated_at || created,
@@ -86,9 +92,9 @@ export function buildApplicationTimeline(application, emails = [], t, lang = "en
   }
 
   const submitted =
-    displayStatus === "submitted"
-    || submission === "submitted"
-    || Boolean(application.submitted_at);
+    displayStatus === "submitted" ||
+    submission === "submitted" ||
+    Boolean(application.submitted_at);
 
   if (submitted) {
     events.push({
@@ -172,9 +178,9 @@ export function buildApplicationTimeline(application, emails = [], t, lang = "en
   }
 
   if (
-    submission === "action_required"
-    || submission === "blocked"
-    || displayStatus === "action_required"
+    submission === "action_required" ||
+    submission === "blocked" ||
+    displayStatus === "action_required"
   ) {
     events.push({
       key: "action-required",
@@ -196,16 +202,14 @@ export function buildApplicationTimeline(application, emails = [], t, lang = "en
   }
 
   if (
-    hasApplicationDocuments(application)
-    && aiSettings.reviewDocuments
-    && !submitted
-    && application.document_review_status !== "approved"
-    && (
-      application.document_review_status === "awaiting_user"
-      || submission === "prepared"
-      || submission === "ready"
-      || application.generation_status === "generated"
-    )
+    hasApplicationDocuments(application) &&
+    aiSettings.reviewDocuments &&
+    !submitted &&
+    application.document_review_status !== "approved" &&
+    (application.document_review_status === "awaiting_user" ||
+      submission === "prepared" ||
+      submission === "ready" ||
+      application.generation_status === "generated")
   ) {
     events.push({
       key: "awaiting-review",
@@ -215,10 +219,10 @@ export function buildApplicationTimeline(application, emails = [], t, lang = "en
       description: t("tracker.timelineAwaitingReviewDesc"),
     });
   } else if (
-    (submission === "prepared" || submission === "ready")
-    && !aiSettings.reviewDocuments
-    && !submitted
-    && submission !== "pending"
+    (submission === "prepared" || submission === "ready") &&
+    !aiSettings.reviewDocuments &&
+    !submitted &&
+    submission !== "pending"
   ) {
     events.push({
       key: "prepared",
@@ -252,7 +256,8 @@ export function buildApplicationTimeline(application, emails = [], t, lang = "en
     .filter((item) => item.at)
     .sort((a, b) => Date.parse(b.at) - Date.parse(a.at))
     .filter((item) => {
-      const dedupeKey = item.kind === "email" || item.kind === "notification" ? item.key : item.kind;
+      const dedupeKey =
+        item.kind === "email" || item.kind === "notification" ? item.key : item.kind;
       if (seen.has(dedupeKey)) return false;
       seen.add(dedupeKey);
       return true;

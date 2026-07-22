@@ -2,7 +2,11 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Bell, Gift, Clock3, X, Loader2 } from "lucide-react";
-import { fetchNotifications, markNotificationRead, markAllNotificationsRead } from "../../lib/notifications";
+import {
+  fetchNotifications,
+  markNotificationRead,
+  markAllNotificationsRead,
+} from "../../lib/notifications";
 import { formatTimelineDate } from "../../lib/applicationTimeline";
 import { useAppLocale } from "../../context/AppLocaleContext";
 
@@ -18,7 +22,9 @@ function NotificationRow({ notification, lang, onClick }) {
       type="button"
       onClick={onClick}
       className={`flex w-full items-start gap-3 rounded-xl px-3 py-3 text-left transition-colors ${
-        notification.read ? "opacity-70 hover:bg-white/5" : "bg-violet-500/10 hover:bg-violet-500/15"
+        notification.read
+          ? "opacity-70 hover:bg-white/5"
+          : "bg-violet-500/10 hover:bg-violet-500/15"
       }`}
       data-testid={`notification-row-${notification.notification_id}`}
     >
@@ -28,10 +34,14 @@ function NotificationRow({ notification, lang, onClick }) {
       <span className="min-w-0 flex-1">
         <span className="flex items-center gap-2">
           <span className="truncate text-sm font-semibold text-white">{notification.title}</span>
-          {!notification.read ? <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-violet-400" /> : null}
+          {!notification.read ? (
+            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-violet-400" />
+          ) : null}
         </span>
         <span className="mt-0.5 block text-xs text-zinc-400">{notification.body}</span>
-        <span className="mt-1 block text-[11px] text-zinc-500">{formatTimelineDate(notification.created_at, lang)}</span>
+        <span className="mt-1 block text-[11px] text-zinc-500">
+          {formatTimelineDate(notification.created_at, lang)}
+        </span>
       </span>
     </button>
   );
@@ -60,7 +70,12 @@ function NotificationsList({ notifications, loading, lang, t, onItemClick, onMar
           </div>
         ) : notifications.length ? (
           notifications.map((n) => (
-            <NotificationRow key={n.notification_id} notification={n} lang={lang} onClick={() => onItemClick(n)} />
+            <NotificationRow
+              key={n.notification_id}
+              notification={n}
+              lang={lang}
+              onClick={() => onItemClick(n)}
+            />
           ))
         ) : (
           <div className="py-10 text-center text-sm text-zinc-500">{t("notifications.empty")}</div>
@@ -75,7 +90,12 @@ function NotificationsList({ notifications, loading, lang, t, onItemClick, onMar
  * mount so the bell badge is correct even before the panel is opened; no
  * polling per product scope (fetch-on-load only).
  */
-export default function NotificationsPanel({ open, onClose, variant = "sheet", onUnreadCountChange }) {
+export default function NotificationsPanel({
+  open,
+  onClose,
+  variant = "sheet",
+  onUnreadCountChange,
+}) {
   const navigate = useNavigate();
   const { t, lang } = useAppLocale();
   const [notifications, setNotifications] = useState([]);
@@ -102,7 +122,9 @@ export default function NotificationsPanel({ open, onClose, variant = "sheet", o
   const handleItemClick = async (notification) => {
     if (!notification.read) {
       setNotifications((prev) =>
-        prev.map((n) => (n.notification_id === notification.notification_id ? { ...n, read: true } : n)),
+        prev.map((n) =>
+          n.notification_id === notification.notification_id ? { ...n, read: true } : n,
+        ),
       );
       onUnreadCountChange?.((count) => Math.max(0, (count || 0) - 1));
       try {

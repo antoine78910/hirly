@@ -55,9 +55,7 @@ export function saveProgressEvent(courseId, moduleId, eventKey) {
 function moduleEventSlots(module) {
   const slots = ["visited", "scrolled"];
 
-  const hasVideo =
-    !!module?.video_url ||
-    (module?.sections || []).some((s) => s.video_url);
+  const hasVideo = !!module?.video_url || (module?.sections || []).some((s) => s.video_url);
   if (hasVideo) slots.push("video");
 
   // All 5 scored modules have a quiz
@@ -98,15 +96,10 @@ export function moduleProgressFraction(courseId, module, quizResults) {
  * Overall course progress fraction 0–1 (scored modules only).
  */
 export function courseProgressFraction(courseId, modules, enrollment) {
-  const scored = (modules || []).filter((m) =>
-    SCORED_MODULE_IDS.includes(m.module_id),
-  );
+  const scored = (modules || []).filter((m) => SCORED_MODULE_IDS.includes(m.module_id));
   if (!scored.length) return 0;
   const quizResults = enrollment?.quiz_results || {};
-  const sum = scored.reduce(
-    (acc, m) => acc + moduleProgressFraction(courseId, m, quizResults),
-    0,
-  );
+  const sum = scored.reduce((acc, m) => acc + moduleProgressFraction(courseId, m, quizResults), 0);
   return sum / scored.length;
 }
 

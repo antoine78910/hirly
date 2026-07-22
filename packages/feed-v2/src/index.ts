@@ -9,11 +9,7 @@ export type FeedEmptyReason =
   | "ALL_MATCHES_BLOCKED"
   | "PROFILE_NOT_READY";
 
-export type InventoryState =
-  | "ready"
-  | "matching_pending"
-  | "inventory_gap"
-  | "degraded";
+export type InventoryState = "ready" | "matching_pending" | "inventory_gap" | "degraded";
 
 export interface FeedAuthAssertion {
   subject: string;
@@ -83,11 +79,7 @@ export interface FeedReadResponse {
   jobs: Array<
     Pick<
       FeedCandidate,
-      | "canonicalGroupId"
-      | "preferredJobId"
-      | "jobVersion"
-      | "relevanceScore"
-      | "fulfillmentRoute"
+      "canonicalGroupId" | "preferredJobId" | "jobVersion" | "relevanceScore" | "fulfillmentRoute"
     >
   >;
   nextCursor: string | null;
@@ -152,10 +144,7 @@ function decodeCursor(value: string): CursorEnvelope {
   }
 }
 
-function emptyReason(
-  snapshot: FeedReadSnapshot,
-  summary: FeedSummary,
-): FeedEmptyReason {
+function emptyReason(snapshot: FeedReadSnapshot, summary: FeedSummary): FeedEmptyReason {
   if (!snapshot.profileReady) return "PROFILE_NOT_READY";
   if (summary.evaluated === 0) return "NO_MATCHING_INVENTORY";
   if (summary.hiddenActioned === summary.evaluated) {
@@ -189,8 +178,7 @@ export class FeedV2ReadService {
 
     const limit = Math.max(1, Math.min(request.limit ?? 12, 100));
     const cursor = request.cursor ? decodeCursor(request.cursor) : null;
-    const queryFingerprint =
-      request.assertion.effectiveQuery?.fingerprint ?? "candidate-profile";
+    const queryFingerprint = request.assertion.effectiveQuery?.fingerprint ?? "candidate-profile";
     if (cursor && cursor.queryFingerprint !== queryFingerprint) {
       throw new FeedCursorError("stale_cursor");
     }
@@ -255,10 +243,7 @@ export class FeedV2ReadService {
           continue;
         }
         groupIds.add(candidate.canonicalGroupId);
-        companyCounts.set(
-          candidate.companyKey,
-          (companyCounts.get(candidate.companyKey) ?? 0) + 1,
-        );
+        companyCounts.set(candidate.companyKey, (companyCounts.get(candidate.companyKey) ?? 0) + 1);
         summary.eligible += 1;
         visibleByRoute[candidate.fulfillmentRoute] += 1;
         jobs.push({

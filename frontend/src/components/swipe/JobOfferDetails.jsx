@@ -1,18 +1,14 @@
 import { getJobOfferDetailRows } from "../../lib/jobDisplayUtils";
 
-export default function JobOfferDetails({
-  job,
-  t,
-  lang = "en",
-  theme,
-  compact = false,
-}) {
+export default function JobOfferDetails({ job, t, lang = "en", theme, compact = false }) {
   const rows = getJobOfferDetailRows(job, { t, lang });
   if (!rows.length) return null;
 
   const labelClass = theme?.cardMeta || "text-sprout-muted";
   const valueClass = theme?.cardAboutBody || "text-zinc-100";
-  const sectionClass = theme?.cardSection || "rounded-2xl border border-sprout-border bg-sprout-surface-2/40 px-4 py-3";
+  const sectionClass =
+    theme?.cardSection ||
+    "rounded-2xl border border-sprout-border bg-sprout-surface-2/40 px-4 py-3";
   const itemGap = compact ? "space-y-2.5" : "space-y-3";
 
   return (

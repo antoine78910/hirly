@@ -5,13 +5,14 @@ import { scoreQuiz } from "../../lib/trainingQuizzes";
 
 function QuizCelebration() {
   const particles = useMemo(
-    () => Array.from({ length: 14 }, (_, i) => ({
-      id: i,
-      angle: (i / 14) * Math.PI * 2,
-      distance: 36 + (i % 5) * 10,
-      color: i % 3 === 0 ? "#10b981" : i % 3 === 1 ? "#7c3aed" : "#f59e0b",
-      size: i % 2 === 0 ? 8 : 6,
-    })),
+    () =>
+      Array.from({ length: 14 }, (_, i) => ({
+        id: i,
+        angle: (i / 14) * Math.PI * 2,
+        distance: 36 + (i % 5) * 10,
+        color: i % 3 === 0 ? "#10b981" : i % 3 === 1 ? "#7c3aed" : "#f59e0b",
+        size: i % 2 === 0 ? 8 : 6,
+      })),
     [],
   );
 
@@ -49,7 +50,9 @@ function QuizResultBanner({ passed, score, labels, celebrate }) {
       }`}
     >
       {passed && celebrate ? <QuizCelebration /> : null}
-      <div className={`relative flex items-center gap-2 ${passed ? "text-emerald-800" : "text-rose-800"}`}>
+      <div
+        className={`relative flex items-center gap-2 ${passed ? "text-emerald-800" : "text-rose-800"}`}
+      >
         {passed ? (
           <motion.span
             initial={celebrate ? { scale: 0, rotate: -20 } : false}
@@ -64,8 +67,7 @@ function QuizResultBanner({ passed, score, labels, celebrate }) {
         <div>
           <p className="font-semibold">{passed ? labels.passedShort : labels.failedShort}</p>
           <p className={`text-sm ${passed ? "text-emerald-700" : "text-rose-700"}`}>
-            {labels.score}: {score}%
-            {!passed ? ` — ${labels.failedHint}` : ""}
+            {labels.score}: {score}%{!passed ? ` — ${labels.failedHint}` : ""}
           </p>
         </div>
       </div>
@@ -83,37 +85,38 @@ export default function ModuleQuiz({
   continuing = false,
 }) {
   const labels = useMemo(
-    () => (lang === "fr"
-      ? {
-          title: "Questionnaire",
-          submit: "Valider mes réponses",
-          retry: "Réessayer",
-          passed: "Quiz réussi",
-          passedShort: "Validé !",
-          failedShort: "Pas encore validé",
-          failedHint: "relis le chapitre et réessaie",
-          failed: "Score insuffisant — relis le chapitre et réessaie.",
-          score: "Score",
-          required: "Réponds à toutes les questions.",
-          continue: "Passer à la suite",
-          alreadyPassed: "Tu as déjà validé ce quiz.",
-          retake: "Refaire le test",
-        }
-      : {
-          title: "Knowledge check",
-          submit: "Submit answers",
-          retry: "Try again",
-          passed: "Quiz passed",
-          passedShort: "Passed!",
-          failedShort: "Not passed yet",
-          failedHint: "review the chapter and try again",
-          failed: "Score too low — review the chapter and try again.",
-          score: "Score",
-          required: "Answer every question.",
-          continue: "Continue to next part",
-          alreadyPassed: "You already passed this quiz.",
-          retake: "Retake quiz",
-        }),
+    () =>
+      lang === "fr"
+        ? {
+            title: "Questionnaire",
+            submit: "Valider mes réponses",
+            retry: "Réessayer",
+            passed: "Quiz réussi",
+            passedShort: "Validé !",
+            failedShort: "Pas encore validé",
+            failedHint: "relis le chapitre et réessaie",
+            failed: "Score insuffisant — relis le chapitre et réessaie.",
+            score: "Score",
+            required: "Réponds à toutes les questions.",
+            continue: "Passer à la suite",
+            alreadyPassed: "Tu as déjà validé ce quiz.",
+            retake: "Refaire le test",
+          }
+        : {
+            title: "Knowledge check",
+            submit: "Submit answers",
+            retry: "Try again",
+            passed: "Quiz passed",
+            passedShort: "Passed!",
+            failedShort: "Not passed yet",
+            failedHint: "review the chapter and try again",
+            failed: "Score too low — review the chapter and try again.",
+            score: "Score",
+            required: "Answer every question.",
+            continue: "Continue to next part",
+            alreadyPassed: "You already passed this quiz.",
+            retake: "Retake quiz",
+          },
     [lang],
   );
 
@@ -191,9 +194,7 @@ export default function ModuleQuiz({
       onSubmit={handleSubmit}
       className="rounded-xl border border-violet-200 bg-violet-50/40 p-5 sm:p-6"
     >
-      <h3 className="font-display text-lg font-bold text-zinc-900">
-        {quiz.title || labels.title}
-      </h3>
+      <h3 className="font-display text-lg font-bold text-zinc-900">{quiz.title || labels.title}</h3>
 
       <AnimatePresence>
         {result ? (

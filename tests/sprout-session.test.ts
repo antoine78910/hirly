@@ -24,7 +24,9 @@ describe("Sprout durable auth session", () => {
     const encrypted = cipher.encrypt({ accessToken: "access", refreshToken: "refresh" });
     expect(encrypted).not.toContain("access");
     expect(cipher.decrypt(encrypted)).toEqual({ accessToken: "access", refreshToken: "refresh" });
-    expect(() => cipher.decrypt(`${encrypted.slice(0, -2)}xx`)).toThrow("sprout_persisted_session_invalid");
+    expect(() => cipher.decrypt(`${encrypted.slice(0, -2)}xx`)).toThrow(
+      "sprout_persisted_session_invalid",
+    );
   });
 
   test("persists a rotated token and a new worker prefers it over bootstrap variables", async () => {
@@ -35,7 +37,9 @@ describe("Sprout durable auth session", () => {
 
     let persisted: { version: bigint; ciphertext: string } | null = null;
     const store = {
-      async getSproutAuthSession() { return persisted; },
+      async getSproutAuthSession() {
+        return persisted;
+      },
       async compareAndSwapSproutAuthSession(expectedVersion: bigint | null, ciphertext: string) {
         if (persisted && expectedVersion !== persisted.version) return null;
         if (!persisted && expectedVersion !== null) return null;
@@ -43,22 +47,35 @@ describe("Sprout durable auth session", () => {
         return persisted.version;
       },
     };
-    globalThis.fetch = (async () => Response.json({ access_token: "rotated-access", refresh_token: "rotated-refresh" })) as typeof fetch;
+    globalThis.fetch = (async () =>
+      Response.json({
+        access_token: "rotated-access",
+        refresh_token: "rotated-refresh",
+      })) as typeof fetch;
 
     const first = environmentSproutSession(store);
-    expect(await first.secrets.resolve("secret://sprout/france-api", new AbortController().signal)).toEqual({
-      accessToken: "bootstrap-access", refreshToken: "bootstrap-refresh",
+    expect(
+      await first.secrets.resolve("secret://sprout/france-api", new AbortController().signal),
+    ).toEqual({
+      accessToken: "bootstrap-access",
+      refreshToken: "bootstrap-refresh",
     });
-    await expect(first.tokenRefresher.refresh("bootstrap-refresh", new AbortController().signal)).resolves.toEqual({
-      accessToken: "rotated-access", refreshToken: "rotated-refresh",
+    await expect(
+      first.tokenRefresher.refresh("bootstrap-refresh", new AbortController().signal),
+    ).resolves.toEqual({
+      accessToken: "rotated-access",
+      refreshToken: "rotated-refresh",
     });
     expect(persisted?.ciphertext).not.toContain("rotated-access");
 
     process.env.SPROUT_FRANCE_API_TOKEN = "stale-bootstrap-access";
     process.env.SPROUT_FRANCE_REFRESH_TOKEN = "stale-bootstrap-refresh";
     const restarted = environmentSproutSession(store);
-    await expect(restarted.secrets.resolve("secret://sprout/france-api", new AbortController().signal)).resolves.toEqual({
-      accessToken: "rotated-access", refreshToken: "rotated-refresh",
+    await expect(
+      restarted.secrets.resolve("secret://sprout/france-api", new AbortController().signal),
+    ).resolves.toEqual({
+      accessToken: "rotated-access",
+      refreshToken: "rotated-refresh",
     });
   });
 });
@@ -69,10 +86,17 @@ test("recovers the persisted winner when another worker consumed the refresh tok
   process.env.SPROUT_FRANCE_REFRESH_TOKEN = "stale-refresh";
   process.env.SPROUT_SUPABASE_ANON_KEY = "public-key";
   const cipher = SproutSessionCipher.fromEnvironment(process.env.SPROUT_SESSION_ENCRYPTION_KEY)!;
-  const persisted = { version: 2n, ciphertext: cipher.encrypt({ accessToken: "winner-access", refreshToken: "winner-refresh" }) };
+  const persisted = {
+    version: 2n,
+    ciphertext: cipher.encrypt({ accessToken: "winner-access", refreshToken: "winner-refresh" }),
+  };
   const store = {
-    async getSproutAuthSession() { return persisted; },
-    async compareAndSwapSproutAuthSession() { return null; },
+    async getSproutAuthSession() {
+      return persisted;
+    },
+    async compareAndSwapSproutAuthSession() {
+      return null;
+    },
   };
   globalThis.fetch = (async () => new Response(null, { status: 401 })) as typeof fetch;
 
@@ -84,16 +108,30 @@ test("recovers the persisted winner when another worker consumed the refresh tok
     async getSproutAuthSession() {
       this.reads += 1;
       return this.reads === 1
-        ? { version: 1n, ciphertext: cipher.encrypt({ accessToken: "stale-access", refreshToken: "stale-refresh" }) }
+        ? {
+            version: 1n,
+            ciphertext: cipher.encrypt({
+              accessToken: "stale-access",
+              refreshToken: "stale-refresh",
+            }),
+          }
         : persisted;
     },
-    async compareAndSwapSproutAuthSession() { return null; },
+    async compareAndSwapSproutAuthSession() {
+      return null;
+    },
   };
   const racingSession = environmentSproutSession(initialStore);
-  await expect(racingSession.tokenRefresher.refresh("stale-refresh", new AbortController().signal)).resolves.toEqual({
-    accessToken: "winner-access", refreshToken: "winner-refresh",
+  await expect(
+    racingSession.tokenRefresher.refresh("stale-refresh", new AbortController().signal),
+  ).resolves.toEqual({
+    accessToken: "winner-access",
+    refreshToken: "winner-refresh",
   });
-  await expect(session.secrets.resolve("secret://sprout/france-api", new AbortController().signal)).resolves.toEqual({
-    accessToken: "winner-access", refreshToken: "winner-refresh",
+  await expect(
+    session.secrets.resolve("secret://sprout/france-api", new AbortController().signal),
+  ).resolves.toEqual({
+    accessToken: "winner-access",
+    refreshToken: "winner-refresh",
   });
 });

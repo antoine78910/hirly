@@ -62,9 +62,10 @@ describe("shared contracts", () => {
   });
 
   test("uses one versioned non-sensitive health contract", () => {
-    expect(
-      healthSchema.parse({ status: "ready", contractVersion: CONTRACT_VERSION }),
-    ).toEqual({ status: "ready", contractVersion: CONTRACT_VERSION });
+    expect(healthSchema.parse({ status: "ready", contractVersion: CONTRACT_VERSION })).toEqual({
+      status: "ready",
+      contractVersion: CONTRACT_VERSION,
+    });
   });
 
   test("validates disabled ATS tenant registration metadata", () => {
@@ -81,9 +82,7 @@ describe("shared contracts", () => {
       checkpoint: { version: "ats-discovery.v1" },
     };
 
-    expect(careerSourceCandidateRegistrationSchema.parse(candidate)).toEqual(
-      candidate,
-    );
+    expect(careerSourceCandidateRegistrationSchema.parse(candidate)).toEqual(candidate);
     for (const baseUrl of [
       "http://boards.greenhouse.io/hirly",
       "https://user:secret@boards.greenhouse.io/hirly",
@@ -231,9 +230,7 @@ describe("shared contracts", () => {
       "https://user:secret@example.test",
       "secret://Sprout/france",
     ]) {
-      expect(() =>
-        sproutSourceRuntimeSchema.parse({ ...runtime, credentialRef }),
-      ).toThrow();
+      expect(() => sproutSourceRuntimeSchema.parse({ ...runtime, credentialRef })).toThrow();
     }
   });
 

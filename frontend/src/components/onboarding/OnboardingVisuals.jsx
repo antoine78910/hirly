@@ -58,7 +58,9 @@ function ChartCard({ label, children, caption }) {
       {label ? <p className={`text-xs ${ob.muted} mb-2 font-medium`}>{label}</p> : null}
       {children}
       {caption ? (
-        <p className={`text-center text-[11px] sm:text-xs ${ob.muted} mt-2 leading-snug`}>{caption}</p>
+        <p className={`text-center text-[11px] sm:text-xs ${ob.muted} mt-2 leading-snug`}>
+          {caption}
+        </p>
       ) : null}
     </div>
   );
@@ -78,7 +80,11 @@ export function InterviewRateChart({ lang = "en" }) {
   const copy = chartCopy(lang);
   return (
     <ChartCard label={copy.interviewRateLabel}>
-      <svg viewBox="0 0 320 160" className="w-full max-h-[22dvh] sm:max-h-[26dvh] h-auto" aria-hidden>
+      <svg
+        viewBox="0 0 320 160"
+        className="w-full max-h-[22dvh] sm:max-h-[26dvh] h-auto"
+        aria-hidden
+      >
         <defs>
           <linearGradient id="rateFillLight" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="#7C3AED" stopOpacity="0.25" />
@@ -271,7 +277,9 @@ export function Compare2xChart({ lang = "en" }) {
     <div className={`${ob.card} mx-auto w-full max-w-lg p-5 sm:p-6`}>
       <div className="flex items-end justify-center gap-6 sm:gap-12">
         <div className="flex flex-1 max-w-[9.5rem] flex-col items-center sm:max-w-[11rem]">
-          <p className="mb-4 text-center text-sm font-medium text-zinc-600 sm:text-base">{copy.compareOwn}</p>
+          <p className="mb-4 text-center text-sm font-medium text-zinc-600 sm:text-base">
+            {copy.compareOwn}
+          </p>
           <div className="relative flex h-48 w-full flex-col justify-end overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-100 p-2 sm:h-60 sm:p-2.5">
             <motion.div
               className="w-full origin-bottom rounded-xl bg-zinc-300 will-change-transform"
@@ -287,7 +295,9 @@ export function Compare2xChart({ lang = "en" }) {
         </div>
 
         <div className="flex flex-1 max-w-[9.5rem] flex-col items-center sm:max-w-[11rem]">
-          <p className={`mb-4 text-center text-sm font-semibold sm:text-base ${ob.accent}`}>{copy.compareWith(BRAND.NAME)}</p>
+          <p className={`mb-4 text-center text-sm font-semibold sm:text-base ${ob.accent}`}>
+            {copy.compareWith(BRAND.NAME)}
+          </p>
           <div className="relative flex h-48 w-full flex-col justify-end overflow-hidden rounded-2xl border border-violet-200 bg-zinc-50 p-2 shadow-sm sm:h-60 sm:p-2.5">
             <motion.div
               className="gradient-linkedin w-full origin-bottom rounded-xl will-change-transform"
@@ -385,7 +395,11 @@ export function LongTermResultsChart({ lang = "en" }) {
 
   return (
     <ChartCard>
-      <svg viewBox="0 0 320 196" className="w-full max-h-[24dvh] sm:max-h-[28dvh] h-auto" aria-hidden>
+      <svg
+        viewBox="0 0 320 196"
+        className="w-full max-h-[24dvh] sm:max-h-[28dvh] h-auto"
+        aria-hidden
+      >
         <defs>
           <linearGradient id="ltFillLight" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="#7C3AED" stopOpacity="0.38" />

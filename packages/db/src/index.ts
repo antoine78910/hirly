@@ -231,11 +231,7 @@ export class WorkerRepository {
     `;
   }
 
-  async claim(
-    leaseOwner: string,
-    limit: number,
-    leaseSeconds: number,
-  ): Promise<ClaimedTask[]> {
+  async claim(leaseOwner: string, limit: number, leaseSeconds: number): Promise<ClaimedTask[]> {
     const rows = await this.sql<WorkerTaskRow[]>`
       SELECT *
       FROM worker_private.claim_tasks(${leaseOwner}, ${limit}, ${leaseSeconds})
@@ -533,10 +529,7 @@ export class WorkerRepository {
     return BigInt(row.version);
   }
 
-  async recordSproutIngestionError(
-    lease: Lease,
-    input: SproutIngestionErrorRecord,
-  ): Promise<void> {
+  async recordSproutIngestionError(lease: Lease, input: SproutIngestionErrorRecord): Promise<void> {
     await this.sql`
       SELECT worker_private.record_sprout_ingestion_error(
         ${lease.taskId}::uuid,
@@ -607,10 +600,7 @@ export class WorkerRepository {
     return row?.heartbeat_provider_work === true;
   }
 
-  async finishProviderWork(
-    lease: Lease,
-    providerClaim: ProviderWorkClaim,
-  ): Promise<boolean> {
+  async finishProviderWork(lease: Lease, providerClaim: ProviderWorkClaim): Promise<boolean> {
     const [row] = await this.sql<{ finish_provider_work: boolean }[]>`
       SELECT worker_private.finish_provider_work(
         ${lease.taskId}::uuid,
@@ -627,10 +617,7 @@ export class WorkerRepository {
     return row?.finish_provider_work === true;
   }
 
-  async releaseProviderWork(
-    lease: Lease,
-    providerClaim: ProviderWorkClaim,
-  ): Promise<boolean> {
+  async releaseProviderWork(lease: Lease, providerClaim: ProviderWorkClaim): Promise<boolean> {
     const [row] = await this.sql<{ release_provider_work: boolean }[]>`
       SELECT worker_private.release_provider_work(
         ${lease.taskId}::uuid,
@@ -798,10 +785,7 @@ export class WorkerRepository {
     `;
   }
 
-  async enqueueDueSchedule(
-    scheduleId: string,
-    nextDueAt: Date,
-  ): Promise<string | null> {
+  async enqueueDueSchedule(scheduleId: string, nextDueAt: Date): Promise<string | null> {
     const [row] = await this.sql<{ id: string }[]>`
       SELECT id
       FROM worker_private.enqueue_due_schedule(${scheduleId}, ${nextDueAt})

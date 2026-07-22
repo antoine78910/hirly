@@ -8,13 +8,14 @@ import DesktopAppShell from "./DesktopAppShell";
 export default function AppLayout() {
   const isDesktop = useIsDesktop();
   const { pathname } = useLocation();
-  const content = isDesktop && !isDesktopSelfManagedRoute(pathname)
-    ? (
+  const content =
+    isDesktop && !isDesktopSelfManagedRoute(pathname) ? (
       <DesktopAppShell>
         <Outlet />
       </DesktopAppShell>
-    )
-    : <Outlet />;
+    ) : (
+      <Outlet />
+    );
 
   return (
     <UpgradeModalProvider>

@@ -2,8 +2,23 @@ import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { motion } from "framer-motion";
 import DOMPurify from "dompurify";
 import {
-  Mail, Sparkles, Copy, Check, ChevronRight, ChevronLeft, ChevronDown, X, Menu, Settings, Star, Pencil,
-  CornerUpLeft, Archive, MoreHorizontal, AlertTriangle, Send,
+  Mail,
+  Sparkles,
+  Copy,
+  Check,
+  ChevronRight,
+  ChevronLeft,
+  ChevronDown,
+  X,
+  Menu,
+  Settings,
+  Star,
+  Pencil,
+  CornerUpLeft,
+  Archive,
+  MoreHorizontal,
+  AlertTriangle,
+  Send,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { BRAND } from "../lib/brand";
@@ -22,10 +37,30 @@ import { useAppLocale } from "../context/AppLocaleContext";
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const getInboxFilters = (t) => [
-  { key: "primary", label: t("emails.primary"), activeClass: "bg-zinc-800 text-white", idleClass: "bg-zinc-100 text-zinc-700" },
-  { key: "verification", label: t("emails.verification"), activeClass: "bg-orange-100 text-orange-700", idleClass: "bg-orange-50 text-orange-600" },
-  { key: "interview", label: t("emails.interview"), activeClass: "bg-violet-100 text-violet-700", idleClass: "bg-violet-50 text-violet-600" },
-  { key: "offer", label: t("emails.offer"), activeClass: "bg-teal-100 text-teal-700", idleClass: "bg-teal-50 text-teal-600" },
+  {
+    key: "primary",
+    label: t("emails.primary"),
+    activeClass: "bg-zinc-800 text-white",
+    idleClass: "bg-zinc-100 text-zinc-700",
+  },
+  {
+    key: "verification",
+    label: t("emails.verification"),
+    activeClass: "bg-orange-100 text-orange-700",
+    idleClass: "bg-orange-50 text-orange-600",
+  },
+  {
+    key: "interview",
+    label: t("emails.interview"),
+    activeClass: "bg-violet-100 text-violet-700",
+    idleClass: "bg-violet-50 text-violet-600",
+  },
+  {
+    key: "offer",
+    label: t("emails.offer"),
+    activeClass: "bg-teal-100 text-teal-700",
+    idleClass: "bg-teal-50 text-teal-600",
+  },
 ];
 
 /** Some ATS senders' plain-text MIME part is itself HTML-entity-encoded
@@ -154,7 +189,9 @@ function SentEmailRow({ email, onClick }) {
           </div>
         </div>
         <p className="mt-0.5 text-white text-sm font-semibold truncate">{email.subject}</p>
-        <p className="mt-0.5 text-sprout-muted text-xs line-clamp-2 leading-relaxed">{email.preview}</p>
+        <p className="mt-0.5 text-sprout-muted text-xs line-clamp-2 leading-relaxed">
+          {email.preview}
+        </p>
         <div className="mt-2">
           <StatusPill status={email.status} />
         </div>
@@ -276,7 +313,10 @@ function GenerateSheet({ open, onClose, onSaveDraft }) {
               {EMAIL_TYPES.map((t) => (
                 <button
                   key={t.key}
-                  onClick={() => { setEmailType(t.key); setGeneratedBody(""); }}
+                  onClick={() => {
+                    setEmailType(t.key);
+                    setGeneratedBody("");
+                  }}
                   className={`text-left p-3.5 rounded-2xl transition-all duration-200 ease-out ${
                     emailType === t.key ? "selection-option-on" : "selection-option-off"
                   }`}
@@ -297,7 +337,10 @@ function GenerateSheet({ open, onClose, onSaveDraft }) {
             <div className="relative">
               <select
                 value={selectedJobId}
-                onChange={(e) => { setSelectedJobId(e.target.value); setGeneratedBody(""); }}
+                onChange={(e) => {
+                  setSelectedJobId(e.target.value);
+                  setGeneratedBody("");
+                }}
                 className="w-full appearance-none bg-sprout-surface-2 border border-sprout-border rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-sprout-mint transition-colors"
               >
                 {MOCK_JOBS.map((j) => (
@@ -404,13 +447,7 @@ function SenderAvatar({ message, size = "md" }) {
     );
   }
 
-  return (
-    <CompanyLogo
-      company={message.company || message.from}
-      size={logoSize}
-      rounded="full"
-    />
-  );
+  return <CompanyLogo company={message.company || message.from} size={logoSize} rounded="full" />;
 }
 
 function WelcomeMessageBody() {
@@ -421,25 +458,25 @@ function WelcomeMessageBody() {
       </h1>
       <p>Hey there! We&apos;re excited to have you on board.</p>
       <p>
-        This is your <strong className="font-semibold text-zinc-900">{BRAND.NAME} inbox</strong>
-        {" "}&mdash; a dedicated space for all your job search communication. Here&apos;s what you can expect to see here:
+        This is your <strong className="font-semibold text-zinc-900">{BRAND.NAME} inbox</strong>{" "}
+        &mdash; a dedicated space for all your job search communication. Here&apos;s what you can
+        expect to see here:
       </p>
       <ul className="list-disc space-y-2.5 pl-5 marker:text-zinc-400">
         <li>
-          <strong className="font-semibold text-zinc-900">Application confirmations</strong>
-          {" "}when you swipe right on a job
+          <strong className="font-semibold text-zinc-900">Application confirmations</strong> when
+          you swipe right on a job
         </li>
         <li>
-          <strong className="font-semibold text-zinc-900">Interview requests</strong>
-          {" "}from companies that want to meet you
+          <strong className="font-semibold text-zinc-900">Interview requests</strong> from companies
+          that want to meet you
         </li>
         <li>
-          <strong className="font-semibold text-zinc-900">Job offers</strong>
-          {" "}and next steps
+          <strong className="font-semibold text-zinc-900">Job offers</strong> and next steps
         </li>
         <li>
-          <strong className="font-semibold text-zinc-900">Important updates</strong>
-          {" "}about your applications
+          <strong className="font-semibold text-zinc-900">Important updates</strong> about your
+          applications
         </li>
       </ul>
       <p>Start swiping to apply to jobs, and you&apos;ll see updates appear right here.</p>
@@ -452,7 +489,16 @@ function WelcomeMessageBody() {
   );
 }
 
-function MessageMoreMenu({ open, message, starred, onClose, onToggleStar, onArchive, onMarkUnread, onReport }) {
+function MessageMoreMenu({
+  open,
+  message,
+  starred,
+  onClose,
+  onToggleStar,
+  onArchive,
+  onMarkUnread,
+  onReport,
+}) {
   if (!message) return null;
 
   const items = [
@@ -528,7 +574,9 @@ function MessageMoreMenu({ open, message, starred, onClose, onToggleStar, onArch
                   fill={key === "star" && starred ? "currentColor" : "none"}
                 />
                 <div className="min-w-0 flex-1">
-                  <p className={`text-[15px] font-semibold ${danger ? "text-rose-500" : "text-zinc-900"}`}>
+                  <p
+                    className={`text-[15px] font-semibold ${danger ? "text-rose-500" : "text-zinc-900"}`}
+                  >
                     {label}
                   </p>
                   <p className="text-sm text-zinc-500">{sub}</p>
@@ -731,7 +779,10 @@ function InboxMessageDetail({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex h-dvh max-h-dvh flex-col overflow-hidden bg-white text-zinc-900" data-testid="inbox-message-detail">
+    <div
+      className="fixed inset-0 z-50 flex h-dvh max-h-dvh flex-col overflow-hidden bg-white text-zinc-900"
+      data-testid="inbox-message-detail"
+    >
       <header className="mx-auto w-full max-w-md shrink-0 border-b border-zinc-100 px-safe pb-3 pt-safe sm:px-4">
         <button
           type="button"
@@ -810,7 +861,10 @@ function InboxMessageDetail({
               .map((paragraph) => paragraph.trim())
               .filter(Boolean)
               .map((paragraph, index) => (
-                <p key={index} className="whitespace-pre-line text-[15px] leading-[1.55] text-zinc-800">
+                <p
+                  key={index}
+                  className="whitespace-pre-line text-[15px] leading-[1.55] text-zinc-800"
+                >
                   {paragraph}
                 </p>
               ))}
@@ -895,7 +949,15 @@ function EmailDetailSheet({ email, onClose }) {
                 onClick={handleCopy}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-sprout-surface-2 text-sprout-mint text-xs font-semibold hover:bg-sprout-mint-soft transition-colors"
               >
-                {copied ? <><Check className="w-3 h-3" /> {t("emails.saved")}</> : <><Copy className="w-3 h-3" /> {t("emails.copy")}</>}
+                {copied ? (
+                  <>
+                    <Check className="w-3 h-3" /> {t("emails.saved")}
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3 h-3" /> {t("emails.copy")}
+                  </>
+                )}
               </button>
               <div className="h-4" />
             </div>
@@ -957,9 +1019,7 @@ function DraftsTab() {
     return (
       <div className="mt-16 text-center">
         <Mail className="w-7 h-7 mx-auto mb-3 text-sprout-dim" />
-        <p className="text-sprout-muted text-sm">
-          {t("emails.noDrafts")}
-        </p>
+        <p className="text-sprout-muted text-sm">{t("emails.noDrafts")}</p>
       </div>
     );
   }
@@ -967,12 +1027,7 @@ function DraftsTab() {
   return (
     <div className="space-y-3">
       {drafts.map((draft) => (
-        <DraftRow
-          key={draft.id}
-          draft={draft}
-          onCopy={handleCopy}
-          onDelete={handleDelete}
-        />
+        <DraftRow key={draft.id} draft={draft} onCopy={handleCopy} onDelete={handleDelete} />
       ))}
     </div>
   );
@@ -1029,7 +1084,10 @@ export default function Emails() {
         if (cancelled) return;
         console.warn("Inbox load failed", error?.response?.data?.detail || error?.message);
         setInboxMessages([]);
-        setGmailStatus({ connected: false, last_sync_error: error?.response?.data?.detail || error?.message });
+        setGmailStatus({
+          connected: false,
+          last_sync_error: error?.response?.data?.detail || error?.message,
+        });
       } finally {
         if (!cancelled) setLoadingInbox(false);
       }
@@ -1074,9 +1132,9 @@ export default function Emails() {
       if (!query.trim()) return true;
       const q = query.toLowerCase();
       return (
-        m.from.toLowerCase().includes(q)
-        || m.subject.toLowerCase().includes(q)
-        || m.preview.toLowerCase().includes(q)
+        m.from.toLowerCase().includes(q) ||
+        m.subject.toLowerCase().includes(q) ||
+        m.preview.toLowerCase().includes(q)
       );
     }),
   );
@@ -1155,7 +1213,9 @@ export default function Emails() {
           {loadingInbox ? (
             <div className="py-16 text-center">
               <Mail className="mx-auto mb-3 h-8 w-8 text-zinc-300" />
-              <p className="text-sm font-medium text-zinc-700">{t("common.loading") || "Loading"}</p>
+              <p className="text-sm font-medium text-zinc-700">
+                {t("common.loading") || "Loading"}
+              </p>
             </div>
           ) : messages.length === 0 ? (
             <div className="py-16 text-center">
@@ -1181,15 +1241,21 @@ export default function Emails() {
                       <SenderAvatar message={m} size="lg" />
                       <div className="min-w-0 flex-1">
                         <div className="flex items-start justify-between gap-2">
-                          <p className={`truncate text-sm ${read[m.id] ? "font-semibold text-zinc-800" : "font-bold text-zinc-900"}`}>
+                          <p
+                            className={`truncate text-sm ${read[m.id] ? "font-semibold text-zinc-800" : "font-bold text-zinc-900"}`}
+                          >
                             {m.from}
                           </p>
                           <span className="shrink-0 text-xs text-zinc-400">{m.date}</span>
                         </div>
-                        <p className={`truncate text-sm ${read[m.id] ? "font-medium text-zinc-700" : "font-bold text-zinc-900"}`}>
+                        <p
+                          className={`truncate text-sm ${read[m.id] ? "font-medium text-zinc-700" : "font-bold text-zinc-900"}`}
+                        >
                           {m.subject}
                         </p>
-                        <p className={`mt-0.5 line-clamp-2 text-sm ${read[m.id] ? "text-zinc-500" : "font-medium text-zinc-600"}`}>
+                        <p
+                          className={`mt-0.5 line-clamp-2 text-sm ${read[m.id] ? "text-zinc-500" : "font-medium text-zinc-600"}`}
+                        >
                           {decodeHtmlEntities(m.preview)}
                         </p>
                       </div>
@@ -1204,7 +1270,9 @@ export default function Emails() {
                       aria-label={starred[m.id] ? "Unstar" : "Star"}
                       data-testid={`inbox-star-${m.id}`}
                     >
-                      <Star className={`h-4 w-4 ${starred[m.id] ? "fill-amber-400 text-amber-400" : ""}`} />
+                      <Star
+                        className={`h-4 w-4 ${starred[m.id] ? "fill-amber-400 text-amber-400" : ""}`}
+                      />
                     </button>
                   </div>
                 </li>

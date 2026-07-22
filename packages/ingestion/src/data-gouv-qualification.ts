@@ -1,12 +1,8 @@
 import { createHash } from "node:crypto";
 import type { SourceRuntimePolicy } from "@hirly/contracts";
-import {
-  sourceActivationBlockReason,
-  type SourceActivationBlockReason,
-} from "./index";
+import { sourceActivationBlockReason, type SourceActivationBlockReason } from "./index";
 
-export const DATA_GOUV_QUALIFICATION_SCHEMA_VERSION =
-  "data-gouv-qualification.v1" as const;
+export const DATA_GOUV_QUALIFICATION_SCHEMA_VERSION = "data-gouv-qualification.v1" as const;
 
 export type DataGouvQualificationBlockReason =
   | "missing_dataset_identity"
@@ -134,8 +130,7 @@ export function qualifyDataGouvDataset(
   const reasons = new Set<DataGouvQualificationBlockReason>();
   const evaluatedAt = new Date(evidence.freshness.evaluatedAt);
   const resourceUpdatedAt = new Date(evidence.freshness.resourceUpdatedAt);
-  const maximumAgeMs =
-    evidence.freshness.maximumAgeDays * 24 * 60 * 60 * 1_000;
+  const maximumAgeMs = evidence.freshness.maximumAgeDays * 24 * 60 * 60 * 1_000;
 
   if (!hasText(evidence.datasetId) || !hasText(evidence.resourceId)) {
     reasons.add("missing_dataset_identity");
@@ -155,10 +150,7 @@ export function qualifyDataGouvDataset(
   ) {
     reasons.add("stale_resource");
   }
-  if (
-    !hasText(evidence.licence.name) ||
-    !hasText(evidence.licence.evidenceRef)
-  ) {
+  if (!hasText(evidence.licence.name) || !hasText(evidence.licence.evidenceRef)) {
     reasons.add("missing_licence_evidence");
   }
   if (!evidence.licence.commercialUseAllowed) {
@@ -206,19 +198,13 @@ export function qualifyDataGouvDataset(
     evidence.relevance.actionableRows > evidence.relevance.jobRows
   ) {
     reasons.add("missing_relevance_evidence");
-  } else if (
-    evidence.relevance.jobRows === 0 ||
-    evidence.relevance.actionableRows === 0
-  ) {
+  } else if (evidence.relevance.jobRows === 0 || evidence.relevance.actionableRows === 0) {
     reasons.add("no_reviewed_jobs");
   }
   if (!hasText(evidence.lifecycle.updateCadence)) {
     reasons.add("missing_update_cadence");
   }
-  if (
-    !hasText(evidence.lifecycle.removalSemantics) ||
-    !hasText(evidence.lifecycle.evidenceRef)
-  ) {
+  if (!hasText(evidence.lifecycle.removalSemantics) || !hasText(evidence.lifecycle.evidenceRef)) {
     reasons.add("missing_removal_semantics");
   }
 
@@ -247,8 +233,7 @@ export function dataGouvProductionBlockReason(
   }
   if (
     runtimePolicy.source.provider !== "data_gouv" ||
-    runtimePolicy.source.sourceKey !==
-      `${qualification.datasetId}:${qualification.resourceId}`
+    runtimePolicy.source.sourceKey !== `${qualification.datasetId}:${qualification.resourceId}`
   ) {
     return "qualification_source_mismatch";
   }

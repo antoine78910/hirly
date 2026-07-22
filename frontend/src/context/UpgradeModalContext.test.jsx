@@ -8,7 +8,7 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 jest.mock("../components/upgrade/DesktopUpgradeModal", () => ({
   __esModule: true,
-  default: ({ open }) => open ? <div data-testid="upgrade-modal" /> : null,
+  default: ({ open }) => (open ? <div data-testid="upgrade-modal" /> : null),
 }));
 
 jest.mock("./AppLocaleContext", () => ({
@@ -19,14 +19,22 @@ jest.mock("../lib/frontendVersion", () => ({
   backendHasNewerFrontend: jest.fn(),
 }));
 
-jest.mock("react-router-dom", () => ({
-  useLocation: () => ({ pathname: "/swipe", search: "" }),
-  useNavigate: () => jest.fn(),
-}), { virtual: true });
+jest.mock(
+  "react-router-dom",
+  () => ({
+    useLocation: () => ({ pathname: "/swipe", search: "" }),
+    useNavigate: () => jest.fn(),
+  }),
+  { virtual: true },
+);
 
 function UpgradeTrigger() {
   const { openUpgrade } = useUpgradeModal();
-  return <button type="button" onClick={() => void openUpgrade()}>Upgrade</button>;
+  return (
+    <button type="button" onClick={() => void openUpgrade()}>
+      Upgrade
+    </button>
+  );
 }
 
 describe("UpgradeModalProvider", () => {
@@ -49,7 +57,9 @@ describe("UpgradeModalProvider", () => {
     backendHasNewerFrontend.mockResolvedValue(true);
     await act(async () => {
       root.render(
-        <UpgradeModalProvider><UpgradeTrigger /></UpgradeModalProvider>,
+        <UpgradeModalProvider>
+          <UpgradeTrigger />
+        </UpgradeModalProvider>,
       );
     });
 
@@ -66,7 +76,9 @@ describe("UpgradeModalProvider", () => {
     backendHasNewerFrontend.mockResolvedValue(false);
     await act(async () => {
       root.render(
-        <UpgradeModalProvider><UpgradeTrigger /></UpgradeModalProvider>,
+        <UpgradeModalProvider>
+          <UpgradeTrigger />
+        </UpgradeModalProvider>,
       );
     });
 

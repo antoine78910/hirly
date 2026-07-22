@@ -61,15 +61,11 @@ const candidateProfile = {
 
 describe("matching v1 contracts", () => {
   test("preserves bigint versions as decimal strings", () => {
-    expect(monotonicVersionSchema.parse("9007199254740993")).toBe(
-      "9007199254740993",
-    );
+    expect(monotonicVersionSchema.parse("9007199254740993")).toBe("9007199254740993");
     for (const invalid of [0, 1, 9_007_199_254_740_992, "0", "01", "-1"]) {
       expect(() => monotonicVersionSchema.parse(invalid)).toThrow();
     }
-    expect(candidateSearchProfileSchema.parse(candidateProfile).version).toBe(
-      "9007199254740993",
-    );
+    expect(candidateSearchProfileSchema.parse(candidateProfile).version).toBe("9007199254740993");
   });
 
   test("keeps candidate profiles purpose-limited and strictly normalized", () => {
@@ -208,9 +204,7 @@ describe("matching v1 contracts", () => {
       currency: null,
       freshnessWindowDays: null,
     };
-    expect(candidateSearchProfileSchema.parse(deletedProfile).status).toBe(
-      "deleted",
-    );
+    expect(candidateSearchProfileSchema.parse(deletedProfile).status).toBe("deleted");
     const row = toCandidateSearchProfilePersistenceRow(
       deletedProfile,
       "44444444-4444-4444-8444-444444444444",
@@ -231,18 +225,18 @@ describe("matching v1 contracts", () => {
 
   test("validates purpose-limited action and opaque outbox envelopes", () => {
     const action = candidateActionProjectionSchema.parse({
-        schemaVersion: MATCHING_CONTRACT_VERSION,
-        candidateId: "mongo-user-id",
-        sourceActionId: "swipe-123",
-        sourceJobId: "job-text-id",
-        canonicalGroupId: groupId,
-        canonicalGroupAliases: [],
-        kind: "dismissed",
-        version: "9007199254740994",
-        occurredAt: now,
-        retentionState: "active",
-        projectedAt: now,
-      });
+      schemaVersion: MATCHING_CONTRACT_VERSION,
+      candidateId: "mongo-user-id",
+      sourceActionId: "swipe-123",
+      sourceJobId: "job-text-id",
+      canonicalGroupId: groupId,
+      canonicalGroupAliases: [],
+      kind: "dismissed",
+      version: "9007199254740994",
+      occurredAt: now,
+      retentionState: "active",
+      projectedAt: now,
+    });
     expect(action.sourceJobId).toBe("job-text-id");
     const actionRow = toCandidateActionProjectionPersistenceRow(
       action,
@@ -329,9 +323,7 @@ describe("matching v1 contracts", () => {
       featureSchemaVersion: "matching-features.v1",
       projectedAt: now,
     };
-    expect(jobSearchDocumentSchema.parse(document).contractTypes).toEqual([
-      "permanent",
-    ]);
+    expect(jobSearchDocumentSchema.parse(document).contractTypes).toEqual(["permanent"]);
     expect(() =>
       jobSearchDocumentSchema.parse({
         ...document,
@@ -484,18 +476,16 @@ describe("matching v1 contracts", () => {
     ] as const;
     expect(projectionTaskKindSchema.options).toEqual([...commonKinds]);
     const task = {
-        schemaVersion: MATCHING_CONTRACT_VERSION,
-        taskId: "33333333-3333-4333-8333-333333333333",
-        taskKind: "projection.reconcile",
-        entityId: "mongo-user-id",
-        entityVersion: "6",
-        idempotencyKey: "reconcile:mongo-user-id:6",
-        availableAt: now,
-        attempt: 0,
-      } as const;
-    expect(projectionTaskSchema.parse(task).taskKind).toBe(
-      "projection.reconcile",
-    );
+      schemaVersion: MATCHING_CONTRACT_VERSION,
+      taskId: "33333333-3333-4333-8333-333333333333",
+      taskKind: "projection.reconcile",
+      entityId: "mongo-user-id",
+      entityVersion: "6",
+      idempotencyKey: "reconcile:mongo-user-id:6",
+      availableAt: now,
+      attempt: 0,
+    } as const;
+    expect(projectionTaskSchema.parse(task).taskKind).toBe("projection.reconcile");
     const taskRow = toProjectionTaskPersistenceRow(task);
     expect(taskRow).toMatchObject({
       task_kind: "projection.reconcile",

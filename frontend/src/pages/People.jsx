@@ -9,12 +9,60 @@ import DesktopPageHeader from "../components/desktop/DesktopPageHeader";
 import { APP_CONTENT_WIDTH } from "../lib/desktopLayout";
 
 const MOCK_PEOPLE = [
-  { id: 1, name: "Sarah Chen", title: "Engineering Manager", company: "Linear", appliedRole: "Senior Frontend Engineer", connected: false, gradient: "from-violet-600 to-indigo-600" },
-  { id: 2, name: "Marc Dubois", title: "Tech Lead", company: "Stripe", appliedRole: "Backend Engineer", connected: false, gradient: "from-emerald-600 to-cyan-600" },
-  { id: 3, name: "Julia Meyer", title: "Senior Recruiter", company: "Vercel", appliedRole: "DevRel Engineer", connected: false, gradient: "from-amber-500 to-orange-500" },
-  { id: 4, name: "Tom Richards", title: "CTO", company: "Notion", appliedRole: "Staff Engineer", connected: false, gradient: "from-pink-600 to-rose-600" },
-  { id: 5, name: "Amara Osei", title: "Head of Talent", company: "Figma", appliedRole: "Product Designer", connected: false, gradient: "from-blue-600 to-violet-600" },
-  { id: 6, name: "Diego Hernández", title: "VP Engineering", company: "Shopify", appliedRole: "Senior Full Stack", connected: false, gradient: "from-green-600 to-teal-600" },
+  {
+    id: 1,
+    name: "Sarah Chen",
+    title: "Engineering Manager",
+    company: "Linear",
+    appliedRole: "Senior Frontend Engineer",
+    connected: false,
+    gradient: "from-violet-600 to-indigo-600",
+  },
+  {
+    id: 2,
+    name: "Marc Dubois",
+    title: "Tech Lead",
+    company: "Stripe",
+    appliedRole: "Backend Engineer",
+    connected: false,
+    gradient: "from-emerald-600 to-cyan-600",
+  },
+  {
+    id: 3,
+    name: "Julia Meyer",
+    title: "Senior Recruiter",
+    company: "Vercel",
+    appliedRole: "DevRel Engineer",
+    connected: false,
+    gradient: "from-amber-500 to-orange-500",
+  },
+  {
+    id: 4,
+    name: "Tom Richards",
+    title: "CTO",
+    company: "Notion",
+    appliedRole: "Staff Engineer",
+    connected: false,
+    gradient: "from-pink-600 to-rose-600",
+  },
+  {
+    id: 5,
+    name: "Amara Osei",
+    title: "Head of Talent",
+    company: "Figma",
+    appliedRole: "Product Designer",
+    connected: false,
+    gradient: "from-blue-600 to-violet-600",
+  },
+  {
+    id: 6,
+    name: "Diego Hernández",
+    title: "VP Engineering",
+    company: "Shopify",
+    appliedRole: "Senior Full Stack",
+    connected: false,
+    gradient: "from-green-600 to-teal-600",
+  },
 ];
 
 function getInitials(name) {
@@ -49,7 +97,10 @@ function ConnectSheet({ person, open, onOpenChange, onConnected }) {
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="bottom" className="sprout bg-sprout-surface border-t border-sprout-border rounded-t-2xl px-5 pb-10">
+      <SheetContent
+        side="bottom"
+        className="sprout bg-sprout-surface border-t border-sprout-border rounded-t-2xl px-5 pb-10"
+      >
         <SheetHeader className="mb-4 text-left">
           <SheetTitle className="font-display font-bold text-white text-xl">
             Message to {person.name}
@@ -100,7 +151,9 @@ function PersonCard({ person, index, onConnect }) {
 
       {/* Info */}
       <div className="flex-1 min-w-0">
-        <p className="truncate text-sm font-semibold leading-tight text-white md:shell-title">{person.name}</p>
+        <p className="truncate text-sm font-semibold leading-tight text-white md:shell-title">
+          {person.name}
+        </p>
         <p className="mt-0.5 truncate text-xs text-sprout-muted md:text-zinc-500">
           {person.title} · {person.company}
         </p>
@@ -140,9 +193,7 @@ export default function People() {
   }
 
   function handleConnected(id) {
-    setPeople((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, connected: true } : p))
-    );
+    setPeople((prev) => prev.map((p) => (p.id === id ? { ...p, connected: true } : p)));
   }
 
   function handleSheetChange(open) {
@@ -155,7 +206,8 @@ export default function People() {
       <header className="mx-auto w-full max-w-md shrink-0 px-5 pt-6 md:hidden">
         <h1 className="font-display text-3xl font-black tracking-tighter text-white">People</h1>
         <p className="mt-1 text-sm text-sprout-muted">
-          {people.length} hiring contact{people.length !== 1 ? "s" : ""} matched to your applications
+          {people.length} hiring contact{people.length !== 1 ? "s" : ""} matched to your
+          applications
         </p>
       </header>
 
@@ -177,12 +229,7 @@ export default function People() {
         ) : (
           <ul className="flex flex-col gap-3 md:grid md:grid-cols-2 md:gap-4">
             {people.map((person, i) => (
-              <PersonCard
-                key={person.id}
-                person={person}
-                index={i}
-                onConnect={handleConnect}
-              />
+              <PersonCard key={person.id} person={person} index={i} onConnect={handleConnect} />
             ))}
           </ul>
         )}

@@ -24,9 +24,15 @@ class FakeSource implements CandidateProjectionSource {
     readonly snapshot: CandidateSourceSnapshot,
     readonly action: Record<string, unknown> | null = null,
   ) {}
-  async claim(): Promise<CandidateProjectionOutboxEvent[]> { return this.events; }
-  async loadCandidate(): Promise<CandidateSourceSnapshot> { return this.snapshot; }
-  async loadAction(): Promise<Record<string, unknown> | null> { return this.action; }
+  async claim(): Promise<CandidateProjectionOutboxEvent[]> {
+    return this.events;
+  }
+  async loadCandidate(): Promise<CandidateSourceSnapshot> {
+    return this.snapshot;
+  }
+  async loadAction(): Promise<Record<string, unknown> | null> {
+    return this.action;
+  }
   async acknowledge(eventId: string): Promise<boolean> {
     this.acknowledgements.push(eventId);
     return true;
@@ -37,21 +43,28 @@ class FakeStore implements CandidateProjectionStore {
   calls: string[] = [];
   result: ProjectionApplyResult = "applied";
   groupId: string | null = "22222222-2222-4222-8222-222222222222";
-  async resolveCanonicalGroup(): Promise<string | null> { return this.groupId; }
+  async resolveCanonicalGroup(): Promise<string | null> {
+    return this.groupId;
+  }
   async applyProfile(_profile: CandidateSearchProfile): Promise<ProjectionApplyResult> {
-    this.calls.push("profile"); return this.result;
+    this.calls.push("profile");
+    return this.result;
   }
   async applyPausedProfile(_profile: CandidateSearchProfile): Promise<ProjectionApplyResult> {
-    this.calls.push("pause-and-purge"); return this.result;
+    this.calls.push("pause-and-purge");
+    return this.result;
   }
   async applyAction(_action: CandidateActionProjection): Promise<ProjectionApplyResult> {
-    this.calls.push("action"); return this.result;
+    this.calls.push("action");
+    return this.result;
   }
   async retireAction(): Promise<ProjectionApplyResult> {
-    this.calls.push("retire-action"); return this.result;
+    this.calls.push("retire-action");
+    return this.result;
   }
   async applyDeletion(): Promise<ProjectionApplyResult> {
-    this.calls.push("delete-and-purge"); return this.result;
+    this.calls.push("delete-and-purge");
+    return this.result;
   }
 }
 
@@ -127,22 +140,30 @@ describe("candidate projection", () => {
 
   test("maps only explicit swipe/application semantics and retires deletes", () => {
     const base = { ...event, eventFamily: "swipes" as const, entityId: "candidate-paris:job-1" };
-    expect(normalizeCandidateAction({
-      event: base,
-      source: { job_id: "job-1", direction: "left" },
-      canonicalGroupId: "22222222-2222-4222-8222-222222222222",
-      projectedAt: event.occurredAt,
-    }).kind).toBe("dismissed");
-    expect(normalizeCandidateAction({
-      event: { ...base, eventFamily: "applications" },
-      source: { job_id: "job-1", status: "submitted" },
-      canonicalGroupId: "22222222-2222-4222-8222-222222222222",
-      projectedAt: event.occurredAt,
-    }).kind).toBe("applied");
+    expect(
+      normalizeCandidateAction({
+        event: base,
+        source: { job_id: "job-1", direction: "left" },
+        canonicalGroupId: "22222222-2222-4222-8222-222222222222",
+        projectedAt: event.occurredAt,
+      }).kind,
+    ).toBe("dismissed");
+    expect(
+      normalizeCandidateAction({
+        event: { ...base, eventFamily: "applications" },
+        source: { job_id: "job-1", status: "submitted" },
+        canonicalGroupId: "22222222-2222-4222-8222-222222222222",
+        projectedAt: event.occurredAt,
+      }).kind,
+    ).toBe("applied");
   });
 
   test("acknowledges a terminal missing action so it cannot block later projection events", async () => {
-    const actionEvent = { ...event, eventFamily: "swipes" as const, entityId: "candidate-paris:job-1" };
+    const actionEvent = {
+      ...event,
+      eventFamily: "swipes" as const,
+      entityId: "candidate-paris:job-1",
+    };
     const source = new FakeSource(
       [actionEvent],
       { profile: fixture.profile, user: fixture.user },
@@ -166,7 +187,9 @@ describe("candidate projection", () => {
   test("leaves the primary event unacknowledged when the inventory write fails", async () => {
     const source = new FakeSource([event], { profile: fixture.profile, user: fixture.user });
     const store = new FakeStore();
-    store.applyProfile = async () => { throw new Error("inventory unavailable"); };
+    store.applyProfile = async () => {
+      throw new Error("inventory unavailable");
+    };
     await expect(new CandidateProjector(source, store).runBatch(10, 30)).rejects.toThrow(
       "inventory unavailable",
     );

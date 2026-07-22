@@ -94,10 +94,7 @@ function parseIpv4(address: string): number[] | null {
   const octets = parts.map((part) => Number(part));
   return octets.every(
     (octet, index) =>
-      Number.isInteger(octet) &&
-      octet >= 0 &&
-      octet <= 255 &&
-      String(octet) === parts[index],
+      Number.isInteger(octet) && octet >= 0 && octet <= 255 && String(octet) === parts[index],
   )
     ? octets
     : null;
@@ -130,10 +127,7 @@ function ipv6ToBigInt(address: string): bigint | null {
     if (!octets) return null;
     const high = ((octets[0] ?? 0) << 8) | (octets[1] ?? 0);
     const low = ((octets[2] ?? 0) << 8) | (octets[3] ?? 0);
-    normalized = normalized.replace(
-      ipv4Tail,
-      `${high.toString(16)}:${low.toString(16)}`,
-    );
+    normalized = normalized.replace(ipv4Tail, `${high.toString(16)}:${low.toString(16)}`);
   }
   const halves = normalized.split("::");
   if (halves.length > 2) return null;
@@ -142,23 +136,13 @@ function ipv6ToBigInt(address: string): bigint | null {
   const missing = halves.length === 2 ? 8 - left.length - right.length : 0;
   if (missing < 0 || (halves.length === 1 && left.length !== 8)) return null;
   const groups = [...left, ...Array<string>(missing).fill("0"), ...right];
-  if (
-    groups.length !== 8 ||
-    groups.some((group) => !/^[0-9a-f]{1,4}$/.test(group))
-  ) {
+  if (groups.length !== 8 || groups.some((group) => !/^[0-9a-f]{1,4}$/.test(group))) {
     return null;
   }
-  return groups.reduce(
-    (value, group) => (value << 16n) | BigInt(`0x${group}`),
-    0n,
-  );
+  return groups.reduce((value, group) => (value << 16n) | BigInt(`0x${group}`), 0n);
 }
 
-function isInIpv6Prefix(
-  value: bigint,
-  prefix: bigint,
-  prefixLength: number,
-): boolean {
+function isInIpv6Prefix(value: bigint, prefix: bigint, prefixLength: number): boolean {
   const shift = BigInt(128 - prefixLength);
   return value >> shift === prefix >> shift;
 }
@@ -187,10 +171,7 @@ function isPublicIpv6(address: string): boolean {
   if (value >> 125n !== 1n) return false;
   for (const [prefix, prefixLength] of DENIED_IPV6_SPECIAL_PREFIXES) {
     const parsedPrefix = ipv6ToBigInt(prefix);
-    if (
-      parsedPrefix !== null &&
-      isInIpv6Prefix(value, parsedPrefix, prefixLength)
-    ) {
+    if (parsedPrefix !== null && isInIpv6Prefix(value, parsedPrefix, prefixLength)) {
       return false;
     }
   }
@@ -216,12 +197,14 @@ function normalizedHostname(url: URL): string {
   if (
     hostname.length === 0 ||
     hostname.length > 253 ||
-    hostname.split(".").some(
-      (label) =>
-        label.length === 0 ||
-        label.length > 63 ||
-        !/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(label),
-    )
+    hostname
+      .split(".")
+      .some(
+        (label) =>
+          label.length === 0 ||
+          label.length > 63 ||
+          !/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(label),
+      )
   ) {
     throw new AtsDiscoveryRejectedError(
       "hostname_invalid",
@@ -231,9 +214,7 @@ function normalizedHostname(url: URL): string {
   return hostname;
 }
 
-function validateAtsDiscoveryHop(
-  input: AtsDiscoveryHopInput,
-): ValidatedAtsDiscoveryHop {
+function validateAtsDiscoveryHop(input: AtsDiscoveryHopInput): ValidatedAtsDiscoveryHop {
   if (input.url.length > ATS_DISCOVERY_RESOURCE_LIMITS.maxUrlLength) {
     throw new AtsDiscoveryRejectedError(
       "url_too_long",
@@ -244,16 +225,10 @@ function validateAtsDiscoveryHop(
   try {
     url = new URL(input.url);
   } catch {
-    throw new AtsDiscoveryRejectedError(
-      "invalid_url",
-      "ATS discovery URL is invalid",
-    );
+    throw new AtsDiscoveryRejectedError("invalid_url", "ATS discovery URL is invalid");
   }
   if (url.protocol !== "https:") {
-    throw new AtsDiscoveryRejectedError(
-      "https_required",
-      "ATS discovery requires HTTPS",
-    );
+    throw new AtsDiscoveryRejectedError("https_required", "ATS discovery requires HTTPS");
   }
   if (url.username || url.password) {
     throw new AtsDiscoveryRejectedError(
@@ -287,10 +262,7 @@ function validateAtsDiscoveryHop(
       "ATS discovery requires DNS results resolved immediately before use",
     );
   }
-  if (
-    input.resolvedAddresses.length >
-    ATS_DISCOVERY_RESOURCE_LIMITS.maxDnsAnswers
-  ) {
+  if (input.resolvedAddresses.length > ATS_DISCOVERY_RESOURCE_LIMITS.maxDnsAnswers) {
     throw new AtsDiscoveryRejectedError(
       "dns_answer_limit_exceeded",
       "ATS discovery DNS answer count exceeds the bound",
@@ -384,9 +356,7 @@ export async function registerDiscoveredAtsTenant(
     tenantKey: final.tenantKey,
     companyId: input.companyId ?? null,
     companyName: input.companyName ?? null,
-    countryCodes: [
-      ...new Set(input.countryCodes.map((code) => code.trim().toUpperCase())),
-    ].sort(),
+    countryCodes: [...new Set(input.countryCodes.map((code) => code.trim().toUpperCase()))].sort(),
     baseUrl: candidateBaseUrl(final),
     accessType: "tenant_feed",
     syncFrequencySeconds: null,
@@ -395,8 +365,7 @@ export async function registerDiscoveredAtsTenant(
       observedHost: final.asciiHostname,
     },
   });
-  const candidate =
-    await registrar.registerCareerSourceCandidate(registration);
+  const candidate = await registrar.registerCareerSourceCandidate(registration);
   if (
     candidate.enabled ||
     candidate.transportEnabled ||

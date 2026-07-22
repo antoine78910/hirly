@@ -3,10 +3,7 @@ import Logo from "../Logo";
 import { BRAND } from "../../lib/brand";
 
 export default function LandingPhoneNotifications({ items, anchor = "phone" }) {
-  const positionClass =
-    anchor === "cards"
-      ? "bottom-[7.5rem] right-2.5"
-      : "bottom-3 right-2.5";
+  const positionClass = anchor === "cards" ? "bottom-[7.5rem] right-2.5" : "bottom-3 right-2.5";
 
   return (
     <div className={`absolute z-30 flex max-w-[88%] flex-col items-end gap-2 ${positionClass}`}>
@@ -26,8 +23,12 @@ export default function LandingPhoneNotifications({ items, anchor = "phone" }) {
                 <Logo size={18} />
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-400">{BRAND.NAME}</p>
-                <p className="mt-0.5 text-xs font-semibold leading-snug text-zinc-900">{item.title}</p>
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-400">
+                  {BRAND.NAME}
+                </p>
+                <p className="mt-0.5 text-xs font-semibold leading-snug text-zinc-900">
+                  {item.title}
+                </p>
                 {item.body ? (
                   <p className="mt-0.5 text-[11px] leading-snug text-zinc-500">{item.body}</p>
                 ) : null}

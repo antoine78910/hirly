@@ -8,10 +8,7 @@ import {
   previewAtsSourceTrial,
   type SourceTrialEvidenceRepository,
 } from "../src/source-trial";
-import {
-  parseSourceTrialArgs,
-  runSourceTrialCli,
-} from "../src/source-trial-cli";
+import { parseSourceTrialArgs, runSourceTrialCli } from "../src/source-trial-cli";
 
 const manifest: SourceTrialManifest = {
   schemaVersion: "hirly.source-trial-manifest.v1",
@@ -110,8 +107,7 @@ describe("G014 evidence-only source trial runner", () => {
     await persistAtsSourceTrial({
       manifest,
       repository,
-      fetch: async () =>
-        Response.json({ jobs: [response.jobs[0]], meta: { total: 1 } }),
+      fetch: async () => Response.json({ jobs: [response.jobs[0]], meta: { total: 1 } }),
       now: () => new Date("2026-07-20T12:00:00Z"),
     });
     expect(calls).toEqual(["begin", "page", "candidate", "scorecard"]);
@@ -154,9 +150,9 @@ describe("G014 evidence-only source trial runner", () => {
   ])(
     "persists an immutable classified result for a $name attempt",
     async ({ fetch, manifest: trialManifest, expectedStatus, expectedReason }) => {
-      const results: Array<Parameters<
-        SourceTrialEvidenceRepository["recordSourceTrialScorecard"]
-      >[0]["result"]> = [];
+      const results: Array<
+        Parameters<SourceTrialEvidenceRepository["recordSourceTrialScorecard"]>[0]["result"]
+      > = [];
       const repository: SourceTrialEvidenceRepository = {
         async beginSourceTrial() {
           return "018f02d8-a8b8-7f1d-a419-bf38eaf22a92";
@@ -232,9 +228,9 @@ describe("G014 evidence-only source trial runner", () => {
   });
 
   test("records policy_expired only after the manifest actually expires", async () => {
-    const results: Array<Parameters<
-      SourceTrialEvidenceRepository["recordSourceTrialScorecard"]
-    >[0]["result"]> = [];
+    const results: Array<
+      Parameters<SourceTrialEvidenceRepository["recordSourceTrialScorecard"]>[0]["result"]
+    > = [];
     const repository: SourceTrialEvidenceRepository = {
       async beginSourceTrial() {
         return "018f02d8-a8b8-7f1d-a419-bf38eaf22a92";
@@ -279,10 +275,7 @@ describe("G014 evidence-only source trial runner", () => {
     };
     await Promise.all([
       writeFile(manifestPath, JSON.stringify(currentManifest)),
-      writeFile(
-        responsePath,
-        JSON.stringify({ jobs: [response.jobs[0]], meta: { total: 1 } }),
-      ),
+      writeFile(responsePath, JSON.stringify({ jobs: [response.jobs[0]], meta: { total: 1 } })),
     ]);
     const preview = parseSourceTrialArgs([
       "preview",
@@ -301,9 +294,7 @@ describe("G014 evidence-only source trial runner", () => {
         queueWrites: false,
       },
     });
-    expect(JSON.parse(await readFile(outputPath, "utf8")).runId).toBe(
-      result.runId,
-    );
+    expect(JSON.parse(await readFile(outputPath, "utf8")).runId).toBe(result.runId);
 
     const live = parseSourceTrialArgs([
       "run",
@@ -312,9 +303,7 @@ describe("G014 evidence-only source trial runner", () => {
       "--output",
       join(directory, "run.json"),
     ]);
-    await expect(runSourceTrialCli(live, {})).rejects.toThrow(
-      "SOURCE_TRIAL_DATABASE_URL",
-    );
+    await expect(runSourceTrialCli(live, {})).rejects.toThrow("SOURCE_TRIAL_DATABASE_URL");
     expect(() =>
       parseSourceTrialArgs([
         "run",

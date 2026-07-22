@@ -26,9 +26,7 @@ const rollback = readFileSync(
   "utf8",
 );
 
-function policy(
-  overrides: Partial<SourceRuntimePolicy> = {},
-): SourceRuntimePolicy {
+function policy(overrides: Partial<SourceRuntimePolicy> = {}): SourceRuntimePolicy {
   return sourceRuntimePolicySchema.parse({
     providerEnabled: true,
     providerAuthorizationStatus: "authorized",
@@ -66,9 +64,7 @@ function policy(
 describe("G009 disabled TypeScript source contract", () => {
   test("accepts the existing empty checkpoint and keeps registry modes explicit", () => {
     expect(sourceCheckpointSchema.parse({})).toEqual({});
-    expect(
-      sourceRegistryEntrySchema.parse(policy().source),
-    ).toMatchObject({
+    expect(sourceRegistryEntrySchema.parse(policy().source)).toMatchObject({
       enabled: true,
       transportEnabled: true,
       incrementalEnabled: true,
@@ -101,8 +97,7 @@ describe("G009 disabled TypeScript source contract", () => {
 
   test("requires provider ownership, policy, mode, and country gates", () => {
     const now = new Date("2026-07-20T00:00:00.000Z");
-    expect(sourceActivationBlockReason(policy(), "FR", "incremental", now))
-      .toBeNull();
+    expect(sourceActivationBlockReason(policy(), "FR", "incremental", now)).toBeNull();
     expect(
       sourceActivationBlockReason(
         policy({ providerAuthorizationStatus: "unverified" }),
@@ -112,12 +107,7 @@ describe("G009 disabled TypeScript source contract", () => {
       ),
     ).toBe("provider_not_authorized");
     expect(
-      sourceActivationBlockReason(
-        policy({ writerRuntime: "python" }),
-        "FR",
-        "incremental",
-        now,
-      ),
+      sourceActivationBlockReason(policy({ writerRuntime: "python" }), "FR", "incremental", now),
     ).toBe("writer_not_typescript");
     expect(
       sourceActivationBlockReason(
@@ -135,8 +125,9 @@ describe("G009 disabled TypeScript source contract", () => {
         now,
       ),
     ).toBe("source_country_killed");
-    expect(sourceActivationBlockReason(policy(), "", "incremental", now))
-      .toBe("country_not_declared");
+    expect(sourceActivationBlockReason(policy(), "", "incremental", now)).toBe(
+      "country_not_declared",
+    );
     expect(
       sourceActivationBlockReason(
         policy({
@@ -150,8 +141,7 @@ describe("G009 disabled TypeScript source contract", () => {
         now,
       ),
     ).toBe("policy_not_approved");
-    expect(sourceActivationBlockReason(policy(), "FR", "backfill", now))
-      .toBe("mode_disabled");
+    expect(sourceActivationBlockReason(policy(), "FR", "backfill", now)).toBe("mode_disabled");
     expect(
       sourceActivationBlockReason(
         policy({
@@ -240,21 +230,15 @@ describe("G009 additive database boundary", () => {
       expect(migration).toContain(`public.${object}`);
       expect(rollback).toContain(object);
     }
-    expect(migration).toContain(
-      "UNIQUE (id, source_id, external_id, content_hash)",
-    );
-    expect(migration).toContain(
-      "UNIQUE (id, source_id, external_id, content_hash)",
-    );
+    expect(migration).toContain("UNIQUE (id, source_id, external_id, content_hash)");
+    expect(migration).toContain("UNIQUE (id, source_id, external_id, content_hash)");
     expect(migration).toContain(
       "CONSTRAINT job_occurrences_source_external_unique UNIQUE (source_id, external_id)",
     );
     expect(migration).toContain(
       "FOREIGN KEY (raw_snapshot_id, source_id, external_id, content_hash)",
     );
-    expect(migration).toContain(
-      "job_id text NOT NULL UNIQUE REFERENCES public.jobs(job_id)",
-    );
+    expect(migration).toContain("job_id text NOT NULL UNIQUE REFERENCES public.jobs(job_id)");
     expect(migration).toContain("BEFORE UPDATE OR DELETE");
     expect(migration).toContain("superseded_by_group_id uuid");
     expect(migration).toContain("event_type IN ('created', 'merged', 'split'");
@@ -262,9 +246,7 @@ describe("G009 additive database boundary", () => {
 
   test("keeps legacy jobs identity and reads additive", () => {
     expect(migration).toContain("ALTER TABLE public.jobs");
-    expect(migration).not.toMatch(
-      /\b(?:DROP|ALTER)\s+(?:COLUMN\s+)?job_id\b/i,
-    );
+    expect(migration).not.toMatch(/\b(?:DROP|ALTER)\s+(?:COLUMN\s+)?job_id\b/i);
     expect(migration).not.toMatch(/\bUPDATE\s+public\.jobs\b/i);
     for (const column of [
       "source_id",
@@ -293,21 +275,13 @@ describe("G009 additive database boundary", () => {
     expect(migration).toContain("registry.writer_runtime = 'typescript'");
     expect(migration).toContain("policy.full_text_retention_allowed");
     expect(migration).toContain("'production' = ANY(policy.enabled_environments)");
-    expect(migration).toContain(
-      "source.access_type = ANY(policy.permitted_access_methods)",
-    );
-    expect(migration).not.toMatch(
-      /\b(?:INSERT\s+INTO|UPDATE)\s+(?:public\.)?provider_registry\b/i,
-    );
+    expect(migration).toContain("source.access_type = ANY(policy.permitted_access_methods)");
+    expect(migration).not.toMatch(/\b(?:INSERT\s+INTO|UPDATE)\s+(?:public\.)?provider_registry\b/i);
     expect(migration).toContain("policy.full_text_retention_allowed");
     for (const definition of [
       migration.match(/ALTER TABLE public\.career_sources[\s\S]*?;/)?.[0],
-      migration.match(
-        /CREATE TABLE IF NOT EXISTS public\.raw_job_snapshots[\s\S]*?\n\);/,
-      )?.[0],
-      migration.match(
-        /CREATE TABLE IF NOT EXISTS public\.job_occurrences[\s\S]*?\n\);/,
-      )?.[0],
+      migration.match(/CREATE TABLE IF NOT EXISTS public\.raw_job_snapshots[\s\S]*?\n\);/)?.[0],
+      migration.match(/CREATE TABLE IF NOT EXISTS public\.job_occurrences[\s\S]*?\n\);/)?.[0],
     ]) {
       expect(definition).toBeDefined();
       expect(definition).not.toContain("writer_runtime");

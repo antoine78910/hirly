@@ -8,23 +8,38 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 jest.mock("../lib/api", () => ({ api: { get: jest.fn() } }));
 jest.mock("../lib/adminApi", () => ({ adminApiErrorMessage: () => "Could not load applications" }));
-jest.mock("react-router-dom", () => {
-  const React = jest.requireActual("react");
-  return {
-    Link: ({ children, to, ...props }) => <a href={to} {...props}>{children}</a>,
-    useSearchParams: () => {
-      const [params, setParamsState] = React.useState(() => new URLSearchParams(globalThis.location.search));
-      const setParams = (next) => setParamsState(new URLSearchParams(next));
-      return [params, setParams];
-    },
-  };
-}, { virtual: true });
+jest.mock(
+  "react-router-dom",
+  () => {
+    const React = jest.requireActual("react");
+    return {
+      Link: ({ children, to, ...props }) => (
+        <a href={to} {...props}>
+          {children}
+        </a>
+      ),
+      useSearchParams: () => {
+        const [params, setParamsState] = React.useState(
+          () => new URLSearchParams(globalThis.location.search),
+        );
+        const setParams = (next) => setParamsState(new URLSearchParams(next));
+        return [params, setParams];
+      },
+    };
+  },
+  { virtual: true },
+);
 jest.mock("../components/ui/button", () => ({
   Button: ({ children, ...props }) => <button {...props}>{children}</button>,
 }));
 jest.mock("../components/admin/AdminShell", () => ({
   __esModule: true,
-  default: ({ actions, children }) => <main>{actions}{children}</main>,
+  default: ({ actions, children }) => (
+    <main>
+      {actions}
+      {children}
+    </main>
+  ),
   AdminAccessDenied: () => <div>Admin access denied</div>,
 }));
 jest.mock("../components/admin/AdminPipelineSteps", () => ({
@@ -66,7 +81,9 @@ describe("AdminApplications server pagination state", () => {
         total: 1,
         queue: {
           active_count: 1,
-          items: [{ application_id: "q1", company: "Queued Co", auto_apply_queue_status: "queued" }],
+          items: [
+            { application_id: "q1", company: "Queued Co", auto_apply_queue_status: "queued" },
+          ],
         },
       }),
     });
@@ -77,7 +94,9 @@ describe("AdminApplications server pagination state", () => {
 
     api.get.mockRejectedValueOnce(new Error("database unavailable"));
     await act(async () => {
-      [...container.querySelectorAll("button")].find((item) => item.textContent.includes("Refresh")).click();
+      [...container.querySelectorAll("button")]
+        .find((item) => item.textContent.includes("Refresh"))
+        .click();
     });
 
     expect(container.textContent).not.toContain("user@example.com");
@@ -88,8 +107,12 @@ describe("AdminApplications server pagination state", () => {
 
   it("keeps the active filter in the URL when requesting the next cursor", async () => {
     api.get
-      .mockResolvedValueOnce({ data: page({ total: 101, has_next: true, next_cursor: "signed-next" }) })
-      .mockResolvedValueOnce({ data: page({ total: 101, has_previous: true, previous_cursor: "signed-previous" }) });
+      .mockResolvedValueOnce({
+        data: page({ total: 101, has_next: true, next_cursor: "signed-next" }),
+      })
+      .mockResolvedValueOnce({
+        data: page({ total: 101, has_previous: true, previous_cursor: "signed-previous" }),
+      });
     window.history.replaceState({}, "", "/admin/applications?filter=prepared");
     await act(async () => root.render(<AdminApplications />));
     await act(async () => {

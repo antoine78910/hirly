@@ -26,10 +26,22 @@ describe("TrainingLocaleProvider", () => {
   });
 
   test("updates translations when the route locale changes", () => {
-    act(() => root.render(<TrainingLocaleProvider locale="fr"><Probe /></TrainingLocaleProvider>));
+    act(() =>
+      root.render(
+        <TrainingLocaleProvider locale="fr">
+          <Probe />
+        </TrainingLocaleProvider>,
+      ),
+    );
     expect(container.textContent).toBe("Académie");
 
-    act(() => root.render(<TrainingLocaleProvider locale="en"><Probe /></TrainingLocaleProvider>));
+    act(() =>
+      root.render(
+        <TrainingLocaleProvider locale="en">
+          <Probe />
+        </TrainingLocaleProvider>,
+      ),
+    );
     expect(container.textContent).toBe("Academy");
   });
 

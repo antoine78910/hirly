@@ -8,18 +8,7 @@ async function psql(sql: string): Promise<string> {
     throw new Error("SPROUT_CANARY_TEST_DATABASE_URL is required");
   }
   const child = Bun.spawn(
-    [
-      "psql",
-      databaseUrl,
-      "-X",
-      "-v",
-      "ON_ERROR_STOP=1",
-      "-A",
-      "-t",
-      "-q",
-      "-c",
-      sql,
-    ],
+    ["psql", databaseUrl, "-X", "-v", "ON_ERROR_STOP=1", "-A", "-t", "-q", "-c", sql],
     { stdout: "pipe", stderr: "pipe" },
   );
   const [exitCode, stdout, stderr] = await Promise.all([

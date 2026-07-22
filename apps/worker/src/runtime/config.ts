@@ -4,18 +4,8 @@ import { z } from "zod";
 const runtimeConfigSchema = z.object({
   PORT: z.coerce.number().int().positive().max(65_535).default(3001),
   WORKER_POLL_MS: z.coerce.number().int().min(50).max(60_000).default(1_000),
-  WORKER_SCHEDULE_POLL_MS: z.coerce
-    .number()
-    .int()
-    .min(250)
-    .max(300_000)
-    .default(5_000),
-  WORKER_SHUTDOWN_MS: z.coerce
-    .number()
-    .int()
-    .min(100)
-    .max(25_000)
-    .default(25_000),
+  WORKER_SCHEDULE_POLL_MS: z.coerce.number().int().min(250).max(300_000).default(5_000),
+  WORKER_SHUTDOWN_MS: z.coerce.number().int().min(100).max(25_000).default(25_000),
   WORKER_INSTANCE_ID: z.string().trim().min(1).max(128).optional(),
   JOB_PROJECTION_ENABLED: z
     .enum(["true", "false"])
@@ -26,12 +16,7 @@ const runtimeConfigSchema = z.object({
     .default("false")
     .transform((value) => value === "true"),
   JOB_PROJECTION_BATCH_SIZE: z.coerce.number().int().min(1).max(100).default(10),
-  JOB_PROJECTION_RECONCILIATION_BATCH_SIZE: z.coerce
-    .number()
-    .int()
-    .min(1)
-    .max(1_000)
-    .default(100),
+  JOB_PROJECTION_RECONCILIATION_BATCH_SIZE: z.coerce.number().int().min(1).max(1_000).default(100),
 });
 
 export interface RuntimeConfig extends WorkerConfig {
@@ -46,9 +31,7 @@ export interface RuntimeConfig extends WorkerConfig {
   JOB_PROJECTION_RECONCILIATION_BATCH_SIZE: number;
 }
 
-export function parseRuntimeConfig(
-  environment: Record<string, string | undefined>,
-): RuntimeConfig {
+export function parseRuntimeConfig(environment: Record<string, string | undefined>): RuntimeConfig {
   const worker = parseWorkerConfig(environment);
   const runtime = runtimeConfigSchema.parse(environment);
   return {

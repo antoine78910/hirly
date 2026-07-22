@@ -56,16 +56,24 @@ export function publicCanonicalUrl(locale, pathname = "/", siteUrl = "https://tr
 }
 
 /** Produces the complete five-language alternate set plus the default entry. */
-export function publicHreflangLinks(pathname = "/", siteUrl = "https://tryhirly.com", availableLocales) {
+export function publicHreflangLinks(
+  pathname = "/",
+  siteUrl = "https://tryhirly.com",
+  availableLocales,
+) {
   if (!Array.isArray(availableLocales) || availableLocales.length === 0) {
-    throw new TypeError("Public alternate links require a non-empty explicitly available locale set");
+    throw new TypeError(
+      "Public alternate links require a non-empty explicitly available locale set",
+    );
   }
   const locales = [...new Set(availableLocales.map(assertPublicLocale))];
   const links = locales.map((locale) => ({
     hrefLang: PUBLIC_LOCALE_METADATA[locale].hreflang,
     href: publicCanonicalUrl(locale, pathname, siteUrl),
   }));
-  const defaultLocale = locales.includes(DEFAULT_PUBLIC_LOCALE) ? DEFAULT_PUBLIC_LOCALE : locales[0];
+  const defaultLocale = locales.includes(DEFAULT_PUBLIC_LOCALE)
+    ? DEFAULT_PUBLIC_LOCALE
+    : locales[0];
   links.push({ hrefLang: "x-default", href: publicCanonicalUrl(defaultLocale, pathname, siteUrl) });
   return links;
 }

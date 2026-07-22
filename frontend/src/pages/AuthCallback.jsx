@@ -17,11 +17,7 @@ import {
 } from "../lib/creatorInvite";
 import { setDemoAccountFromUser } from "../lib/demoAccount";
 import { resolvePostAuthDestination } from "../lib/appDomains";
-import {
-  clearOnboardingReturnPath,
-  readOnboardingReturnPath,
-  splitAppPath,
-} from "../lib/auth";
+import { clearOnboardingReturnPath, readOnboardingReturnPath, splitAppPath } from "../lib/auth";
 import { hasJobSeekerOnboardingComplete } from "../lib/jobSeekerEntry";
 
 export default function AuthCallback() {
@@ -85,14 +81,18 @@ export default function AuthCallback() {
               inviteRedirect = inviteDestination(redeemed);
             }
           } catch (inviteErr) {
-            console.warn("Invite redeem skipped", inviteErr?.response?.data?.detail || inviteErr?.message);
+            console.warn(
+              "Invite redeem skipped",
+              inviteErr?.response?.data?.detail || inviteErr?.message,
+            );
           }
         } else {
           clearPendingInviteCode();
         }
-        const authProvider = session?.user?.app_metadata?.provider
-          || session?.user?.identities?.[0]?.provider
-          || "email";
+        const authProvider =
+          session?.user?.app_metadata?.provider ||
+          session?.user?.identities?.[0]?.provider ||
+          "email";
         trackEvent("auth_success", {
           method: authProvider === "google" ? "google" : "email",
           has_profile: Boolean(data.has_profile),
@@ -115,19 +115,19 @@ export default function AuthCallback() {
         let destination = inviteRedirect || (nextPath.startsWith("/") ? nextPath : "/swipe");
         // Google/email signup from onboarding must continue onboarding — never skip via billing.
         if (
-          !inviteRedirect
-          && (onboardingIncomplete || onboardingSignupReturn)
-          && !isDemoOrTrainingInvite
-          && !data?.user?.demo_account
+          !inviteRedirect &&
+          (onboardingIncomplete || onboardingSignupReturn) &&
+          !isDemoOrTrainingInvite &&
+          !data?.user?.demo_account
         ) {
           destination = destination.startsWith("/onboarding")
             ? destination
             : "/onboarding?step=jobSearch";
         } else if (
-          !inviteRedirect
-          && destination.startsWith("/onboarding")
-          && !isDemoOrTrainingInvite
-          && !data?.user?.demo_account
+          !inviteRedirect &&
+          destination.startsWith("/onboarding") &&
+          !isDemoOrTrainingInvite &&
+          !data?.user?.demo_account
         ) {
           try {
             const { data: profileData } = await api.get("/profile");
@@ -155,10 +155,21 @@ export default function AuthCallback() {
         setErrorMessage(`${step}: ${message}`);
       }
     })();
-  }, [navigate, setUser, setHasProfile, setHasPreferences, setIsTrainingCreator, setHasTrainingAccess, checkAuth]);
+  }, [
+    navigate,
+    setUser,
+    setHasProfile,
+    setHasPreferences,
+    setIsTrainingCreator,
+    setHasTrainingAccess,
+    checkAuth,
+  ]);
 
   return (
-    <div className="min-h-dvh flex items-center justify-center bg-white" data-testid="auth-callback">
+    <div
+      className="min-h-dvh flex items-center justify-center bg-white"
+      data-testid="auth-callback"
+    >
       <div className="flex flex-col items-center gap-3 text-zinc-600">
         <Loader2 className="w-6 h-6 animate-spin" />
         {errorMessage ? (

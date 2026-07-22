@@ -34,7 +34,13 @@ export interface PartitionFact {
   expectedFailures?: string[];
   pageBase?: 0 | 1;
   configuredPageBase?: 0 | 1;
-  termination?: "partial_page" | "empty_first_page" | "empty_intermediate_page" | "source_total" | "cap" | "failure";
+  termination?:
+    | "partial_page"
+    | "empty_first_page"
+    | "empty_intermediate_page"
+    | "source_total"
+    | "cap"
+    | "failure";
   failure?: "rate_limit" | "transient_network" | "permanent_page";
   retryCount?: number;
   recoveredAfterRetry?: boolean;
@@ -163,19 +169,12 @@ const SENSITIVE_DIMENSION_KEY =
   /(?:^|_)(?:user|email|name|cv|resume|application|phone|address|search|keyword|raw)(?:_|$)/i;
 const EMAIL_LIKE_VALUE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-export function validateAggregateDimensions(
-  value: unknown,
-  path = "dimensions",
-): string[] {
+export function validateAggregateDimensions(value: unknown, path = "dimensions"): string[] {
   if (Array.isArray(value)) {
-    return value.flatMap((item, index) =>
-      validateAggregateDimensions(item, `${path}[${index}]`));
+    return value.flatMap((item, index) => validateAggregateDimensions(item, `${path}[${index}]`));
   }
   if (!value || typeof value !== "object") {
-    if (
-      typeof value === "string"
-      && (value.length > 128 || EMAIL_LIKE_VALUE.test(value))
-    ) {
+    if (typeof value === "string" && (value.length > 128 || EMAIL_LIKE_VALUE.test(value))) {
       return [`${path}:sensitive_or_unbounded_value`];
     }
     return [];
@@ -186,16 +185,12 @@ export function validateAggregateDimensions(
   });
 }
 
-export function redactAggregateDimensions(
-  value: Record<string, unknown>,
-): Record<string, unknown> {
+export function redactAggregateDimensions(value: Record<string, unknown>): Record<string, unknown> {
   const redact = (input: unknown): unknown => {
     if (Array.isArray(input)) return input.map(redact);
     if (!input || typeof input !== "object") {
-      if (
-        typeof input === "string"
-        && (input.length > 128 || EMAIL_LIKE_VALUE.test(input))
-      ) return "[REDACTED]";
+      if (typeof input === "string" && (input.length > 128 || EMAIL_LIKE_VALUE.test(input)))
+        return "[REDACTED]";
       return input;
     }
     return Object.fromEntries(
@@ -254,11 +249,11 @@ export function computePaidUserCoverageBaseline(
       throw new Error("paid-user snapshot counters must be non-negative safe integers");
     }
     if (
-      snapshot.unseenActionableTotal > snapshot.actionableTotal
-      || snapshot.actionableTotal > snapshot.uniqueTotal
-      || snapshot.uniqueTotal > snapshot.relevantTotal
-      || snapshot.routeKnownTotal > snapshot.relevantTotal
-      || snapshot.directEmployerTotal > snapshot.relevantTotal
+      snapshot.unseenActionableTotal > snapshot.actionableTotal ||
+      snapshot.actionableTotal > snapshot.uniqueTotal ||
+      snapshot.uniqueTotal > snapshot.relevantTotal ||
+      snapshot.routeKnownTotal > snapshot.relevantTotal ||
+      snapshot.directEmployerTotal > snapshot.relevantTotal
     ) {
       throw new Error("paid-user snapshot counters violate aggregate monotonicity");
     }
@@ -288,14 +283,16 @@ export function computePaidUserCoverageBaseline(
     median: percentile(unseen, 0.5),
     p90: percentile(unseen, 0.9),
     feedExhaustionRate:
-      snapshots.filter((snapshot) => snapshot.unseenActionableTotal === 0).length
-      / snapshots.length,
-    routeKnownRate: relevant === 0
-      ? null
-      : snapshots.reduce((sum, snapshot) => sum + snapshot.routeKnownTotal, 0) / relevant,
-    directEmployerRate: relevant === 0
-      ? null
-      : snapshots.reduce((sum, snapshot) => sum + snapshot.directEmployerTotal, 0) / relevant,
+      snapshots.filter((snapshot) => snapshot.unseenActionableTotal === 0).length /
+      snapshots.length,
+    routeKnownRate:
+      relevant === 0
+        ? null
+        : snapshots.reduce((sum, snapshot) => sum + snapshot.routeKnownTotal, 0) / relevant,
+    directEmployerRate:
+      relevant === 0
+        ? null
+        : snapshots.reduce((sum, snapshot) => sum + snapshot.directEmployerTotal, 0) / relevant,
     terminalReasonCounts: Object.fromEntries(
       Object.entries(terminalReasonCounts).sort(([left], [right]) => left.localeCompare(right)),
     ),
@@ -305,31 +302,27 @@ export function computePaidUserCoverageBaseline(
 function manifestInput(
   manifest: FranceTravailCensusManifestInput | FranceTravailCensusManifest,
 ): FranceTravailCensusManifestInput {
-  const { manifestDigest: _manifestDigest, ...input } =
-    manifest as FranceTravailCensusManifest;
+  const { manifestDigest: _manifestDigest, ...input } = manifest as FranceTravailCensusManifest;
   return input;
 }
 
 export function freezeFranceTravailCensusManifest(
   input: FranceTravailCensusManifestInput,
 ): FranceTravailCensusManifest {
-  const privacyFailures = validateAggregateDimensions(
-    input.profileStrata,
-    "profileStrata",
-  );
+  const privacyFailures = validateAggregateDimensions(input.profileStrata, "profileStrata");
   if (privacyFailures.length) {
     throw new Error(`unsafe France Travail profile strata: ${privacyFailures.join(",")}`);
   }
   const frozen = structuredClone({
     ...input,
-    profileStrata: [...input.profileStrata]
-      .sort((left, right) => stableDigest(left).localeCompare(stableDigest(right))),
+    profileStrata: [...input.profileStrata].sort((left, right) =>
+      stableDigest(left).localeCompare(stableDigest(right)),
+    ),
     partitions: [...input.partitions]
       .map((partition) => ({
         ...partition,
         parameters: Object.fromEntries(
-          Object.entries(partition.parameters)
-            .sort(([left], [right]) => left.localeCompare(right)),
+          Object.entries(partition.parameters).sort(([left], [right]) => left.localeCompare(right)),
         ),
       }))
       .sort((left, right) => left.id.localeCompare(right.id)),
@@ -373,10 +366,7 @@ export function validateFranceTravailCensusManifest(
       continue;
     }
     const key = stableDigest(partition.parameters);
-    partitionsByParameters.set(key, [
-      ...(partitionsByParameters.get(key) ?? []),
-      partition,
-    ]);
+    partitionsByParameters.set(key, [...(partitionsByParameters.get(key) ?? []), partition]);
   }
   for (const partitions of partitionsByParameters.values()) {
     const sorted = [...partitions].sort(
@@ -397,34 +387,29 @@ export function reconcileFranceTravailPartition(
   accounting: FranceTravailPartitionAccounting,
 ): string[] {
   const failures: string[] = [];
-  const residual = Object.values(accounting.namedResiduals)
-    .reduce((sum, count) => sum + count, 0);
+  const residual = Object.values(accounting.namedResiduals).reduce((sum, count) => sum + count, 0);
   if (accounting.httpRecords !== accounting.uniqueExternalIds + accounting.duplicateRawRecords) {
     failures.push("http_unique_accounting_mismatch");
   }
-  if (
-    accounting.uniqueExternalIds
-    !== accounting.normalized + accounting.rejectedNormalization
-  ) {
+  if (accounting.uniqueExternalIds !== accounting.normalized + accounting.rejectedNormalization) {
     failures.push("normalization_accounting_mismatch");
   }
   if (
-    accounting.normalized
-    !== accounting.occurrenceInserted + accounting.occurrenceUpdated
-      + accounting.occurrenceDeduplicated + accounting.writeFailed
+    accounting.normalized !==
+    accounting.occurrenceInserted +
+      accounting.occurrenceUpdated +
+      accounting.occurrenceDeduplicated +
+      accounting.writeFailed
   ) {
     failures.push("occurrence_accounting_mismatch");
   }
   if (
-    accounting.sourceReportedTotal !== null
-    && accounting.sourceReportedTotal !== accounting.uniqueExternalIds + residual
+    accounting.sourceReportedTotal !== null &&
+    accounting.sourceReportedTotal !== accounting.uniqueExternalIds + residual
   ) {
     failures.push("source_total_accounting_mismatch");
   }
-  if (
-    accounting.actionable > accounting.active
-    || accounting.relevant > accounting.actionable
-  ) {
+  if (accounting.actionable > accounting.active || accounting.relevant > accounting.actionable) {
     failures.push("coverage_stage_order_mismatch");
   }
   if (accounting.status === "complete" && accounting.sourceReportedTotal === null) {
@@ -434,8 +419,8 @@ export function reconcileFranceTravailPartition(
     failures.push("complete_with_residuals");
   }
   if (
-    (accounting.status === "capped" || accounting.status === "blocked")
-    && !accounting.blockerReason?.trim()
+    (accounting.status === "capped" || accounting.status === "blocked") &&
+    !accounting.blockerReason?.trim()
   ) {
     failures.push(`${accounting.status}_without_reason`);
   }
@@ -452,7 +437,8 @@ export function evaluatePartition(partition: PartitionFact): string[] {
   if (partition.status === "never_run") failures.push("nonterminal_partition");
   if (new Set(partition.cursorHistory).size !== partition.cursorHistory.length) {
     failures.push(
-      partition.cursorHistory.length > 2 && partition.cursorHistory.at(-1) === partition.cursorHistory[0]
+      partition.cursorHistory.length > 2 &&
+        partition.cursorHistory.at(-1) === partition.cursorHistory[0]
         ? "cursor_cycle"
         : "repeated_cursor",
     );
@@ -469,10 +455,16 @@ export function evaluatePartition(partition: PartitionFact): string[] {
   if (partition.termination === "empty_intermediate_page") {
     failures.push("unexpected_empty_intermediate_page");
   }
-  if (partition.failure === "rate_limit" && (!partition.retryCount || !partition.recoveredAfterRetry)) {
+  if (
+    partition.failure === "rate_limit" &&
+    (!partition.retryCount || !partition.recoveredAfterRetry)
+  ) {
     failures.push("rate_limit_not_retried");
   }
-  if (partition.failure === "transient_network" && (!partition.retryCount || !partition.recoveredAfterRetry)) {
+  if (
+    partition.failure === "transient_network" &&
+    (!partition.retryCount || !partition.recoveredAfterRetry)
+  ) {
     failures.push("transient_failure_not_retried");
   }
   if (partition.failure === "permanent_page") {
@@ -480,23 +472,27 @@ export function evaluatePartition(partition: PartitionFact): string[] {
     if (completed) failures.push("page_failure_marked_complete");
   }
   if (
-    partition.pageBase !== undefined
-    && partition.configuredPageBase !== undefined
-    && partition.pageBase !== partition.configuredPageBase
+    partition.pageBase !== undefined &&
+    partition.configuredPageBase !== undefined &&
+    partition.pageBase !== partition.configuredPageBase
   ) {
     failures.push("invalid_page_base");
   }
   if (
-    partition.boundaryOperator !== undefined
-    && partition.expectedBoundaryOperator !== undefined
-    && partition.boundaryOperator !== partition.expectedBoundaryOperator
+    partition.boundaryOperator !== undefined &&
+    partition.expectedBoundaryOperator !== undefined &&
+    partition.boundaryOperator !== partition.expectedBoundaryOperator
   ) {
     failures.push("boundary_gap");
   }
   if (partition.uniqueSortTieBreaker === false) {
     failures.push("missing_unique_tie_breaker");
   }
-  if (partition.mutationDuringPagination && partition.mutationDuringPagination !== "none" && !partition.mutationHandled) {
+  if (
+    partition.mutationDuringPagination &&
+    partition.mutationDuringPagination !== "none" &&
+    !partition.mutationHandled
+  ) {
     failures.push("mutation_gap");
   }
   return [...new Set(failures)].sort();
@@ -504,12 +500,30 @@ export function evaluatePartition(partition: PartitionFact): string[] {
 
 export function validatePaginationFixtures(partitions: PartitionFact[]): string[] {
   const requiredIds = new Set([
-    "one-page", "exact-full-page", "full-plus-one", "several-full-pages", "partial-final-page",
-    "empty-first-page", "empty-intermediate-page", "repeated-cursor", "cursor-cycle",
-    "adjacent-page-duplicates", "concurrent-insert", "concurrent-delete", "rate-limit-retry",
-    "transient-network-retry", "permanent-page-failure", "page-base-zero", "page-base-one",
-    "wrong-page-base", "boundary-less-than", "boundary-less-than-equal", "wrong-boundary",
-    "identical-sort-with-tie-breaker", "identical-sort-without-tie-breaker", "cap-hit",
+    "one-page",
+    "exact-full-page",
+    "full-plus-one",
+    "several-full-pages",
+    "partial-final-page",
+    "empty-first-page",
+    "empty-intermediate-page",
+    "repeated-cursor",
+    "cursor-cycle",
+    "adjacent-page-duplicates",
+    "concurrent-insert",
+    "concurrent-delete",
+    "rate-limit-retry",
+    "transient-network-retry",
+    "permanent-page-failure",
+    "page-base-zero",
+    "page-base-one",
+    "wrong-page-base",
+    "boundary-less-than",
+    "boundary-less-than-equal",
+    "wrong-boundary",
+    "identical-sort-with-tie-breaker",
+    "identical-sort-without-tie-breaker",
+    "cap-hit",
     "source-total-mismatch",
   ]);
   const present = new Set(partitions.map((partition) => partition.id.replace(/^PAG-\d+-/, "")));
@@ -523,7 +537,9 @@ export function validatePaginationFixtures(partitions: PartitionFact[]): string[
     const actual = evaluatePartition(partition);
     const expected = [...(partition.expectedFailures ?? [])].sort();
     if (JSON.stringify(actual) !== JSON.stringify(expected)) {
-      failures.push(`${partition.id}:unexpected_evaluation:${actual.join(",") || "none"}!=${expected.join(",") || "none"}`);
+      failures.push(
+        `${partition.id}:unexpected_evaluation:${actual.join(",") || "none"}!=${expected.join(",") || "none"}`,
+      );
     }
   }
   return failures;
@@ -545,11 +561,14 @@ export function materializeCoverage(manifest: CoverageManifest): MaterializedCov
             geography,
             occupation,
             status: rule.state,
-            blocker: rule.state === "blocked" ? {
-              dependency: rule.dependency,
-              capabilityCheck: rule.capabilityCheck,
-              unblockProcedure: rule.unblockProcedure,
-            } : null,
+            blocker:
+              rule.state === "blocked"
+                ? {
+                    dependency: rule.dependency,
+                    capabilityCheck: rule.capabilityCheck,
+                    unblockProcedure: rule.unblockProcedure,
+                  }
+                : null,
           });
         }
       }
@@ -564,24 +583,37 @@ export function validateCoverageManifest(
 ): string[] {
   const failures: string[] = [];
   const { provider, contractType, geography, occupation } = manifest.dimensions;
-  const expectedCount = provider.length * contractType.length * geography.length * occupation.length;
+  const expectedCount =
+    provider.length * contractType.length * geography.length * occupation.length;
   if (materialized.records.length !== expectedCount) {
     failures.push(`coverage_partition_count:${materialized.records.length}/${expectedCount}`);
   }
-  const allowedTerminal = new Set(["completed_with_results", "completed_zero_results", "failed", "blocked"]);
+  const allowedTerminal = new Set([
+    "completed_with_results",
+    "completed_zero_results",
+    "failed",
+    "blocked",
+  ]);
   const ids = new Set<string>();
   const expectedIds = new Set(
-    provider.flatMap((p) => contractType.flatMap((c) =>
-      geography.flatMap((g) => occupation.map((o) => [p, c, g, o].join(":"))),
-    )),
+    provider.flatMap((p) =>
+      contractType.flatMap((c) =>
+        geography.flatMap((g) => occupation.map((o) => [p, c, g, o].join(":"))),
+      ),
+    ),
   );
   for (const record of materialized.records) {
     if (ids.has(record.partitionId)) failures.push(`coverage_duplicate:${record.partitionId}`);
     ids.add(record.partitionId);
-    if (!allowedTerminal.has(record.status)) failures.push(`coverage_nonterminal:${record.partitionId}`);
-    if (record.status === "blocked" && (
-      !record.blocker?.dependency || !record.blocker.capabilityCheck || !record.blocker.unblockProcedure
-    )) failures.push(`coverage_unjustified_block:${record.partitionId}`);
+    if (!allowedTerminal.has(record.status))
+      failures.push(`coverage_nonterminal:${record.partitionId}`);
+    if (
+      record.status === "blocked" &&
+      (!record.blocker?.dependency ||
+        !record.blocker.capabilityCheck ||
+        !record.blocker.unblockProcedure)
+    )
+      failures.push(`coverage_unjustified_block:${record.partitionId}`);
   }
   for (const id of expectedIds) if (!ids.has(id)) failures.push(`coverage_missing:${id}`);
   for (const id of ids) if (!expectedIds.has(id)) failures.push(`coverage_unexpected:${id}`);
@@ -599,7 +631,10 @@ export function reconcileFunnel(funnel: Funnel): string[] {
   }
   if (
     funnel.acceptedAfterFilters !==
-    funnel.newIdentity + funnel.existingIdentity + funnel.duplicateOccurrence + funnel.fuzzyCandidateOnly
+    funnel.newIdentity +
+      funnel.existingIdentity +
+      funnel.duplicateOccurrence +
+      funnel.fuzzyCandidateOnly
   ) {
     failures.push("identity_accounting_mismatch");
   }
@@ -609,8 +644,10 @@ export function reconcileFunnel(funnel: Funnel): string[] {
 export function validateRows(rows: AuditRow[]): string[] {
   return rows.flatMap((row) => {
     if (row.status === "FAIL") return [`${row.riskId}:internal_failure`];
-    if (row.status === "BLOCKED_EXTERNAL" && !row.blocker) return [`${row.riskId}:unjustified_block`];
-    if (row.status === "PASS" && !row.reproductionCommand) return [`${row.riskId}:missing_reproduction`];
+    if (row.status === "BLOCKED_EXTERNAL" && !row.blocker)
+      return [`${row.riskId}:unjustified_block`];
+    if (row.status === "PASS" && !row.reproductionCommand)
+      return [`${row.riskId}:missing_reproduction`];
     return [];
   });
 }

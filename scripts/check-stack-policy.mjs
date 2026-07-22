@@ -16,11 +16,7 @@ function addedStagedFiles() {
 }
 
 function isProductionPython(file) {
-  return (
-    file.startsWith("backend/")
-    && file.endsWith(".py")
-    && !file.startsWith("backend/tests/")
-  );
+  return file.startsWith("backend/") && file.endsWith(".py") && !file.startsWith("backend/tests/");
 }
 
 function stagedContent(file) {
@@ -46,4 +42,3 @@ console.error("Prefer TypeScript for new isolated backend capabilities.");
 console.error("If Python is the fastest safe path, add this within the first 10 lines:");
 console.error("  # stack-policy: python-exception=<why TypeScript would be slower or less safe>");
 process.exit(1);
-

@@ -14,7 +14,15 @@ import ProfileFormSection from "./ProfileFormSection";
 const ACCEPTED_DOCUMENTS = ".pdf,.docx,.txt,.rtf,.png,.jpg,.jpeg,.heic,.webp";
 const MAX_DOCUMENT_BYTES = CV_MAX_BYTES;
 
-function DocumentEmptyState({ icon: Icon, title, description, actionLabel, onAction, testId, disabled }) {
+function DocumentEmptyState({
+  icon: Icon,
+  title,
+  description,
+  actionLabel,
+  onAction,
+  testId,
+  disabled,
+}) {
   return (
     <div className="shell-dashed flex flex-col items-center justify-center gap-4 rounded-lg border px-6 py-10 text-center">
       <div className="grid h-12 w-12 place-items-center rounded-xl shell-icon-box">
@@ -85,45 +93,52 @@ export default function ProfileDocumentsTab({ profile, onUploadResume, onDocumen
   const [uploading, setUploading] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
 
-  const additionalDocuments = profile?.additional_documents || profile?.extras?.additional_documents || [];
+  const additionalDocuments =
+    profile?.additional_documents || profile?.extras?.additional_documents || [];
 
   const openDocumentPicker = () => {
     if (!uploading) fileInputRef.current?.click();
   };
 
-  const uploadDocument = useCallback(async (file) => {
-    if (!file) return;
-    if (isLegacyDocFile(file)) {
-      toast.error(t("resumeSheet.legacyDocError"));
-      return;
-    }
-    if (file.size > MAX_DOCUMENT_BYTES) {
-      toast.error(t("profile.documents.fileTooLarge"));
-      return;
-    }
-    setUploading(true);
-    try {
-      if (shouldMockCvUpload()) {
-        await onDocumentsChange?.();
+  const uploadDocument = useCallback(
+    async (file) => {
+      if (!file) return;
+      if (isLegacyDocFile(file)) {
+        toast.error(t("resumeSheet.legacyDocError"));
         return;
       }
-      const form = new FormData();
-      form.append("file", file);
-      // Bypass the Vercel /api rewrite for large uploads (avoids proxy timeouts).
-      const base = (getDirectApiBase() || "").replace(/\/+$/, "");
-      const url = base ? `${base}/profile/documents` : "/profile/documents";
-      await api.post(url, form, { timeout: 120000, headers: { "Content-Type": "multipart/form-data" } });
-      toast.success(t("profile.documents.uploadSuccess"));
-      await onDocumentsChange?.();
-    } catch (error) {
-      if (!shouldMockCvUpload()) {
-        toast.error(error?.response?.data?.detail || t("profile.documents.uploadError"));
+      if (file.size > MAX_DOCUMENT_BYTES) {
+        toast.error(t("profile.documents.fileTooLarge"));
+        return;
       }
-    } finally {
-      setUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    }
-  }, [onDocumentsChange, t]);
+      setUploading(true);
+      try {
+        if (shouldMockCvUpload()) {
+          await onDocumentsChange?.();
+          return;
+        }
+        const form = new FormData();
+        form.append("file", file);
+        // Bypass the Vercel /api rewrite for large uploads (avoids proxy timeouts).
+        const base = (getDirectApiBase() || "").replace(/\/+$/, "");
+        const url = base ? `${base}/profile/documents` : "/profile/documents";
+        await api.post(url, form, {
+          timeout: 120000,
+          headers: { "Content-Type": "multipart/form-data" },
+        });
+        toast.success(t("profile.documents.uploadSuccess"));
+        await onDocumentsChange?.();
+      } catch (error) {
+        if (!shouldMockCvUpload()) {
+          toast.error(error?.response?.data?.detail || t("profile.documents.uploadError"));
+        }
+      } finally {
+        setUploading(false);
+        if (fileInputRef.current) fileInputRef.current.value = "";
+      }
+    },
+    [onDocumentsChange, t],
+  );
 
   const viewDocument = async (doc) => {
     try {
@@ -160,9 +175,10 @@ export default function ProfileDocumentsTab({ profile, onUploadResume, onDocumen
     }
   };
 
-  const uploadedCountLabel = additionalDocuments.length === 1
-    ? t("profile.documents.uploadedCountOne")
-    : t("profile.documents.uploadedCountMany", { n: additionalDocuments.length });
+  const uploadedCountLabel =
+    additionalDocuments.length === 1
+      ? t("profile.documents.uploadedCountOne")
+      : t("profile.documents.uploadedCountMany", { n: additionalDocuments.length });
 
   return (
     <div className="space-y-8 pb-6" data-testid="profile-documents">
@@ -175,15 +191,9 @@ export default function ProfileDocumentsTab({ profile, onUploadResume, onDocumen
         data-testid="profile-document-input"
       />
 
-      <ProfileResumeSection
-        profile={profile}
-        onUploadResume={onUploadResume}
-      />
+      <ProfileResumeSection profile={profile} onUploadResume={onUploadResume} />
 
-      <ProfileCoverLetterSection
-        profile={profile}
-        onCoverLetterChange={onDocumentsChange}
-      />
+      <ProfileCoverLetterSection profile={profile} onCoverLetterChange={onDocumentsChange} />
 
       <ProfileFormSection
         title={t("profile.documents.additionalTitle")}

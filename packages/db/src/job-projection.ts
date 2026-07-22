@@ -2,9 +2,7 @@ import type { JobSearchDocumentPersistenceRow } from "@hirly/contracts";
 import type postgres from "postgres";
 import type { Database } from "./index";
 
-export type JobProjectionTaskKind =
-  | "job.document.project"
-  | "projection.reconcile";
+export type JobProjectionTaskKind = "job.document.project" | "projection.reconcile";
 
 export interface JobProjectionLease {
   taskId: string;
@@ -103,10 +101,7 @@ export class JobProjectionRepository {
     return rows.map(leaseFromRow);
   }
 
-  async heartbeat(
-    lease: JobProjectionLease,
-    leaseSeconds: number,
-  ): Promise<boolean> {
+  async heartbeat(lease: JobProjectionLease, leaseSeconds: number): Promise<boolean> {
     const [row] = await this.sql<{ heartbeat_job_projection_task: boolean }[]>`
       SELECT worker_private.heartbeat_job_projection_task(
         ${lease.taskId}::uuid,
@@ -119,9 +114,7 @@ export class JobProjectionRepository {
     return row?.heartbeat_job_projection_task === true;
   }
 
-  async loadSource(
-    lease: JobProjectionLease,
-  ): Promise<JobProjectionSourceRecord | null> {
+  async loadSource(lease: JobProjectionLease): Promise<JobProjectionSourceRecord | null> {
     const [row] = await this.sql<{ source: JobProjectionSourceRecord | null }[]>`
       SELECT worker_private.read_job_projection_source(
         ${lease.taskId}::uuid,

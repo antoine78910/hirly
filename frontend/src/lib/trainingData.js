@@ -88,20 +88,22 @@ function mergeModules(apiModules, staticModules) {
   if (!apiModules?.length) return staticModules;
 
   const apiById = Object.fromEntries(apiModules.map((m) => [m.module_id, m]));
-    return staticModules.map((base) => {
+  return staticModules.map((base) => {
     const fromApi = apiById[base.module_id];
     if (!fromApi) return base;
-    const mergedSections = (fromApi.sections?.length ? fromApi.sections : base.sections)?.map((sec) => {
-      const baseSec = base.sections?.find((s) => s.section_id === sec.section_id);
-      return {
-        ...baseSec,
-        ...sec,
-        content: sec.content?.length ? sec.content : baseSec?.content,
-        resources: sec.resources?.length ? sec.resources : baseSec?.resources,
-        video_url: sec.video_url || baseSec?.video_url || "",
-        badge: sec.badge || baseSec?.badge || "",
-      };
-    });
+    const mergedSections = (fromApi.sections?.length ? fromApi.sections : base.sections)?.map(
+      (sec) => {
+        const baseSec = base.sections?.find((s) => s.section_id === sec.section_id);
+        return {
+          ...baseSec,
+          ...sec,
+          content: sec.content?.length ? sec.content : baseSec?.content,
+          resources: sec.resources?.length ? sec.resources : baseSec?.resources,
+          video_url: sec.video_url || baseSec?.video_url || "",
+          badge: sec.badge || baseSec?.badge || "",
+        };
+      },
+    );
     return {
       ...base,
       ...fromApi,
@@ -125,11 +127,13 @@ export async function fetchTrainingCatalog(lang) {
       return {
         ...staticData,
         ...data,
-        courses: [{
-          ...staticData.courses[0],
-          ...data.courses[0],
-          course_id: data.courses[0].course_id || TRAINING_COURSE_ID,
-        }],
+        courses: [
+          {
+            ...staticData.courses[0],
+            ...data.courses[0],
+            course_id: data.courses[0].course_id || TRAINING_COURSE_ID,
+          },
+        ],
       };
     }
   } catch (err) {
@@ -288,9 +292,7 @@ export async function syncLocalTrainingProgress(courseId) {
   if (!isLiveTrainingApiEnabled() || typeof window === "undefined") return;
   const local = loadLocalTrainingProgress(courseId);
   const hasLocal = Boolean(
-    local.quiz_results
-    || local.completed_module_ids?.length
-    || local.activity?.last_module_id,
+    local.quiz_results || local.completed_module_ids?.length || local.activity?.last_module_id,
   );
   if (!hasLocal) return;
 

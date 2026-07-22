@@ -33,9 +33,7 @@ describe("Swipe Feed v2 request policy", () => {
       provider_refresh: "true",
       background_refresh: "true",
     });
-    expect(sanitizeSwipeFeedParams(params).toString()).toBe(
-      "search_role=engineer",
-    );
+    expect(sanitizeSwipeFeedParams(params).toString()).toBe("search_role=engineer");
     expect(params.get("prefetch")).toBe("true");
     expect(params.get("refresh")).toBe("true");
     expect(params.get("provider_refresh")).toBe("true");
@@ -112,56 +110,77 @@ describe("Swipe Feed v2 request policy", () => {
   });
 
   it("keeps a terminal state hidden while the next page is loading", () => {
-    expect(resolveSwipeFeedViewState({
-      loadingNextPage: true,
-      jobCount: 0,
-      feedMeta: { emptyReason: "ALL_MATCHES_ACTIONED" },
-    })).toEqual({ kind: "loading_next_page" });
+    expect(
+      resolveSwipeFeedViewState({
+        loadingNextPage: true,
+        jobCount: 0,
+        feedMeta: { emptyReason: "ALL_MATCHES_ACTIONED" },
+      }),
+    ).toEqual({ kind: "loading_next_page" });
   });
 
   it("prefetches only a committed, non-in-flight cursor with a short runway", () => {
     expect(shouldPrefetchSwipeFeedPage({ nextCursor: "page-2", remainingJobs: 7 })).toBe(true);
     expect(shouldPrefetchSwipeFeedPage({ nextCursor: "page-2", remainingJobs: 8 })).toBe(false);
-    expect(shouldPrefetchSwipeFeedPage({ nextCursor: "page-2", remainingJobs: 0, inFlightCursor: "page-2" })).toBe(false);
+    expect(
+      shouldPrefetchSwipeFeedPage({
+        nextCursor: "page-2",
+        remainingJobs: 0,
+        inFlightCursor: "page-2",
+      }),
+    ).toBe(false);
     expect(shouldPrefetchSwipeFeedPage({ nextCursor: null, remainingJobs: 0 })).toBe(false);
   });
 
   it("orders only applicable broadening suggestions", () => {
-    expect(resolveSwipeFeedSuggestions({
-      targetLocation: "Paris",
-      filters: { searchRadius: "50km", postedDate: "7d" },
-    }).map(({ id }) => id)).toEqual(["preferences", "location", "radius", "filters"]);
-    expect(resolveSwipeFeedSuggestions({ filters: { searchRadius: "worldwide" } }).map(({ id }) => id))
-      .toEqual(["preferences", "revisit_later"]);
+    expect(
+      resolveSwipeFeedSuggestions({
+        targetLocation: "Paris",
+        filters: { searchRadius: "50km", postedDate: "7d" },
+      }).map(({ id }) => id),
+    ).toEqual(["preferences", "location", "radius", "filters"]);
+    expect(
+      resolveSwipeFeedSuggestions({ filters: { searchRadius: "worldwide" } }).map(({ id }) => id),
+    ).toEqual(["preferences", "revisit_later"]);
   });
 
   it("recognizes populated array filters as broadenable", () => {
-    expect(resolveSwipeFeedSuggestions({
-      filters: { jobTypes: ["full_time"] },
-    }).map(({ id }) => id)).toEqual(["preferences", "filters"]);
+    expect(
+      resolveSwipeFeedSuggestions({
+        filters: { jobTypes: ["full_time"] },
+      }).map(({ id }) => id),
+    ).toEqual(["preferences", "filters"]);
   });
 
   it("derives exhausted only after the final cursor was locally consumed by swipe history", () => {
-    expect(deriveFinalCursorActionedReason({
-      nextCursor: null,
-      jobsBeforeActionFilter: 4,
-      jobsAfterActionFilter: 0,
-    })).toBe("ALL_MATCHES_ACTIONED");
-    expect(deriveFinalCursorActionedReason({
-      nextCursor: "more",
-      jobsBeforeActionFilter: 4,
-      jobsAfterActionFilter: 0,
-    })).toBeNull();
-    expect(deriveFinalCursorActionedReason({
-      nextCursor: null,
-      upstreamEmptyReason: "NO_MATCHING_INVENTORY",
-      jobsBeforeActionFilter: 4,
-      jobsAfterActionFilter: 0,
-    })).toBeNull();
-    expect(deriveFinalCursorActionedReason({
-      nextCursor: null,
-      jobsBeforeActionFilter: 4,
-      jobsAfterActionFilter: 1,
-    })).toBeNull();
+    expect(
+      deriveFinalCursorActionedReason({
+        nextCursor: null,
+        jobsBeforeActionFilter: 4,
+        jobsAfterActionFilter: 0,
+      }),
+    ).toBe("ALL_MATCHES_ACTIONED");
+    expect(
+      deriveFinalCursorActionedReason({
+        nextCursor: "more",
+        jobsBeforeActionFilter: 4,
+        jobsAfterActionFilter: 0,
+      }),
+    ).toBeNull();
+    expect(
+      deriveFinalCursorActionedReason({
+        nextCursor: null,
+        upstreamEmptyReason: "NO_MATCHING_INVENTORY",
+        jobsBeforeActionFilter: 4,
+        jobsAfterActionFilter: 0,
+      }),
+    ).toBeNull();
+    expect(
+      deriveFinalCursorActionedReason({
+        nextCursor: null,
+        jobsBeforeActionFilter: 4,
+        jobsAfterActionFilter: 1,
+      }),
+    ).toBeNull();
   });
 });

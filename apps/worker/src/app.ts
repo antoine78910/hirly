@@ -1,15 +1,8 @@
 import { createJsonLogger } from "@hirly/observability";
 import { CandidateProjector } from "@hirly/matching";
-import {
-  createDatabase,
-  JobProjectionRepository,
-  WorkerRepository,
-} from "@hirly/db";
+import { createDatabase, JobProjectionRepository, WorkerRepository } from "@hirly/db";
 import { parseRuntimeConfig } from "./runtime/config";
-import {
-  PostgresJobProjectionStore,
-  PostgresRuntimeStore,
-} from "./runtime/store";
+import { PostgresJobProjectionStore, PostgresRuntimeStore } from "./runtime/store";
 import { createTaskHandlers } from "./runtime/handlers";
 import { Consumer } from "./runtime/consumer";
 import { Scheduler } from "./runtime/scheduler";
@@ -27,8 +20,7 @@ export async function startApplication(
   environment: Record<string, string | undefined> = process.env,
 ) {
   const config = parseRuntimeConfig(environment);
-  const candidateProjectionConfig =
-    parseCandidateProjectionRuntimeConfig(environment);
+  const candidateProjectionConfig = parseCandidateProjectionRuntimeConfig(environment);
   const sql = createDatabase(config.JOBS_DATABASE_URL, {
     max: Math.max(4, config.WORKER_CONCURRENCY + 2),
   });
@@ -37,20 +29,15 @@ export async function startApplication(
   const store = new PostgresRuntimeStore(repository);
   const logger = createJsonLogger();
   const health = { ready: false };
-  const consumer = new Consumer(
-    repository,
-    createTaskHandlers(store, logger),
-    logger,
-    {
-      concurrency: config.WORKER_CONCURRENCY,
-      leaseSeconds: config.WORKER_LEASE_SECONDS,
-      heartbeatSeconds: config.WORKER_HEARTBEAT_SECONDS,
-      pollMs: config.WORKER_POLL_MS,
-      instanceId: config.WORKER_INSTANCE_ID,
-      serviceVersion: "0.1.0",
-      environment: config.NODE_ENV,
-    },
-  );
+  const consumer = new Consumer(repository, createTaskHandlers(store, logger), logger, {
+    concurrency: config.WORKER_CONCURRENCY,
+    leaseSeconds: config.WORKER_LEASE_SECONDS,
+    heartbeatSeconds: config.WORKER_HEARTBEAT_SECONDS,
+    pollMs: config.WORKER_POLL_MS,
+    instanceId: config.WORKER_INSTANCE_ID,
+    serviceVersion: "0.1.0",
+    environment: config.NODE_ENV,
+  });
   const projectionConsumer = new JobProjectionConsumer(
     new PostgresJobProjectionStore(projectionRepository),
     {
@@ -62,8 +49,7 @@ export async function startApplication(
       leaseSeconds: config.WORKER_LEASE_SECONDS,
       heartbeatSeconds: config.WORKER_HEARTBEAT_SECONDS,
       pollMs: config.WORKER_POLL_MS,
-      reconciliationBatchSize:
-        config.JOB_PROJECTION_RECONCILIATION_BATCH_SIZE,
+      reconciliationBatchSize: config.JOB_PROJECTION_RECONCILIATION_BATCH_SIZE,
     },
     undefined,
     undefined,
@@ -97,10 +83,7 @@ export async function startApplication(
   const candidateProjectionRelay = primarySql
     ? new CandidateProjectionRelay(
         new CandidateProjector(
-          new PrimaryCandidateProjectionSource(
-            primarySql,
-            config.WORKER_INSTANCE_ID,
-          ),
+          new PrimaryCandidateProjectionSource(primarySql, config.WORKER_INSTANCE_ID),
           new InventoryCandidateProjectionStore(sql),
         ),
         logger,

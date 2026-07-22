@@ -81,9 +81,7 @@ function normalizedGreenhouseJob(externalId: string): NormalizedProviderJob {
     description: "Protect the canonical ingestion boundary.",
     contractType: "CDI",
     status: "open",
-    applyUrls: [
-      `https://boards.greenhouse.io/vaulttec/jobs/${externalId}`,
-    ],
+    applyUrls: [`https://boards.greenhouse.io/vaulttec/jobs/${externalId}`],
   };
 }
 
@@ -127,9 +125,7 @@ describe("G019 adversarial ATS transport and policy release gates", () => {
     const calls: Array<{ url: string; init: RequestInit }> = [];
     await expect(
       fetchBoundedAtsJson({
-        url: new URL(
-          "https://boards-api.greenhouse.io/v1/boards/vaulttec/jobs?content=true",
-        ),
+        url: new URL("https://boards-api.greenhouse.io/v1/boards/vaulttec/jobs?content=true"),
         allowedHost: "boards-api.greenhouse.io",
         fetch: async (url, init) => {
           calls.push({ url, init });
@@ -162,27 +158,25 @@ describe("G019 adversarial ATS transport and policy release gates", () => {
 
     const expired = runtimePolicy();
     expired.policy.expiresAt = now.toISOString();
-    expect(sourceActivationBlockReason(expired, "FR", "incremental", now)).toBe(
-      "policy_expired",
-    );
+    expect(sourceActivationBlockReason(expired, "FR", "incremental", now)).toBe("policy_expired");
 
     const providerKilled = runtimePolicy();
     providerKilled.providerCountryKillSwitches.FR = true;
-    expect(
-      sourceActivationBlockReason(providerKilled, "FR", "incremental", now),
-    ).toBe("provider_country_killed");
+    expect(sourceActivationBlockReason(providerKilled, "FR", "incremental", now)).toBe(
+      "provider_country_killed",
+    );
 
     const sourceKilled = runtimePolicy();
     sourceKilled.sourceCountryKillSwitches.FR = true;
-    expect(
-      sourceActivationBlockReason(sourceKilled, "FR", "incremental", now),
-    ).toBe("source_country_killed");
+    expect(sourceActivationBlockReason(sourceKilled, "FR", "incremental", now)).toBe(
+      "source_country_killed",
+    );
 
     const wrongWriter = runtimePolicy();
     wrongWriter.writerRuntime = "python";
-    expect(
-      sourceActivationBlockReason(wrongWriter, "FR", "incremental", now),
-    ).toBe("writer_not_typescript");
+    expect(sourceActivationBlockReason(wrongWriter, "FR", "incremental", now)).toBe(
+      "writer_not_typescript",
+    );
   });
 
   test("redacts nested PII, credentials, tokens, and secret query values", () => {
@@ -401,10 +395,7 @@ describe("G019 canonical write, retry, and rollback safety", () => {
         transport: {
           async fetch() {
             return {
-              items: [
-                { externalId: "vaulttec:42" },
-                { externalId: "vaulttec:42" },
-              ],
+              items: [{ externalId: "vaulttec:42" }, { externalId: "vaulttec:42" }],
               nextCursor: null,
             };
           },
@@ -434,24 +425,16 @@ describe("G019 canonical write, retry, and rollback safety", () => {
     expect(first.metrics).toMatchObject({ accepted: 1, deduplicated: 1, upserted: 1 });
     expect(repeat.metrics).toMatchObject({ accepted: 1, deduplicated: 1, upserted: 1 });
     expect(rows.size).toBe(1);
-    expect([...rows.values()][0]?.jobId).toBe(
-      stableJobId("greenhouse", "vaulttec:42"),
-    );
+    expect([...rows.values()][0]?.jobId).toBe(stableJobId("greenhouse", "vaulttec:42"));
   });
 
   test("ownership transfer invalidates stale claims and rollback is explicit", async () => {
     const migration = await readFile(
-      join(
-        repoRoot,
-        "backend/db/migrations/20260720000700_provider_ownership_epochs.sql",
-      ),
+      join(repoRoot, "backend/db/migrations/20260720000700_provider_ownership_epochs.sql"),
       "utf8",
     );
     const rollback = await readFile(
-      join(
-        repoRoot,
-        "backend/db/migrations/20260720000700_provider_ownership_epochs.down.sql",
-      ),
+      join(repoRoot, "backend/db/migrations/20260720000700_provider_ownership_epochs.down.sql"),
       "utf8",
     );
 
@@ -461,14 +444,8 @@ describe("G019 canonical write, retry, and rollback safety", () => {
     expect(migration).toMatch(
       /write_jobs_and_complete[\s\S]*claim\.expires_at > clock_timestamp\(\)[\s\S]*registry\.writer_runtime = 'typescript'[\s\S]*registry\.ownership_epoch = claim\.ownership_epoch/i,
     );
-    expect(rollback).toContain(
-      "-- Operational rollback: stop/drain writers before applying.",
-    );
-    expect(rollback).toContain(
-      "DROP FUNCTION IF EXISTS worker_private.transition_provider_writer",
-    );
-    expect(rollback).toContain(
-      "DROP TABLE IF EXISTS public.provider_work_claims",
-    );
+    expect(rollback).toContain("-- Operational rollback: stop/drain writers before applying.");
+    expect(rollback).toContain("DROP FUNCTION IF EXISTS worker_private.transition_provider_writer");
+    expect(rollback).toContain("DROP TABLE IF EXISTS public.provider_work_claims");
   });
 });

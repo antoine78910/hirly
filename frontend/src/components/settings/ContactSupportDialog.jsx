@@ -8,7 +8,8 @@ import { BRAND } from "../../lib/brand";
 
 const MAX_FILES = 5;
 const MAX_BYTES = 5 * 1024 * 1024;
-const ACCEPT = "image/jpeg,image/png,image/webp,image/gif,application/pdf,.pdf,.doc,.docx,.txt,text/plain";
+const ACCEPT =
+  "image/jpeg,image/png,image/webp,image/gif,application/pdf,.pdf,.doc,.docx,.txt,text/plain";
 
 function isValidEmail(value) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((value || "").trim());
@@ -94,7 +95,9 @@ export default function ContactSupportDialog({ open, onClose }) {
       setMessage("");
       onClose?.();
     } catch (error) {
-      toast.error(error?.response?.data?.detail || t("contactSupport.error", { email: BRAND.SUPPORT_EMAIL }));
+      toast.error(
+        error?.response?.data?.detail || t("contactSupport.error", { email: BRAND.SUPPORT_EMAIL }),
+      );
     } finally {
       setSending(false);
     }

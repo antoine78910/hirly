@@ -107,7 +107,9 @@ function normalizedDomainRecord(record: OnlineV2DomainRecord) {
     canonicalGroupId: record.canonicalGroupId,
     eligible: record.eligible,
     statusReasons: [...record.statusReasons].sort(),
-    componentScores: Object.fromEntries(Object.entries(record.componentScores).sort(([a], [b]) => a.localeCompare(b))),
+    componentScores: Object.fromEntries(
+      Object.entries(record.componentScores).sort(([a], [b]) => a.localeCompare(b)),
+    ),
     relevanceScore: record.relevanceScore,
     fulfillmentRoute: record.fulfillmentRoute,
     explanationCodes: [...record.explanationCodes].sort(),
@@ -121,7 +123,9 @@ function sha256(value: string): string {
   return hash.digest("hex");
 }
 
-export function digestOnlineV2Domain(records: readonly OnlineV2DomainRecord[]): OnlineV2ParityDigest {
+export function digestOnlineV2Domain(
+  records: readonly OnlineV2DomainRecord[],
+): OnlineV2ParityDigest {
   const payload = [...records]
     .map(normalizedDomainRecord)
     .sort((a, b) => a.canonicalGroupId.localeCompare(b.canonicalGroupId));
@@ -134,9 +138,11 @@ export function digestOnlineV2Domain(records: readonly OnlineV2DomainRecord[]): 
 }
 
 function validateControls(controls: ShadowCanaryControls): void {
-  if (!Number.isInteger(controls.sampleRateBasisPoints)
-    || controls.sampleRateBasisPoints < 0
-    || controls.sampleRateBasisPoints > 10_000) {
+  if (
+    !Number.isInteger(controls.sampleRateBasisPoints) ||
+    controls.sampleRateBasisPoints < 0 ||
+    controls.sampleRateBasisPoints > 10_000
+  ) {
     throw new Error("SHADOW_CANARY_REFUSED: sample rate must be 0..10000 basis points");
   }
   if (controls.canaryEnabled && !controls.shadowEnabled) {
@@ -152,7 +158,8 @@ function sampled(candidateId: string, basisPoints: number): boolean {
 
 function routeMix(response: OnlineMatchResponse): Record<string, number> {
   const mix: Record<string, number> = {};
-  for (const result of response.results) mix[result.fulfillmentRoute] = (mix[result.fulfillmentRoute] ?? 0) + 1;
+  for (const result of response.results)
+    mix[result.fulfillmentRoute] = (mix[result.fulfillmentRoute] ?? 0) + 1;
   return mix;
 }
 
@@ -161,23 +168,30 @@ function compare(observation: ShadowObservation): ShadowComparisonMetrics {
   const onlineV2 = observation.onlineV2.results.map((result) => result.canonicalGroupId);
   const legacySet = new Set(legacy);
   const v2Set = new Set(onlineV2);
-  const difference = [...new Set([
-    ...legacy.filter((id) => !v2Set.has(id)),
-    ...onlineV2.filter((id) => !legacySet.has(id)),
-  ])].sort();
+  const difference = [
+    ...new Set([
+      ...legacy.filter((id) => !v2Set.has(id)),
+      ...onlineV2.filter((id) => !legacySet.has(id)),
+    ]),
+  ].sort();
   let commonPrefixLength = 0;
-  while (legacy[commonPrefixLength] !== undefined && legacy[commonPrefixLength] === onlineV2[commonPrefixLength]) {
+  while (
+    legacy[commonPrefixLength] !== undefined &&
+    legacy[commonPrefixLength] === onlineV2[commonPrefixLength]
+  ) {
     commonPrefixLength += 1;
   }
-  const missingRequiredIndexes = observation.queryPlan.requiredIndexes
-    .filter((index) => !observation.queryPlan.usedIndexes.includes(index));
+  const missingRequiredIndexes = observation.queryPlan.requiredIndexes.filter(
+    (index) => !observation.queryPlan.usedIndexes.includes(index),
+  );
   return {
     legacyEligibleCanonicalGroups: legacy,
     onlineV2EligibleCanonicalGroups: onlineV2,
     eligibleSetSymmetricDifference: difference,
     legacyRouteMix: routeMix(observation.legacy),
     onlineV2RouteMix: routeMix(observation.onlineV2),
-    exactOrderMatch: legacy.length === onlineV2.length && legacy.every((id, index) => id === onlineV2[index]),
+    exactOrderMatch:
+      legacy.length === onlineV2.length && legacy.every((id, index) => id === onlineV2[index]),
     commonPrefixLength,
     emptyReasonMatch: observation.legacy.emptyReason === observation.onlineV2.emptyReason,
     legacyLatencyMs: observation.legacyLatencyMs,
@@ -188,20 +202,40 @@ function compare(observation: ShadowObservation): ShadowComparisonMetrics {
   };
 }
 
-function selectorMatches(context: ShadowRequestContext, selectors: readonly RolloutSelector[]): boolean {
-  return selectors.some((selector) => selector.cohort === context.cohort
-    && selector.countryCode === context.countryCode
-    && selector.roleFamilyId === context.roleFamilyId);
+function selectorMatches(
+  context: ShadowRequestContext,
+  selectors: readonly RolloutSelector[],
+): boolean {
+  return selectors.some(
+    (selector) =>
+      selector.cohort === context.cohort &&
+      selector.countryCode === context.countryCode &&
+      selector.roleFamilyId === context.roleFamilyId,
+  );
 }
 
-function supplyGateFailure(required: readonly string[], gates: readonly SupplyScorecardGate[], now: Date): string | null {
+function supplyGateFailure(
+  required: readonly string[],
+  gates: readonly SupplyScorecardGate[],
+  now: Date,
+): string | null {
   for (const gateId of required) {
     const gate = gates.find((candidate) => candidate.gateId === gateId);
     if (!gate) return `SUPPLY_GATE_MISSING:${gateId}`;
-    if (!Number.isFinite(Date.parse(gate.recordedAt)) || Date.parse(gate.expiresAt) <= now.getTime()) return `SUPPLY_GATE_EXPIRED:${gateId}`;
-    if (gate.freshVisibleCanonicalGroups < gate.minimumRequired) return `SUPPLY_GATE_FAILED:${gateId}`;
-    if (gateId === PARIS_FULLSTACK_SUPPLY_GATE
-      && (gate.city !== "Paris" || gate.radiusKm !== 52 || gate.countryCode !== "FR" || gate.roleFamilyId !== "fullstack")) {
+    if (
+      !Number.isFinite(Date.parse(gate.recordedAt)) ||
+      Date.parse(gate.expiresAt) <= now.getTime()
+    )
+      return `SUPPLY_GATE_EXPIRED:${gateId}`;
+    if (gate.freshVisibleCanonicalGroups < gate.minimumRequired)
+      return `SUPPLY_GATE_FAILED:${gateId}`;
+    if (
+      gateId === PARIS_FULLSTACK_SUPPLY_GATE &&
+      (gate.city !== "Paris" ||
+        gate.radiusKm !== 52 ||
+        gate.countryCode !== "FR" ||
+        gate.roleFamilyId !== "fullstack")
+    ) {
       return `SUPPLY_GATE_SCOPE_MISMATCH:${gateId}`;
     }
   }
@@ -216,24 +250,28 @@ export function evaluateShadowCanary(
   now = new Date(),
 ): ShadowCanaryDecision {
   validateControls(controls);
-  const isSampled = controls.shadowEnabled && sampled(context.candidateId, controls.sampleRateBasisPoints);
+  const isSampled =
+    controls.shadowEnabled && sampled(context.candidateId, controls.sampleRateBasisPoints);
   if (!isSampled) {
     return {
       exposedResponse: observation.legacy,
       shadowExecuted: false,
       sampled: false,
       canaryAuthorized: false,
-      rollbackReason: controls.rollbackRequested ? "ROLLBACK_REQUESTED" : "SHADOW_DISABLED_OR_NOT_SAMPLED",
+      rollbackReason: controls.rollbackRequested
+        ? "ROLLBACK_REQUESTED"
+        : "SHADOW_DISABLED_OR_NOT_SAMPLED",
       parityDigest: null,
       metrics: null,
     };
   }
   const metrics = compare(observation);
   const supplyFailure = supplyGateFailure(controls.requiredSupplyGates, supplyGates, now);
-  const rollbackReason = controls.rollbackRequested ? "ROLLBACK_REQUESTED"
-    : !selectorMatches(context, controls.selectors) ? "ROLLOUT_SCOPE_DENIED"
-    : supplyFailure
-      ?? (!metrics.queryPlanReady ? "QUERY_PLAN_GATE_FAILED" : null);
+  const rollbackReason = controls.rollbackRequested
+    ? "ROLLBACK_REQUESTED"
+    : !selectorMatches(context, controls.selectors)
+      ? "ROLLOUT_SCOPE_DENIED"
+      : (supplyFailure ?? (!metrics.queryPlanReady ? "QUERY_PLAN_GATE_FAILED" : null));
   return {
     // PR6 is observation-only: even an authorized canary never becomes the visible response here.
     exposedResponse: observation.legacy,

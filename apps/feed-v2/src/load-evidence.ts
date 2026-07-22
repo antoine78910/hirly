@@ -18,7 +18,12 @@ export function percentile(samples: readonly number[], percentileValue: number):
   return sorted[Math.max(0, Math.ceil(sorted.length * percentileValue) - 1)] ?? 0;
 }
 
-export function planFacts(value: unknown): { nodeTypes: string[]; indexNames: string[]; sharedHitBlocks: number; sharedReadBlocks: number } {
+export function planFacts(value: unknown): {
+  nodeTypes: string[];
+  indexNames: string[];
+  sharedHitBlocks: number;
+  sharedReadBlocks: number;
+} {
   const nodeTypes = new Set<string>();
   const indexNames = new Set<string>();
   let sharedHitBlocks = 0;
@@ -35,13 +40,20 @@ export function planFacts(value: unknown): { nodeTypes: string[]; indexNames: st
     }
   };
   visit(value);
-  return { nodeTypes: [...nodeTypes].sort(), indexNames: [...indexNames].sort(), sharedHitBlocks, sharedReadBlocks };
+  return {
+    nodeTypes: [...nodeTypes].sort(),
+    indexNames: [...indexNames].sort(),
+    sharedHitBlocks,
+    sharedReadBlocks,
+  };
 }
 
 function localDisposableDatabase(databaseUrl: string): void {
   const url = new URL(databaseUrl);
-  if (!["127.0.0.1", "localhost", "::1"].includes(url.hostname)
-    || !url.pathname.slice(1).startsWith("hirly_feed_v2_evidence")) {
+  if (
+    !["127.0.0.1", "localhost", "::1"].includes(url.hostname) ||
+    !url.pathname.slice(1).startsWith("hirly_feed_v2_evidence")
+  ) {
     throw new Error("refusing non-local or non-disposable evidence database");
   }
 }
@@ -60,11 +72,15 @@ export async function runLoadEvidence(input: {
   baselineConcurrency: number;
 }): Promise<void> {
   localDisposableDatabase(input.databaseUrl);
-  if (!Number.isSafeInteger(input.cardinality) || input.cardinality < 10_000) throw new Error("cardinality must be at least 10000");
+  if (!Number.isSafeInteger(input.cardinality) || input.cardinality < 10_000)
+    throw new Error("cardinality must be at least 10000");
   const sql = postgres(input.databaseUrl, { max: input.baselineConcurrency * 2 + 2 });
   try {
-    await sql.unsafe("TRUNCATE public.candidate_action_projection, public.candidate_search_profiles, public.job_search_documents");
-    await sql.unsafe(`INSERT INTO public.candidate_search_profiles (
+    await sql.unsafe(
+      "TRUNCATE public.candidate_action_projection, public.candidate_search_profiles, public.job_search_documents",
+    );
+    await sql.unsafe(
+      `INSERT INTO public.candidate_search_profiles (
       candidate_id, version, status, target_role_label_normalized, role_family_ids,
       skill_ids, contract_types, work_modes, country_codes, location_policy,
       origin_latitude, origin_longitude, radius_km, freshness_window_days,
@@ -73,8 +89,11 @@ export async function runLoadEvidence(input: {
     ) VALUES ($1, 1, 'active', 'fullstack engineer', ARRAY['fullstack-engineering'],
       ARRAY['typescript'], ARRAY['permanent'], ARRAY['remote','onsite'], ARRAY['FR'],
       'explicit', 48.8566, 2.3522, 52, 30, 'exposure-v1', 'features-v1',
-      clock_timestamp(), clock_timestamp(), gen_random_uuid())`, [CANDIDATE_ID]);
-    await sql.unsafe(`INSERT INTO public.job_search_documents (
+      clock_timestamp(), clock_timestamp(), gen_random_uuid())`,
+      [CANDIDATE_ID],
+    );
+    await sql.unsafe(
+      `INSERT INTO public.job_search_documents (
       canonical_group_id, preferred_job_id, job_version, lifecycle_status,
       normalized_title, role_family_codes, skill_codes, contract_families,
       work_modes, country_codes, location_confidence, location_unknown,
@@ -91,16 +110,33 @@ export async function runLoadEvidence(input: {
       CASE WHEN n % 3 = 0 THEN 'auto' ELSE 'manual' END, true, true,
       'features-v1', CASE WHEN n % 10 = 0 THEN 'fullstack engineer typescript' ELSE 'account manager crm' END,
       clock_timestamp()
-    FROM generate_series(1, $1::integer) AS fixture(n)`, [input.cardinality]);
+    FROM generate_series(1, $1::integer) AS fixture(n)`,
+      [input.cardinality],
+    );
     await sql.unsafe("ANALYZE public.candidate_search_profiles");
     await sql.unsafe("ANALYZE public.candidate_action_projection");
     await sql.unsafe("ANALYZE public.job_search_documents");
 
     const parameters = [
-      CANDIDATE_ID, null, null, 13, "candidate-profile", null,
-      [], [], [], [], [], [], 1, false,
+      CANDIDATE_ID,
+      null,
+      null,
+      13,
+      "candidate-profile",
+      null,
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      1,
+      false,
     ];
-    const plan = await sql.unsafe(`EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) ${FEED_V2_INDEXED_READ_SQL}`, parameters);
+    const plan = await sql.unsafe(
+      `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) ${FEED_V2_INDEXED_READ_SQL}`,
+      parameters,
+    );
     const explainPlan = (plan[0] as { "QUERY PLAN"?: unknown } | undefined)?.["QUERY PLAN"] ?? plan;
     const facts = planFacts(explainPlan);
     const availableIndexes = await sql.unsafe<Array<{ indexname: string }>>(
@@ -109,28 +145,70 @@ export async function runLoadEvidence(input: {
     );
     const repository = new PostgresFeedReadRepository({
       unsafe: async (query, queryParameters) =>
-        await sql.unsafe(query, [...queryParameters] as never[]) as never,
+        (await sql.unsafe(query, [...queryParameters] as never[])) as never,
     });
-    const first = await repository.readIndexedCandidates({ candidateId: CANDIDATE_ID, effectiveQuery: null, limit: 12, after: null });
-    if (first.candidates.length !== 12 || new Set(first.candidates.map((row) => row.canonicalGroupId)).size !== 12) {
+    const first = await repository.readIndexedCandidates({
+      candidateId: CANDIDATE_ID,
+      effectiveQuery: null,
+      limit: 12,
+      after: null,
+    });
+    if (
+      first.candidates.length !== 12 ||
+      new Set(first.candidates.map((row) => row.canonicalGroupId)).size !== 12
+    ) {
       throw new Error("Feed v2 first page correctness assertion failed");
     }
     for (let index = 0; index < 5; index += 1) {
-      await repository.readIndexedCandidates({ candidateId: CANDIDATE_ID, effectiveQuery: null, limit: 12, after: null });
+      await repository.readIndexedCandidates({
+        candidateId: CANDIDATE_ID,
+        effectiveQuery: null,
+        limit: 12,
+        after: null,
+      });
     }
     const samples: number[] = [];
     for (let index = 0; index < input.samples; index += 1) {
-      samples.push((await measure(() => repository.readIndexedCandidates({ candidateId: CANDIDATE_ID, effectiveQuery: null, limit: 12, after: null }))).elapsedMs);
+      samples.push(
+        (
+          await measure(() =>
+            repository.readIndexedCandidates({
+              candidateId: CANDIDATE_ID,
+              effectiveQuery: null,
+              limit: 12,
+              after: null,
+            }),
+          )
+        ).elapsedMs,
+      );
     }
     const peakConcurrency = input.baselineConcurrency * 2;
-    const concurrent = await Promise.all(Array.from({ length: peakConcurrency }, () =>
-      measure(() => repository.readIndexedCandidates({ candidateId: CANDIDATE_ID, effectiveQuery: null, limit: 12, after: null }))));
+    const concurrent = await Promise.all(
+      Array.from({ length: peakConcurrency }, () =>
+        measure(() =>
+          repository.readIndexedCandidates({
+            candidateId: CANDIDATE_ID,
+            effectiveQuery: null,
+            limit: 12,
+            after: null,
+          }),
+        ),
+      ),
+    );
     const latency = {
-      p50Ms: percentile(samples, 0.50), p95Ms: percentile(samples, 0.95), p99Ms: percentile(samples, 0.99),
-      peakX2Concurrency: peakConcurrency, peakX2P99Ms: percentile(concurrent.map((sample) => sample.elapsedMs), 0.99),
+      p50Ms: percentile(samples, 0.5),
+      p95Ms: percentile(samples, 0.95),
+      p99Ms: percentile(samples, 0.99),
+      peakX2Concurrency: peakConcurrency,
+      peakX2P99Ms: percentile(
+        concurrent.map((sample) => sample.elapsedMs),
+        0.99,
+      ),
     };
     const assertions = {
-      requiredIndexesPresent: REQUIRED_INDEXES.every((name) => availableIndexes.some((row) => row.indexname === name)),
+      requiredIndexesPresent: REQUIRED_INDEXES.every((name) =>
+        availableIndexes.some((row) => row.indexname === name),
+      ),
       noSequentialScan: !facts.nodeTypes.includes("Seq Scan"),
       recencyIndexUsed: facts.indexNames.includes("job_search_documents_active_recency_idx"),
       projectedIndexUsed: facts.indexNames.includes("job_search_documents_active_projected_idx"),
@@ -144,17 +222,34 @@ export async function runLoadEvidence(input: {
     const evidence = {
       schemaVersion: "hirly.feed-v2-load-evidence.v1",
       generatedAt: process.env.FEED_V2_EVIDENCE_GENERATED_AT ?? new Date().toISOString(),
-      environment: { postgresMajor: 15, disposableLocalOnly: true, providerCalls: 0, canonicalProductionWrites: 0 },
-      input: { cardinality: input.cardinality, firstPageLimit: 12, samples: input.samples, baselineConcurrency: input.baselineConcurrency },
+      environment: {
+        postgresMajor: 15,
+        disposableLocalOnly: true,
+        providerCalls: 0,
+        canonicalProductionWrites: 0,
+      },
+      input: {
+        cardinality: input.cardinality,
+        firstPageLimit: 12,
+        samples: input.samples,
+        baselineConcurrency: input.baselineConcurrency,
+      },
       queryDigest: createHash("sha256").update(FEED_V2_INDEXED_READ_SQL).digest("hex"),
       resultDigest: createHash("sha256").update(JSON.stringify(first.candidates)).digest("hex"),
-      plan: { nodeTypes: facts.nodeTypes, indexNames: facts.indexNames, requiredIndexes: REQUIRED_INDEXES, raw: explainPlan },
-      latency, assertions,
+      plan: {
+        nodeTypes: facts.nodeTypes,
+        indexNames: facts.indexNames,
+        requiredIndexes: REQUIRED_INDEXES,
+        raw: explainPlan,
+      },
+      latency,
+      assertions,
       releaseDecision: Object.values(assertions).every(Boolean) ? "PASS" : "BLOCKED",
     };
     await mkdir(dirname(resolve(input.outputPath)), { recursive: true });
     await writeFile(resolve(input.outputPath), `${JSON.stringify(evidence, null, 2)}\n`);
-    if (evidence.releaseDecision !== "PASS") throw new Error(`Feed v2 load evidence blocked: ${JSON.stringify(assertions)}`);
+    if (evidence.releaseDecision !== "PASS")
+      throw new Error(`Feed v2 load evidence blocked: ${JSON.stringify(assertions)}`);
   } finally {
     await sql.end({ timeout: 5 });
   }
@@ -168,6 +263,8 @@ if (import.meta.main) {
     outputPath: process.argv[2] ?? "artifacts/candidate-matching/feed-v2-load-evidence.json",
     cardinality: Number(process.env.FEED_V2_EVIDENCE_CARDINALITY ?? "300000"),
     samples: Number(process.env.FEED_V2_EVIDENCE_SAMPLES ?? "50"),
-    baselineConcurrency: Number(process.env.FEED_V2_EVIDENCE_BASELINE_CONCURRENCY ?? DEFAULT_BASELINE_CONCURRENCY),
+    baselineConcurrency: Number(
+      process.env.FEED_V2_EVIDENCE_BASELINE_CONCURRENCY ?? DEFAULT_BASELINE_CONCURRENCY,
+    ),
   });
 }

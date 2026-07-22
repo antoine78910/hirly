@@ -49,7 +49,12 @@ export default function NotificationSettingsSheet({ open, onClose }) {
   };
 
   return (
-    <Sheet open={open} title={t("settings.notifications")} onClose={onClose} testId="notification-settings-sheet">
+    <Sheet
+      open={open}
+      title={t("settings.notifications")}
+      onClose={onClose}
+      testId="notification-settings-sheet"
+    >
       <div className="mb-4 flex items-start gap-3 rounded-2xl border border-sprout-border bg-sprout-surface-2/60 px-4 py-3">
         <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-violet-500/15 text-violet-300">
           <Bell className="h-4 w-4" />
@@ -69,8 +74,12 @@ export default function NotificationSettingsSheet({ open, onClose }) {
                   <Icon className="h-4 w-4" strokeWidth={1.9} />
                 </div>
                 <div className="min-w-0 flex-1 pr-2">
-                  <p className="text-[15px] font-semibold text-white">{t(`notificationSettings.${key}.title`)}</p>
-                  <p className="mt-1 text-sm leading-snug text-sprout-muted">{t(`notificationSettings.${key}.description`)}</p>
+                  <p className="text-[15px] font-semibold text-white">
+                    {t(`notificationSettings.${key}.title`)}
+                  </p>
+                  <p className="mt-1 text-sm leading-snug text-sprout-muted">
+                    {t(`notificationSettings.${key}.description`)}
+                  </p>
                 </div>
                 <ViralToggle
                   checked={settings[key]}
@@ -98,7 +107,9 @@ export default function NotificationSettingsSheet({ open, onClose }) {
                       })}
                     </p>
                   </div>
-                  <span className="shrink-0 text-[10px] text-sprout-dim">{t("notificationSettings.exampleTime")}</span>
+                  <span className="shrink-0 text-[10px] text-sprout-dim">
+                    {t("notificationSettings.exampleTime")}
+                  </span>
                 </div>
                 <p className="mt-1.5 text-xs leading-relaxed text-sprout-muted">
                   {t(`notificationSettings.${key}.exampleBody`)}

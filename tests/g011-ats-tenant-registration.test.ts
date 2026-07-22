@@ -3,10 +3,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const repoRoot = join(import.meta.dir, "..");
-const migrationPath =
-  "backend/db/migrations/20260720000800_ats_tenant_source_registration.sql";
-const rollbackPath =
-  "backend/db/migrations/20260720000800_ats_tenant_source_registration.down.sql";
+const migrationPath = "backend/db/migrations/20260720000800_ats_tenant_source_registration.sql";
+const rollbackPath = "backend/db/migrations/20260720000800_ats_tenant_source_registration.down.sql";
 
 function read(path: string): string {
   return readFileSync(join(repoRoot, path), "utf8");
@@ -29,18 +27,10 @@ describe("G011 disabled ATS tenant registration", () => {
   });
 
   test("registers new candidates idempotently and disabled", () => {
-    expect(registrationFunction).toContain(
-      "FROM public.career_sources AS source",
-    );
-    expect(registrationFunction).toContain(
-      "source.source_key = btrim(p_source_key)",
-    );
-    expect(registrationFunction).toContain(
-      "source.tenant_key = btrim(p_tenant_key)",
-    );
-    expect(registrationFunction).toContain(
-      "career source key and tenant identify different rows",
-    );
+    expect(registrationFunction).toContain("FROM public.career_sources AS source");
+    expect(registrationFunction).toContain("source.source_key = btrim(p_source_key)");
+    expect(registrationFunction).toContain("source.tenant_key = btrim(p_tenant_key)");
+    expect(registrationFunction).toContain("career source key and tenant identify different rows");
     expect(registrationFunction).toContain(
       "pg_advisory_xact_lock(hashtextextended(p_provider, 0))",
     );
@@ -73,24 +63,18 @@ describe("G011 disabled ATS tenant registration", () => {
         new RegExp(`\\b${protectedColumn}\\s*=`),
       );
     }
-    expect(registrationFunction).toContain(
-      "IF v_source.discovery_state = 'approved'",
-    );
+    expect(registrationFunction).toContain("IF v_source.discovery_state = 'approved'");
   });
 
   test("requires bounded metadata and keeps direct table writes unavailable", () => {
     expect(registrationFunction).toContain(
       "worker_private.country_code_array_is_valid(p_country_codes)",
     );
-    expect(registrationFunction).toContain(
-      "p_base_url !~ '^https://",
-    );
+    expect(registrationFunction).toContain("p_base_url !~ '^https://");
     expect(registrationFunction).toContain(
       "p_access_type NOT IN ('public_api', 'open_data', 'tenant_feed', 'partner_feed')",
     );
-    expect(registrationFunction).toContain(
-      "jsonb_typeof(p_checkpoint) <> 'object'",
-    );
+    expect(registrationFunction).toContain("jsonb_typeof(p_checkpoint) <> 'object'");
     expect(migration).toMatch(
       /REVOKE ALL ON FUNCTION worker_private\.register_career_source_candidate\([\s\S]*?\) FROM PUBLIC;/,
     );
@@ -106,8 +90,6 @@ describe("G011 disabled ATS tenant registration", () => {
     expect(rollback).toContain(
       "DROP FUNCTION IF EXISTS worker_private.register_career_source_candidate(",
     );
-    expect(rollback).not.toMatch(
-      /\b(?:DROP\s+TABLE|DELETE\s+FROM|TRUNCATE)\b/i,
-    );
+    expect(rollback).not.toMatch(/\b(?:DROP\s+TABLE|DELETE\s+FROM|TRUNCATE)\b/i);
   });
 });

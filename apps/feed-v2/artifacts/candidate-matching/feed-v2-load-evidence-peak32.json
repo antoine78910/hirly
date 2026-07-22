@@ -52,10 +52,7 @@
           "Actual Total Time": 9.395,
           "Actual Rows": 13,
           "Actual Loops": 1,
-          "Sort Key": [
-            "scored.relevance_score DESC",
-            "scored.canonical_group_id"
-          ],
+          "Sort Key": ["scored.relevance_score DESC", "scored.canonical_group_id"],
           "Sort Method": "quicksort",
           "Sort Space Used": 28,
           "Sort Space Type": "Memory",
@@ -901,10 +898,7 @@
                           "Actual Total Time": 8.3,
                           "Actual Rows": 13,
                           "Actual Loops": 1,
-                          "Sort Key": [
-                            "scored.relevance_score DESC",
-                            "scored.canonical_group_id"
-                          ],
+                          "Sort Key": ["scored.relevance_score DESC", "scored.canonical_group_id"],
                           "Sort Method": "top-N heapsort",
                           "Sort Space Used": 30,
                           "Sort Space Type": "Memory",

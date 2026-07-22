@@ -1,7 +1,6 @@
 import { z } from "zod";
 
-const positiveInteger = (fallback: number) =>
-  z.coerce.number().int().positive().default(fallback);
+const positiveInteger = (fallback: number) => z.coerce.number().int().positive().default(fallback);
 
 export const workerConfigSchema = z
   .object({
@@ -44,8 +43,7 @@ export const workerConfigSchema = z
         context.addIssue({
           code: "custom",
           path: ["JOBS_DATABASE_URL"],
-          message:
-            "production inventory database URL must require TLS with sslmode",
+          message: "production inventory database URL must require TLS with sslmode",
         });
       }
     }
@@ -53,9 +51,7 @@ export const workerConfigSchema = z
 
 export type WorkerConfig = z.infer<typeof workerConfigSchema>;
 
-export function parseWorkerConfig(
-  environment: Record<string, string | undefined>,
-): WorkerConfig {
+export function parseWorkerConfig(environment: Record<string, string | undefined>): WorkerConfig {
   return workerConfigSchema.parse({
     NODE_ENV: environment.NODE_ENV,
     JOBS_DATABASE_URL: environment.JOBS_DATABASE_URL,

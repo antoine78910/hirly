@@ -41,12 +41,8 @@ describe("G002 shared contract boundaries", () => {
     };
 
     expect(canonicalJobSchema.parse(validJob)).toEqual(validJob);
-    expect(() =>
-      canonicalJobSchema.parse({ ...validJob, jobId: "external-1" }),
-    ).toThrow();
-    expect(() =>
-      canonicalJobSchema.parse({ ...validJob, countryCode: "France" }),
-    ).toThrow();
+    expect(() => canonicalJobSchema.parse({ ...validJob, jobId: "external-1" })).toThrow();
+    expect(() => canonicalJobSchema.parse({ ...validJob, countryCode: "France" })).toThrow();
   });
 
   test("rejects invalid rate limits and unauthorized writer combinations", () => {

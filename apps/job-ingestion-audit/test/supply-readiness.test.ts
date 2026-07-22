@@ -39,8 +39,7 @@ function completeInput(count = 12): SupplyReadinessInput {
     threshold: {
       thresholdId: "prd-paris-fullstack-v1",
       segment: { ...PARIS_FULLSTACK_SEGMENT },
-      minimumFreshVisibleCanonicalGroups:
-        PARIS_FULLSTACK_MIN_FRESH_VISIBLE_GROUPS,
+      minimumFreshVisibleCanonicalGroups: PARIS_FULLSTACK_MIN_FRESH_VISIBLE_GROUPS,
       approvedByProduct: "product-owner",
       approvedAt: "2026-07-20T08:00:00.000Z",
     },
@@ -113,8 +112,7 @@ describe("PR0-S supply readiness", () => {
     const forward = completeInput();
     const reversed = completeInput();
     reversed.observations = [...reversed.observations!].reverse();
-    expect(buildSupplyReadinessScorecard(reversed))
-      .toEqual(buildSupplyReadinessScorecard(forward));
+    expect(buildSupplyReadinessScorecard(reversed)).toEqual(buildSupplyReadinessScorecard(forward));
   });
 
   test("accepts only a matching named Product-approved unexpired lower-threshold exception", () => {
@@ -147,40 +145,48 @@ describe("PR0-S supply readiness", () => {
   });
 
   test("rejects exceptions with scope drift or a non-lower threshold", () => {
-    expect(() => buildSupplyReadinessScorecard(completeInput(8), {
-      exception: exception({
-        segment: {
-          countryCode: "FR",
-          cohortId: "lyon-50km",
-          roleFamilyId: "fullstack-engineering",
-          radiusKm: 50,
-        },
+    expect(() =>
+      buildSupplyReadinessScorecard(completeInput(8), {
+        exception: exception({
+          segment: {
+            countryCode: "FR",
+            cohortId: "lyon-50km",
+            roleFamilyId: "fullstack-engineering",
+            radiusKm: 50,
+          },
+        }),
       }),
-    })).toThrow("exception segment does not match");
-    expect(() => buildSupplyReadinessScorecard(completeInput(8), {
-      exception: exception({ minimumFreshVisibleCanonicalGroups: 12 }),
-    })).toThrow("exception minimum must be lower");
+    ).toThrow("exception segment does not match");
+    expect(() =>
+      buildSupplyReadinessScorecard(completeInput(8), {
+        exception: exception({ minimumFreshVisibleCanonicalGroups: 12 }),
+      }),
+    ).toThrow("exception minimum must be lower");
   });
 
   test("keeps fixture evidence and duplicate canonical groups from satisfying PR0-S", () => {
-    expect(() => buildSupplyReadinessScorecard({
-      ...completeInput(),
-      environment: "fixture",
-    })).toThrow("fixture evidence cannot establish supply readiness");
-    expect(() => buildSupplyReadinessScorecard({
-      ...completeInput(),
-      observations: [observations(1)[0]!, observations(1)[0]!],
-    })).toThrow("duplicate canonical group");
+    expect(() =>
+      buildSupplyReadinessScorecard({
+        ...completeInput(),
+        environment: "fixture",
+      }),
+    ).toThrow("fixture evidence cannot establish supply readiness");
+    expect(() =>
+      buildSupplyReadinessScorecard({
+        ...completeInput(),
+        observations: [observations(1)[0]!, observations(1)[0]!],
+      }),
+    ).toThrow("duplicate canonical group");
   });
 
   test("refuses malformed runtime booleans instead of scoring truthy values", () => {
     const input = completeInput();
     input.observations = input.observations!.map((observation, index) =>
-      index === 0
-        ? { ...observation, fresh: "yes" as unknown as boolean }
-        : observation);
-    expect(() => buildSupplyReadinessScorecard(input))
-      .toThrow("observations[0].fresh must be boolean");
+      index === 0 ? { ...observation, fresh: "yes" as unknown as boolean } : observation,
+    );
+    expect(() => buildSupplyReadinessScorecard(input)).toThrow(
+      "observations[0].fresh must be boolean",
+    );
   });
 
   test("records unavailable Paris production-like evidence as non-scoreable and blocked", () => {
@@ -233,10 +239,7 @@ describe("PR0-S supply readiness", () => {
   });
 
   test("contains no production mutation, routing, or network surface", () => {
-    const source = readFileSync(
-      new URL("../src/supply-readiness.ts", import.meta.url),
-      "utf8",
-    );
+    const source = readFileSync(new URL("../src/supply-readiness.ts", import.meta.url), "utf8");
     expect(source).not.toMatch(
       /\b(?:INSERT\s+INTO|UPDATE\s+\w+\s+SET|DELETE\s+FROM|TRUNCATE\s+TABLE)\b/i,
     );
@@ -252,13 +255,17 @@ describe("PR0-S supply readiness", () => {
       canonicalIdentityContract: "canonical_group_id_only",
       eligibilityContract: "active_valid_fresh_visible_canonical_groups",
     });
-    expect(() => buildSupplyReadinessScorecard({
-      ...completeInput(),
-      sourceDigest: "not-a-digest",
-    })).toThrow("sourceDigest must be a SHA-256 value");
-    expect(() => buildSupplyReadinessScorecard({
-      ...completeInput(),
-      canonicalIdentityContract: "provider_external_id" as "canonical_group_id_only",
-    })).toThrow("exclude provider fallback identities");
+    expect(() =>
+      buildSupplyReadinessScorecard({
+        ...completeInput(),
+        sourceDigest: "not-a-digest",
+      }),
+    ).toThrow("sourceDigest must be a SHA-256 value");
+    expect(() =>
+      buildSupplyReadinessScorecard({
+        ...completeInput(),
+        canonicalIdentityContract: "provider_external_id" as "canonical_group_id_only",
+      }),
+    ).toThrow("exclude provider fallback identities");
   });
 });

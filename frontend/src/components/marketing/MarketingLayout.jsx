@@ -5,20 +5,28 @@ import { BRAND, supportMailto } from "../../lib/brand";
 import { PRIVACY_PATH, TERMS_PATH } from "../../lib/legalPaths";
 
 export default function MarketingLayout({ children }) {
-
   return (
     <div className="min-h-dvh bg-white text-zinc-900">
       {/* Header */}
       <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-xl border-b border-zinc-100">
         <div className="max-w-6xl mx-auto px-6 py-3.5 flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-2 font-display font-black tracking-tight text-lg">
+          <Link
+            to="/"
+            className="flex items-center gap-2 font-display font-black tracking-tight text-lg"
+          >
             <Logo size={28} />
             <span>{BRAND.NAME}</span>
           </Link>
           <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-zinc-600">
-            <Link to="/how-it-works" className="hover:text-zinc-900 transition-colors">How it works</Link>
-            <Link to="/blog" className="hover:text-zinc-900 transition-colors">Blog</Link>
-            <Link to="/compare/hirly-vs-linkedin" className="hover:text-zinc-900 transition-colors">Compare</Link>
+            <Link to="/how-it-works" className="hover:text-zinc-900 transition-colors">
+              How it works
+            </Link>
+            <Link to="/blog" className="hover:text-zinc-900 transition-colors">
+              Blog
+            </Link>
+            <Link to="/compare/hirly-vs-linkedin" className="hover:text-zinc-900 transition-colors">
+              Compare
+            </Link>
           </nav>
           <Link
             to="/onboarding"
@@ -38,34 +46,79 @@ export default function MarketingLayout({ children }) {
         <div className="max-w-6xl mx-auto px-6 py-10">
           <div className="grid sm:grid-cols-3 gap-8 mb-8">
             <div>
-              <Link to="/" className="flex items-center gap-2 font-display font-black tracking-tight mb-3">
+              <Link
+                to="/"
+                className="flex items-center gap-2 font-display font-black tracking-tight mb-3"
+              >
                 <Logo size={24} />
                 <span>{BRAND.NAME}</span>
               </Link>
               <p className="text-sm text-zinc-500 leading-relaxed">{BRAND.TAGLINE}</p>
             </div>
             <div>
-              <p className="text-xs font-semibold text-zinc-400 uppercase tracking-widest mb-3">Product</p>
+              <p className="text-xs font-semibold text-zinc-400 uppercase tracking-widest mb-3">
+                Product
+              </p>
               <ul className="space-y-2 text-sm text-zinc-600">
-                <li><Link to="/how-it-works" className="hover:text-zinc-900">How it works</Link></li>
-                <li><Link to="/use-cases" className="hover:text-zinc-900">Use cases</Link></li>
-                <li><Link to="/for/juniors" className="hover:text-zinc-900">For juniors</Link></li>
-                <li><Link to="/for/reconversion" className="hover:text-zinc-900">For career changers</Link></li>
-                <li><Link to="/for/developpeurs" className="hover:text-zinc-900">For developers</Link></li>
-                <li><Link to="/creators" className="hover:text-zinc-900">Creators program</Link></li>
+                <li>
+                  <Link to="/how-it-works" className="hover:text-zinc-900">
+                    How it works
+                  </Link>
+                </li>
+                <li>
+                  <Link to="/use-cases" className="hover:text-zinc-900">
+                    Use cases
+                  </Link>
+                </li>
+                <li>
+                  <Link to="/for/juniors" className="hover:text-zinc-900">
+                    For juniors
+                  </Link>
+                </li>
+                <li>
+                  <Link to="/for/reconversion" className="hover:text-zinc-900">
+                    For career changers
+                  </Link>
+                </li>
+                <li>
+                  <Link to="/for/developpeurs" className="hover:text-zinc-900">
+                    For developers
+                  </Link>
+                </li>
+                <li>
+                  <Link to="/creators" className="hover:text-zinc-900">
+                    Creators program
+                  </Link>
+                </li>
               </ul>
             </div>
             <div>
-              <p className="text-xs font-semibold text-zinc-400 uppercase tracking-widest mb-3">Compare</p>
+              <p className="text-xs font-semibold text-zinc-400 uppercase tracking-widest mb-3">
+                Compare
+              </p>
               <ul className="space-y-2 text-sm text-zinc-600">
-                <li><Link to="/compare/hirly-vs-linkedin" className="hover:text-zinc-900">Hirly vs LinkedIn</Link></li>
-                <li><Link to="/compare/hirly-vs-indeed" className="hover:text-zinc-900">Hirly vs Indeed</Link></li>
-                <li><Link to="/blog" className="hover:text-zinc-900">Blog</Link></li>
+                <li>
+                  <Link to="/compare/hirly-vs-linkedin" className="hover:text-zinc-900">
+                    Hirly vs LinkedIn
+                  </Link>
+                </li>
+                <li>
+                  <Link to="/compare/hirly-vs-indeed" className="hover:text-zinc-900">
+                    Hirly vs Indeed
+                  </Link>
+                </li>
+                <li>
+                  <Link to="/blog" className="hover:text-zinc-900">
+                    Blog
+                  </Link>
+                </li>
               </ul>
             </div>
           </div>
           <div className="border-t border-zinc-100 pt-6 text-xs text-zinc-400">
-            <p>© {new Date().getFullYear()} {BRAND.NAME} · All rights reserved.</p>
+            <p>
+              © {new Date().getFullYear()} {BRAND.NAME} · All rights reserved.
+            </p>
             <p className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
               <Link to={TERMS_PATH} className="hover:text-zinc-600 transition-colors">
                 Terms of Use

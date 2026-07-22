@@ -12,11 +12,7 @@ export function postingHoursBlocks(lang = "en") {
       {
         type: "list",
         style: "bullet",
-        items: [
-          "7h–9h (heure de Paris)",
-          "12h–14h",
-          "19h–22h",
-        ],
+        items: ["7h–9h (heure de Paris)", "12h–14h", "19h–22h"],
       },
       {
         type: "paragraph",
@@ -40,5 +36,4 @@ export function postingHoursBlocks(lang = "en") {
   ];
 }
 
-export const FR_POSTING_HOURS_SUMMARY =
-  "7h–9h, 12h–14h et 19h–22h (heure de Paris — CET/CEST)";
+export const FR_POSTING_HOURS_SUMMARY = "7h–9h, 12h–14h et 19h–22h (heure de Paris — CET/CEST)";

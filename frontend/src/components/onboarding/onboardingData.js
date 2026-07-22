@@ -78,30 +78,30 @@ import {
 
 /** Hirly onboarding step order (aligned with Sprout flow + Hirly extras). */
 export const ONBOARDING_STEP_ORDER = [
-  "intro",           // 5 illustrated intro slides
+  "intro", // 5 illustrated intro slides
   "signup",
   "jobSearch",
-  "jobGoal",         // What's your goal? (early — before other goal-style questions)
-  "compare2x",       // 2× interviews vs on your own
-  "contractType",    // Hirly: CDI/CDD/etc.
-  "otherApps",       // Have you tried other job apps?
-  "longTerm",        // Long-term results chart
-  "categories",      // Job categories + roles
-  "experience",      // Experience level
-  "location",        // Where do you want to work?
-  "contactPhone",    // Phone — required by many employers to apply
-  "salary",          // Expected salary range
-  "interviews",      // Interviews per week
-  "jobTimeline",     // When do you need a new job?
+  "jobGoal", // What's your goal? (early — before other goal-style questions)
+  "compare2x", // 2× interviews vs on your own
+  "contractType", // Hirly: CDI/CDD/etc.
+  "otherApps", // Have you tried other job apps?
+  "longTerm", // Long-term results chart
+  "categories", // Job categories + roles
+  "experience", // Experience level
+  "location", // Where do you want to work?
+  "contactPhone", // Phone — required by many employers to apply
+  "salary", // Expected salary range
+  "interviews", // Interviews per week
+  "jobTimeline", // When do you need a new job?
   "interviewsConfirm", // Achievable interviews/week
-  "jobBlocker",      // What's stopping you?
-  "jobAccomplish",   // What do you want to accomplish?
-  "potentialChart",  // Interview rate potential
-  "attribution",     // How did you hear about us?
-  "referralCode",    // Referral / access code
-  "upload",          // Upload CV
-  "profileSetup",    // Setup loader
-  "profileWelcome",  // Personalized welcome cards
+  "jobBlocker", // What's stopping you?
+  "jobAccomplish", // What do you want to accomplish?
+  "potentialChart", // Interview rate potential
+  "attribution", // How did you hear about us?
+  "referralCode", // Referral / access code
+  "upload", // Upload CV
+  "profileSetup", // Setup loader
+  "profileWelcome", // Personalized welcome cards
   "showcaseLanding",
   "showcaseAllInOne",
   "showcasePricing",
@@ -130,15 +130,18 @@ const ONBOARDING_WELCOME_COPY = {
     items: [
       {
         title: "Boostez votre carrière",
-        body: ({ salaryLabel }) => `Nous vous aiderons à cibler des équipes en pleine croissance et des postes alignés avec votre objectif de ${salaryLabel}+.` ,
+        body: ({ salaryLabel }) =>
+          `Nous vous aiderons à cibler des équipes en pleine croissance et des postes alignés avec votre objectif de ${salaryLabel}+.`,
       },
       {
         title: "Candidatez à la vitesse de la lumière",
-        body: ({ primaryRole }) => `Notre agent IA automatise les candidatures pour ${primaryRole} — fini le copier-coller.`,
+        body: ({ primaryRole }) =>
+          `Notre agent IA automatise les candidatures pour ${primaryRole} — fini le copier-coller.`,
       },
       {
         title: "Décrochez votre prochaine victoire",
-        body: ({ industryHint, interviewsPerWeek }) => `Swipez sur les offres ${industryHint}. Nous gérons la paperasse pendant que vous visez ${interviewsPerWeek} entretiens par semaine.`,
+        body: ({ industryHint, interviewsPerWeek }) =>
+          `Swipez sur les offres ${industryHint}. Nous gérons la paperasse pendant que vous visez ${interviewsPerWeek} entretiens par semaine.`,
       },
     ],
   },
@@ -148,15 +151,18 @@ const ONBOARDING_WELCOME_COPY = {
     items: [
       {
         title: "Scale Your Career Fast",
-        body: ({ salaryLabel }) => `We'll help you target high-growth teams and roles aligned with your ${salaryLabel}+ salary goal.`,
+        body: ({ salaryLabel }) =>
+          `We'll help you target high-growth teams and roles aligned with your ${salaryLabel}+ salary goal.`,
       },
       {
         title: "Apply at Light Speed",
-        body: ({ primaryRole }) => `Our AI agent automates tailored applications for ${primaryRole} — no more copy-pasting the same answers.`,
+        body: ({ primaryRole }) =>
+          `Our AI agent automates tailored applications for ${primaryRole} — no more copy-pasting the same answers.`,
       },
       {
         title: "Land Your Next Win",
-        body: ({ industryHint, interviewsPerWeek }) => `Swipe right on ${industryHint} matches. We handle the paperwork while you focus on landing ${interviewsPerWeek} interviews per week.`,
+        body: ({ industryHint, interviewsPerWeek }) =>
+          `Swipe right on ${industryHint} matches. We handle the paperwork while you focus on landing ${interviewsPerWeek} interviews per week.`,
       },
     ],
   },
@@ -166,15 +172,18 @@ const ONBOARDING_WELCOME_COPY = {
     items: [
       {
         title: "Bring deine Karriere voran",
-        body: ({ salaryLabel }) => `Wir helfen dir, wachstumsstarke Teams und Positionen zu finden, die zu deinem Gehaltsziel von ${salaryLabel}+ passen.`,
+        body: ({ salaryLabel }) =>
+          `Wir helfen dir, wachstumsstarke Teams und Positionen zu finden, die zu deinem Gehaltsziel von ${salaryLabel}+ passen.`,
       },
       {
         title: "Bewirb dich in Lichtgeschwindigkeit",
-        body: ({ primaryRole }) => `Unser KI-Agent automatisiert maßgeschneiderte Bewerbungen für ${primaryRole} — kein Copy-and-Paste mehr.`,
+        body: ({ primaryRole }) =>
+          `Unser KI-Agent automatisiert maßgeschneiderte Bewerbungen für ${primaryRole} — kein Copy-and-Paste mehr.`,
       },
       {
         title: "Sichere dir deinen nächsten Erfolg",
-        body: ({ industryHint, interviewsPerWeek }) => `Swipe durch passende Stellen bei ${industryHint}. Wir übernehmen den Papierkram, während du ${interviewsPerWeek} Vorstellungsgespräche pro Woche ansteuerst.`,
+        body: ({ industryHint, interviewsPerWeek }) =>
+          `Swipe durch passende Stellen bei ${industryHint}. Wir übernehmen den Papierkram, während du ${interviewsPerWeek} Vorstellungsgespräche pro Woche ansteuerst.`,
       },
     ],
   },
@@ -184,15 +193,18 @@ const ONBOARDING_WELCOME_COPY = {
     items: [
       {
         title: "Impulsa tu carrera",
-        body: ({ salaryLabel }) => `Te ayudaremos a encontrar equipos en crecimiento y puestos acordes con tu objetivo salarial de ${salaryLabel}+.`,
+        body: ({ salaryLabel }) =>
+          `Te ayudaremos a encontrar equipos en crecimiento y puestos acordes con tu objetivo salarial de ${salaryLabel}+.`,
       },
       {
         title: "Solicita empleo a toda velocidad",
-        body: ({ primaryRole }) => `Nuestro agente de IA automatiza las solicitudes personalizadas para ${primaryRole}; se acabó copiar y pegar las mismas respuestas.`,
+        body: ({ primaryRole }) =>
+          `Nuestro agente de IA automatiza las solicitudes personalizadas para ${primaryRole}; se acabó copiar y pegar las mismas respuestas.`,
       },
       {
         title: "Consigue tu próximo logro",
-        body: ({ industryHint, interviewsPerWeek }) => `Desliza entre ofertas de ${industryHint}. Nosotros nos ocupamos del papeleo mientras buscas conseguir ${interviewsPerWeek} entrevistas por semana.`,
+        body: ({ industryHint, interviewsPerWeek }) =>
+          `Desliza entre ofertas de ${industryHint}. Nosotros nos ocupamos del papeleo mientras buscas conseguir ${interviewsPerWeek} entrevistas por semana.`,
       },
     ],
   },
@@ -202,15 +214,18 @@ const ONBOARDING_WELCOME_COPY = {
     items: [
       {
         title: "Fai crescere la tua carriera",
-        body: ({ salaryLabel }) => `Ti aiuteremo a puntare a team in crescita e ruoli in linea con il tuo obiettivo di stipendio di ${salaryLabel}+.`,
+        body: ({ salaryLabel }) =>
+          `Ti aiuteremo a puntare a team in crescita e ruoli in linea con il tuo obiettivo di stipendio di ${salaryLabel}+.`,
       },
       {
         title: "Candidati alla velocità della luce",
-        body: ({ primaryRole }) => `Il nostro agente IA automatizza le candidature su misura per ${primaryRole}: niente più copia e incolla.`,
+        body: ({ primaryRole }) =>
+          `Il nostro agente IA automatizza le candidature su misura per ${primaryRole}: niente più copia e incolla.`,
       },
       {
         title: "Conquista il tuo prossimo traguardo",
-        body: ({ industryHint, interviewsPerWeek }) => `Scorri le offerte di ${industryHint}. Noi gestiamo la burocrazia mentre punti a ${interviewsPerWeek} colloqui a settimana.`,
+        body: ({ industryHint, interviewsPerWeek }) =>
+          `Scorri le offerte di ${industryHint}. Noi gestiamo la burocrazia mentre punti a ${interviewsPerWeek} colloqui a settimana.`,
       },
     ],
   },
@@ -464,25 +479,80 @@ export const SUGGESTED_ONBOARDING_LOCATIONS = [
 ];
 
 export const EMPLOYMENT_TYPE_OPTIONS = [
-  { id: "permanent", label: "Permanent contract (CDI)", hint: "Open-ended, full-time role.", Icon: Briefcase },
-  { id: "fixed_term", label: "Fixed-term contract (CDD)", hint: "Temporary contract with an end date.", Icon: Clock },
-  { id: "internship", label: "Internship", hint: "Student or graduate internship.", Icon: GraduationCap },
-  { id: "apprenticeship", label: "Apprenticeship", hint: "Work-study or vocational training.", Icon: Wrench },
-  { id: "summer_job", label: "Summer job", hint: "Short seasonal role during summer break.", Icon: Sun },
+  {
+    id: "permanent",
+    label: "Permanent contract (CDI)",
+    hint: "Open-ended, full-time role.",
+    Icon: Briefcase,
+  },
+  {
+    id: "fixed_term",
+    label: "Fixed-term contract (CDD)",
+    hint: "Temporary contract with an end date.",
+    Icon: Clock,
+  },
+  {
+    id: "internship",
+    label: "Internship",
+    hint: "Student or graduate internship.",
+    Icon: GraduationCap,
+  },
+  {
+    id: "apprenticeship",
+    label: "Apprenticeship",
+    hint: "Work-study or vocational training.",
+    Icon: Wrench,
+  },
+  {
+    id: "summer_job",
+    label: "Summer job",
+    hint: "Short seasonal role during summer break.",
+    Icon: Sun,
+  },
   { id: "part_time", label: "Part-time", hint: "Reduced hours on an ongoing basis.", Icon: Clock },
-  { id: "seasonal", label: "Seasonal work", hint: "Peak-season jobs (harvest, holidays, tourism).", Icon: Leaf },
-  { id: "freelance", label: "Freelance / contract", hint: "Independent or project-based work.", Icon: User },
+  {
+    id: "seasonal",
+    label: "Seasonal work",
+    hint: "Peak-season jobs (harvest, holidays, tourism).",
+    Icon: Leaf,
+  },
+  {
+    id: "freelance",
+    label: "Freelance / contract",
+    hint: "Independent or project-based work.",
+    Icon: User,
+  },
 ];
 
 export const EMPLOYMENT_TYPE_OPTIONS_FR = [
   { id: "permanent", label: "CDI", hint: "Poste ouvert, à temps plein.", Icon: Briefcase },
   { id: "fixed_term", label: "CDD", hint: "Contrat temporaire avec date de fin.", Icon: Clock },
   { id: "internship", label: "Stage", hint: "Stage étudiant ou diplômé.", Icon: GraduationCap },
-  { id: "apprenticeship", label: "Alternance / apprentissage", hint: "Formation en alternance.", Icon: Wrench },
-  { id: "summer_job", label: "Job d'été", hint: "Poste saisonnier court pendant l'été.", Icon: Sun },
+  {
+    id: "apprenticeship",
+    label: "Alternance / apprentissage",
+    hint: "Formation en alternance.",
+    Icon: Wrench,
+  },
+  {
+    id: "summer_job",
+    label: "Job d'été",
+    hint: "Poste saisonnier court pendant l'été.",
+    Icon: Sun,
+  },
   { id: "part_time", label: "Temps partiel", hint: "Heures réduites sur la durée.", Icon: Clock },
-  { id: "seasonal", label: "Emploi saisonnier", hint: "Postes de saison (vendanges, tourisme…).", Icon: Leaf },
-  { id: "freelance", label: "Freelance / mission", hint: "Travail indépendant ou à la mission.", Icon: User },
+  {
+    id: "seasonal",
+    label: "Emploi saisonnier",
+    hint: "Postes de saison (vendanges, tourisme…).",
+    Icon: Leaf,
+  },
+  {
+    id: "freelance",
+    label: "Freelance / mission",
+    hint: "Travail indépendant ou à la mission.",
+    Icon: User,
+  },
 ];
 
 export const JOB_SEARCH_OPTIONS = [
@@ -832,7 +902,11 @@ export const JOB_CATEGORIES = [
     id: "customer",
     label: "Customer Success",
     Icon: Headphones,
-    roles: ["Customer Success Manager", "Customer Support Manager", "Customer Support Representative"],
+    roles: [
+      "Customer Success Manager",
+      "Customer Support Manager",
+      "Customer Support Representative",
+    ],
   },
   {
     id: "security",
@@ -844,13 +918,27 @@ export const JOB_CATEGORIES = [
     id: "engineering_other",
     label: "Misc. Engineering",
     Icon: Wrench,
-    roles: ["Hardware Engineer", "IT Support Specialist", "Mechanical Engineer", "Technical Writer"],
+    roles: [
+      "Hardware Engineer",
+      "IT Support Specialist",
+      "Mechanical Engineer",
+      "Technical Writer",
+    ],
   },
   {
     id: "hospitality_food",
     label: "Hospitality & Food",
     Icon: UtensilsCrossed,
-    roles: ["Server", "Waiter", "Waitress", "Bartender", "Restaurant Host", "Kitchen Porter", "Barista", "Hotel Front Desk"],
+    roles: [
+      "Server",
+      "Waiter",
+      "Waitress",
+      "Bartender",
+      "Restaurant Host",
+      "Kitchen Porter",
+      "Barista",
+      "Hotel Front Desk",
+    ],
   },
   {
     id: "retail",
@@ -886,7 +974,12 @@ export const JOB_CATEGORIES = [
     id: "trades",
     label: "Trades & Construction",
     Icon: Hammer,
-    roles: ["Electrician Apprentice", "Plumber Apprentice", "Construction Laborer", "Carpenter Helper"],
+    roles: [
+      "Electrician Apprentice",
+      "Plumber Apprentice",
+      "Construction Laborer",
+      "Carpenter Helper",
+    ],
   },
 ];
 
@@ -924,7 +1017,12 @@ export const INTERVIEW_FEEDBACK_FR = [
 
 export const ATTRIBUTION_OPTIONS = [
   { id: "social", label: "Social media", hint: "TikTok, Instagram, LinkedIn, etc.", Icon: Video },
-  { id: "influencer", label: "Influencer", hint: "Creator or community you follow", Icon: Sparkles },
+  {
+    id: "influencer",
+    label: "Influencer",
+    hint: "Creator or community you follow",
+    Icon: Sparkles,
+  },
   { id: "friend", label: "Friend / colleague", hint: "Word of mouth", Icon: Users },
   { id: "search", label: "Search", hint: "Google or app store", Icon: Search },
   { id: "ads", label: "Advertisement", hint: "Online or offline ad", Icon: Megaphone },
@@ -932,8 +1030,18 @@ export const ATTRIBUTION_OPTIONS = [
 ];
 
 export const ATTRIBUTION_OPTIONS_FR = [
-  { id: "social", label: "Réseaux sociaux", hint: "TikTok, Instagram, LinkedIn, etc.", Icon: Video },
-  { id: "influencer", label: "Influenceur", hint: "Créateur ou communauté que vous suivez", Icon: Sparkles },
+  {
+    id: "social",
+    label: "Réseaux sociaux",
+    hint: "TikTok, Instagram, LinkedIn, etc.",
+    Icon: Video,
+  },
+  {
+    id: "influencer",
+    label: "Influenceur",
+    hint: "Créateur ou communauté que vous suivez",
+    Icon: Sparkles,
+  },
   { id: "friend", label: "Ami / collègue", hint: "Bouche à oreille", Icon: Users },
   { id: "search", label: "Recherche", hint: "Google ou store d'apps", Icon: Search },
   { id: "ads", label: "Publicité", hint: "Pub en ligne ou hors ligne", Icon: Megaphone },
@@ -961,11 +1069,24 @@ export function iconForCategoryLabel(label) {
   if (text.includes("health") || text.includes("nurse")) return HeartPulse;
   if (text.includes("childcare") || text.includes("education")) return GraduationCap;
   if (text.includes("finance") || text.includes("account")) return DollarSign;
-  if (text.includes("hospitality") || text.includes("food") || text.includes("restaurant") || text.includes("hotel")) return UtensilsCrossed;
-  if (text.includes("agri") || text.includes("harvest") || text.includes("farm") || text.includes("vineyard")) return Leaf;
+  if (
+    text.includes("hospitality") ||
+    text.includes("food") ||
+    text.includes("restaurant") ||
+    text.includes("hotel")
+  )
+    return UtensilsCrossed;
+  if (
+    text.includes("agri") ||
+    text.includes("harvest") ||
+    text.includes("farm") ||
+    text.includes("vineyard")
+  )
+    return Leaf;
   if (text.includes("security")) return Shield;
   if (text.includes("logistic") || text.includes("warehouse")) return Package;
-  if (text.includes("transport") || text.includes("delivery") || text.includes("driver")) return Truck;
+  if (text.includes("transport") || text.includes("delivery") || text.includes("driver"))
+    return Truck;
   if (text.includes("trade") || text.includes("construction")) return Hammer;
   if (text.includes("operation") || text.includes("strategy")) return Briefcase;
   if (text.includes("engineering")) return Wrench;
@@ -1003,20 +1124,29 @@ function resolveJobCategory(id, label) {
   }
 
   const text = `${id || ""} ${label || ""}`.toLowerCase();
-  if (text.includes("hospitality") || text.includes("food") || text.includes("restaurant") || text.includes("hotel")) {
+  if (
+    text.includes("hospitality") ||
+    text.includes("food") ||
+    text.includes("restaurant") ||
+    text.includes("hotel")
+  ) {
     return JOB_CATEGORIES.find((c) => c.id === "hospitality_food");
   }
   if (text.includes("retail")) return JOB_CATEGORIES.find((c) => c.id === "retail");
   if (text.includes("agri") || text.includes("harvest") || text.includes("farm")) {
     return JOB_CATEGORIES.find((c) => c.id === "agriculture");
   }
-  if (text.includes("logistic") || text.includes("warehouse")) return JOB_CATEGORIES.find((c) => c.id === "logistics");
-  if (text.includes("transport") || text.includes("delivery")) return JOB_CATEGORIES.find((c) => c.id === "transport");
-  if (text.includes("trade") || text.includes("construction")) return JOB_CATEGORIES.find((c) => c.id === "trades");
+  if (text.includes("logistic") || text.includes("warehouse"))
+    return JOB_CATEGORIES.find((c) => c.id === "logistics");
+  if (text.includes("transport") || text.includes("delivery"))
+    return JOB_CATEGORIES.find((c) => c.id === "transport");
+  if (text.includes("trade") || text.includes("construction"))
+    return JOB_CATEGORIES.find((c) => c.id === "trades");
   if (text.includes("childcare") || text.includes("education") || text.includes("camp")) {
     return JOB_CATEGORIES.find((c) => c.id === "education_childcare");
   }
-  if (text.includes("software") || text.includes("technology")) return JOB_CATEGORIES.find((c) => c.id === "software");
+  if (text.includes("software") || text.includes("technology"))
+    return JOB_CATEGORIES.find((c) => c.id === "software");
   if (text.includes("marketing")) return JOB_CATEGORIES.find((c) => c.id === "marketing");
   if (text.includes("sales")) return JOB_CATEGORIES.find((c) => c.id === "sales");
   if (text.includes("health")) return JOB_CATEGORIES.find((c) => c.id === "healthcare");
@@ -1028,7 +1158,8 @@ function resolveJobCategory(id, label) {
   if (text.includes("consult")) return JOB_CATEGORIES.find((c) => c.id === "consulting");
   if (text.includes("customer")) return JOB_CATEGORIES.find((c) => c.id === "customer");
   if (text.includes("operation")) return JOB_CATEGORIES.find((c) => c.id === "operations");
-  if (text.includes("human") || text.includes("hr")) return JOB_CATEGORIES.find((c) => c.id === "hr");
+  if (text.includes("human") || text.includes("hr"))
+    return JOB_CATEGORIES.find((c) => c.id === "hr");
   if (text.includes("product")) return JOB_CATEGORIES.find((c) => c.id === "product");
   return null;
 }

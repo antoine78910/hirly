@@ -28,11 +28,7 @@ import {
   tryTrackTrainingActivity,
 } from "../lib/trainingData";
 import { quizForModule } from "../lib/trainingQuizzes";
-import {
-  parseTrainingLocale,
-  trainingHubPath,
-  trainingModulePath,
-} from "../lib/trainingRoutes";
+import { parseTrainingLocale, trainingHubPath, trainingModulePath } from "../lib/trainingRoutes";
 import {
   dismissTrainingCompletionFeedback,
   queueTrainingCompletionFeedback,
@@ -74,9 +70,10 @@ function VideoBlock({ url, t, onVideoEnded }) {
       );
     }
 
-    const embed = resolvedUrl.includes("youtube.com/embed") || resolvedUrl.includes("youtu.be")
-      ? resolvedUrl.replace("watch?v=", "embed/").replace("youtu.be/", "youtube.com/embed/")
-      : resolvedUrl;
+    const embed =
+      resolvedUrl.includes("youtube.com/embed") || resolvedUrl.includes("youtu.be")
+        ? resolvedUrl.replace("watch?v=", "embed/").replace("youtu.be/", "youtube.com/embed/")
+        : resolvedUrl;
 
     if (embed.includes("youtube.com/embed") || embed.includes("player.vimeo.com")) {
       return (
@@ -174,7 +171,9 @@ export default function TrainingCourse() {
     }
   }, [courseId, hubPath, lang, moduleParam, navigate, t]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
   const modules = data?.modules || [];
   const activeModule = useMemo(
@@ -213,20 +212,13 @@ export default function TrainingCourse() {
       trainingModulePath(routeLocale, courseId, activeModule.module_id, activeSection.section_id),
       { replace: true },
     );
-  }, [
-    activeModule,
-    activeSection,
-    courseId,
-    hasSections,
-    navigate,
-    routeLocale,
-    sectionParam,
-  ]);
+  }, [activeModule, activeSection, courseId, hasSections, navigate, routeLocale, sectionParam]);
 
   const activeSectionIndex = hasSections
     ? sections.findIndex((s) => s.section_id === activeSection?.section_id)
     : -1;
-  const hasNextSection = hasSections && activeSectionIndex >= 0 && activeSectionIndex < sections.length - 1;
+  const hasNextSection =
+    hasSections && activeSectionIndex >= 0 && activeSectionIndex < sections.length - 1;
   const atChapterEnd = !hasNextSection;
 
   useEffect(() => {
@@ -249,16 +241,12 @@ export default function TrainingCourse() {
     }
   }, [loading, data, activeModule, hubPath, navigate]);
 
-  const displayVideoUrl = hasSections
-    ? activeSection?.video_url
-    : activeModule?.video_url;
+  const displayVideoUrl = hasSections ? activeSection?.video_url : activeModule?.video_url;
 
   const isCreatingContentModule = activeModule?.module_id === "mod_creating_content";
   const showPresentationVideoAtTop = hasSections && isCreatingContentModule;
 
-  const displayContent = hasSections
-    ? activeSection?.content
-    : activeModule?.content;
+  const displayContent = hasSections ? activeSection?.content : activeModule?.content;
 
   const pageTitle =
     activeModule?.module_id === "mod_content_bank" && activeSection?.title
@@ -298,7 +286,9 @@ export default function TrainingCourse() {
   }, [activeModuleId, sectionParam]);
 
   const selectSection = (sectionId) => {
-    navigate(trainingModulePath(routeLocale, courseId, activeModule.module_id, sectionId), { replace: true });
+    navigate(trainingModulePath(routeLocale, courseId, activeModule.module_id, sectionId), {
+      replace: true,
+    });
   };
 
   const goToNextSection = () => {
@@ -443,7 +433,9 @@ export default function TrainingCourse() {
         toast.success(t("courseCompleted"));
         setTimeout(() => {
           setCelebrateModuleId(null);
-          if (shouldShowTrainingCompletionFeedback(courseId, user?.user_id, { atFullProgress: true })) {
+          if (
+            shouldShowTrainingCompletionFeedback(courseId, user?.user_id, { atFullProgress: true })
+          ) {
             setFeedbackOpen(true);
           } else {
             navigate(hubPath, { replace: true });
@@ -456,7 +448,9 @@ export default function TrainingCourse() {
           setActiveModuleId(next.module_id);
           const nextSections = next.sections || [];
           const nextSection = nextSections[0]?.section_id;
-          navigate(trainingModulePath(routeLocale, courseId, next.module_id, nextSection), { replace: true });
+          navigate(trainingModulePath(routeLocale, courseId, next.module_id, nextSection), {
+            replace: true,
+          });
           setCompleting(false);
         }, 900);
       } else {
@@ -501,22 +495,21 @@ export default function TrainingCourse() {
     navigate(hubPath, { replace: true });
   };
 
-  const scoredModules = modules.filter((m) =>
-    SCORED_MODULE_IDS.includes(m.module_id),
-  );
+  const scoredModules = modules.filter((m) => SCORED_MODULE_IDS.includes(m.module_id));
 
-  const moduleStepper = scoredModules.length > 0 ? (
-    <TrainingModuleStepper
-      modules={scoredModules}
-      activeModuleId={activeModuleId}
-      courseId={courseId}
-      enrollment={data?.enrollment}
-      lang={lang}
-      progressTick={progressTick}
-      celebrateModuleId={celebrateModuleId}
-      onModuleSelect={goToModule}
-    />
-  ) : null;
+  const moduleStepper =
+    scoredModules.length > 0 ? (
+      <TrainingModuleStepper
+        modules={scoredModules}
+        activeModuleId={activeModuleId}
+        courseId={courseId}
+        enrollment={data?.enrollment}
+        lang={lang}
+        progressTick={progressTick}
+        celebrateModuleId={celebrateModuleId}
+        onModuleSelect={goToModule}
+      />
+    ) : null;
 
   const hasVideo = Boolean(showPresentationVideoAtTop || displayVideoUrl);
 
@@ -539,9 +532,7 @@ export default function TrainingCourse() {
 
       {activeSection?.resources?.length ? (
         <section className="space-y-4 border-t border-zinc-100 pt-8">
-          <h3 className="text-lg font-semibold text-zinc-900">
-            Ressources
-          </h3>
+          <h3 className="text-lg font-semibold text-zinc-900">Ressources</h3>
           <ModuleDocView blocks={activeSection.resources} lang={lang} />
         </section>
       ) : null}
@@ -604,61 +595,65 @@ export default function TrainingCourse() {
         onSubmitted={() => handleFeedbackDismiss({ submitted: true })}
       />
       <div className="min-h-dvh bg-white text-zinc-900">
-      <TrainingTopBar
-        backTo={hubPath}
-        progressPct={overallProgressPct}
-        moduleStepper={moduleStepper}
-      />
-
-      {hasSections ? (
-        <ModuleSectionNav
-          variant="sidebar"
-          placement="fixed"
-          sections={sections}
-          activeSectionId={activeSection?.section_id}
-          onSelect={selectSection}
+        <TrainingTopBar
+          backTo={hubPath}
+          progressPct={overallProgressPct}
+          moduleStepper={moduleStepper}
         />
-      ) : null}
 
-      <main
-        className={
-          hasSections
-            ? `training-main-with-sidebar ${TRAINING_PAGE_OFFSET_CLASS} pb-8 sm:pb-10`
-            : `${TRAINING_PAGE_OFFSET_CLASS} mx-auto max-w-3xl px-4 pb-8 sm:px-8 sm:pb-10`
-        }
-      >
         {hasSections ? (
-          <div className="mb-4 lg:hidden">
-            <ModuleSectionNav
-              variant="tabs"
-              sections={sections}
-              activeSectionId={activeSection?.section_id}
-              onSelect={selectSection}
-            />
-          </div>
+          <ModuleSectionNav
+            variant="sidebar"
+            placement="fixed"
+            sections={sections}
+            activeSectionId={activeSection?.section_id}
+            onSelect={selectSection}
+          />
         ) : null}
 
-        <div className="mx-auto max-w-3xl space-y-5 sm:space-y-6">
-          <h1 className="font-display text-2xl font-bold tracking-tight text-zinc-900 sm:text-4xl">
-            {pageTitle}
-          </h1>
-
-          {showPresentationVideoAtTop ? (
-            <section className="space-y-2" data-testid="training-presentation-video">
-              <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
-                Vidéo de présentation
-              </p>
-              <div ref={videoContainerRef}>
-                <VideoBlock url={activeSection?.video_url || ""} t={t} onVideoEnded={handleVideoEnded} />
-              </div>
-              <ScrollToContinueHint visible={showScrollHint && hasVideo} lang={lang} />
-            </section>
+        <main
+          className={
+            hasSections
+              ? `training-main-with-sidebar ${TRAINING_PAGE_OFFSET_CLASS} pb-8 sm:pb-10`
+              : `${TRAINING_PAGE_OFFSET_CLASS} mx-auto max-w-3xl px-4 pb-8 sm:px-8 sm:pb-10`
+          }
+        >
+          {hasSections ? (
+            <div className="mb-4 lg:hidden">
+              <ModuleSectionNav
+                variant="tabs"
+                sections={sections}
+                activeSectionId={activeSection?.section_id}
+                onSelect={selectSection}
+              />
+            </div>
           ) : null}
 
-          {sectionBody}
-        </div>
-      </main>
-    </div>
+          <div className="mx-auto max-w-3xl space-y-5 sm:space-y-6">
+            <h1 className="font-display text-2xl font-bold tracking-tight text-zinc-900 sm:text-4xl">
+              {pageTitle}
+            </h1>
+
+            {showPresentationVideoAtTop ? (
+              <section className="space-y-2" data-testid="training-presentation-video">
+                <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                  Vidéo de présentation
+                </p>
+                <div ref={videoContainerRef}>
+                  <VideoBlock
+                    url={activeSection?.video_url || ""}
+                    t={t}
+                    onVideoEnded={handleVideoEnded}
+                  />
+                </div>
+                <ScrollToContinueHint visible={showScrollHint && hasVideo} lang={lang} />
+              </section>
+            ) : null}
+
+            {sectionBody}
+          </div>
+        </main>
+      </div>
     </>
   );
 }

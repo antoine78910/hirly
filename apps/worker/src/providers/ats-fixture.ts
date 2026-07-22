@@ -1,8 +1,4 @@
-import type {
-  Provider,
-  RateLimitConfig,
-  SourceRegistryEntry,
-} from "@hirly/contracts";
+import type { Provider, RateLimitConfig, SourceRegistryEntry } from "@hirly/contracts";
 import {
   IngestionError,
   type SourceAdapter,
@@ -89,10 +85,7 @@ export function requireBoundAtsUrl(input: {
       : input.pathKind === "lever_apply"
         ? [tenant, posting, "apply"]
         : [tenant, posting];
-  if (
-    parts.length !== expected.length ||
-    parts.some((part, index) => part !== expected[index])
-  ) {
+  if (parts.length !== expected.length || parts.some((part, index) => part !== expected[index])) {
     throw new IngestionError(
       "invalid_input",
       `${input.provider} canonical URL is not bound to the source tenant and posting`,
@@ -189,9 +182,10 @@ export abstract class FixtureOnlyAtsSourceAdapter<RawJob>
     }
   }
 
-  abstract normalize(raw: RawJob, context: SourceContext): ReturnType<
-    SourceAdapter<RawJob, AtsFixtureCursor, AtsFixtureScope>["normalize"]
-  >;
+  abstract normalize(
+    raw: RawJob,
+    context: SourceContext,
+  ): ReturnType<SourceAdapter<RawJob, AtsFixtureCursor, AtsFixtureScope>["normalize"]>;
 
   validateActive(_raw: RawJob, now: Date): SourceLifecycleEvidence {
     return {
@@ -222,17 +216,14 @@ export abstract class FixtureOnlyAtsSourceAdapter<RawJob>
 function fixturePageSize(source: SourceRegistryEntry): number {
   const configured = source.checkpoint?.fixturePageSize;
   return typeof configured === "number" &&
-      Number.isInteger(configured) &&
-      configured > 0 &&
-      configured <= 500
+    Number.isInteger(configured) &&
+    configured > 0 &&
+    configured <= 500
     ? configured
     : 100;
 }
 
-function fixtureOffset(
-  cursor: AtsFixtureCursor | null,
-  total: number,
-): number {
+function fixtureOffset(cursor: AtsFixtureCursor | null, total: number): number {
   if (!cursor) return 0;
   if (
     cursor.version !== ATS_FIXTURE_CURSOR_VERSION ||

@@ -8,9 +8,7 @@ import type {
 import type { DueSchedule, RuntimeStore } from "./types";
 
 export class PostgresRuntimeStore implements RuntimeStore {
-  constructor(
-    private readonly repository: WorkerRepository,
-  ) {}
+  constructor(private readonly repository: WorkerRepository) {}
 
   async assertProviderRunnable(provider: Provider): Promise<void> {
     return this.repository.assertProviderRunnable(provider);
@@ -20,10 +18,7 @@ export class PostgresRuntimeStore implements RuntimeStore {
     return this.repository.listDueSchedules(limit);
   }
 
-  enqueueDueSchedule(
-    scheduleId: string,
-    nextDueAt: Date,
-  ): Promise<string | null> {
+  enqueueDueSchedule(scheduleId: string, nextDueAt: Date): Promise<string | null> {
     return this.repository.enqueueDueSchedule(scheduleId, nextDueAt);
   }
 
@@ -52,11 +47,7 @@ export class PostgresRuntimeStore implements RuntimeStore {
     providerClaim: Parameters<WorkerRepository["beginSproutIncrementalCycle"]>[1],
     sourceId: Parameters<WorkerRepository["beginSproutIncrementalCycle"]>[2],
   ) {
-    return this.repository.beginSproutIncrementalCycle(
-      lease,
-      providerClaim,
-      sourceId,
-    );
+    return this.repository.beginSproutIncrementalCycle(lease, providerClaim, sourceId);
   }
 
   bindSproutSourceRun(
@@ -65,18 +56,10 @@ export class PostgresRuntimeStore implements RuntimeStore {
     sourceId: Parameters<WorkerRepository["bindSproutSourceRun"]>[2],
     mode: Parameters<WorkerRepository["bindSproutSourceRun"]>[3],
   ) {
-    return this.repository.bindSproutSourceRun(
-      lease,
-      providerClaim,
-      sourceId,
-      mode,
-    );
+    return this.repository.bindSproutSourceRun(lease, providerClaim, sourceId, mode);
   }
 
-  getSproutSourceRuntime(
-    sourceId: string,
-    mode: "canary" | "backfill" | "incremental",
-  ) {
+  getSproutSourceRuntime(sourceId: string, mode: "canary" | "backfill" | "incremental") {
     return this.repository.getSproutSourceRuntime(sourceId, mode);
   }
 
@@ -99,10 +82,7 @@ export class PostgresRuntimeStore implements RuntimeStore {
     return this.repository.getSproutAuthSession();
   }
 
-  compareAndSwapSproutAuthSession(
-    expectedVersion: bigint | null,
-    ciphertext: string,
-  ) {
+  compareAndSwapSproutAuthSession(expectedVersion: bigint | null, ciphertext: string) {
     return this.repository.compareAndSwapSproutAuthSession(expectedVersion, ciphertext);
   }
 
@@ -110,29 +90,15 @@ export class PostgresRuntimeStore implements RuntimeStore {
     return this.repository.claimProviderWork(lease, provider, leaseSeconds);
   }
 
-  heartbeatProviderWork(
-    lease: Lease,
-    providerClaim: ProviderWorkClaim,
-    leaseSeconds: number,
-  ) {
-    return this.repository.heartbeatProviderWork(
-      lease,
-      providerClaim,
-      leaseSeconds,
-    );
+  heartbeatProviderWork(lease: Lease, providerClaim: ProviderWorkClaim, leaseSeconds: number) {
+    return this.repository.heartbeatProviderWork(lease, providerClaim, leaseSeconds);
   }
 
-  finishProviderWork(
-    lease: Lease,
-    providerClaim: ProviderWorkClaim,
-  ) {
+  finishProviderWork(lease: Lease, providerClaim: ProviderWorkClaim) {
     return this.repository.finishProviderWork(lease, providerClaim);
   }
 
-  releaseProviderWork(
-    lease: Lease,
-    providerClaim: ProviderWorkClaim,
-  ) {
+  releaseProviderWork(lease: Lease, providerClaim: ProviderWorkClaim) {
     return this.repository.releaseProviderWork(lease, providerClaim);
   }
 }
@@ -164,9 +130,7 @@ export class PostgresJobProjectionStore {
     return this.repository.finish(...args);
   }
 
-  enqueueReconciliation(
-    ...args: Parameters<JobProjectionRepository["enqueueReconciliation"]>
-  ) {
+  enqueueReconciliation(...args: Parameters<JobProjectionRepository["enqueueReconciliation"]>) {
     return this.repository.enqueueReconciliation(...args);
   }
 }

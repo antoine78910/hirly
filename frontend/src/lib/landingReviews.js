@@ -37,7 +37,10 @@ export function getLandingReviewsAll(lang) {
 }
 
 function normalizeLandingReviewsLocale(lang) {
-  return String(lang || "").trim().toLowerCase().split("-")[0];
+  return String(lang || "")
+    .trim()
+    .toLowerCase()
+    .split("-")[0];
 }
 
 function getGermanReviewsCopy() {
@@ -45,7 +48,8 @@ function getGermanReviewsCopy() {
     badge: "Echte Bewertungen. Echte Menschen.",
     title: "Echte Ergebnisse von echten Bewerber:innen.",
     titleAccent: "Mit Hirly haben sie schneller einen Job gefunden.",
-    subtitle: "Das sagen Bewerber:innen über Hirly — ehrlich, ungefiltert und aus eigener Erfahrung.",
+    subtitle:
+      "Das sagen Bewerber:innen über Hirly — ehrlich, ungefiltert und aus eigener Erfahrung.",
   };
 }
 
@@ -69,107 +73,106 @@ function getItalianReviewsCopy() {
 
 function getFrenchReviewColumns() {
   return [
-      [
-        {
-          id: "thomas",
-          name: "Thomas W.",
-          subline: "Plusieurs entretiens en quelques jours",
-          quote:
-            "Je n'avais jamais décroché d'entretiens aussi vite. Je ne sais pas si c'est la chance, mais franchement, ça marche.",
-        },
-        {
-          id: "verified",
-          name: "Utilisateur vérifié",
-          subline: "Avis 5 étoiles",
-          quote:
-            "Rien ne vaut Hirly. J'ai entre 5 et 10 entretiens par semaine. C'est devenu mon quotidien.",
-        },
-        {
-          id: "karim",
-          name: "Karim J.",
-          subline: "Plus de 5 entretiens",
-          quote: "Super appli : j'ai déjà décroché plus de 5 entretiens grâce à elle.",
-        },
-        {
-          id: "lea",
-          name: "Léa M.",
-          subline: "Étudiante en école de commerce",
-          quote:
-            "L'interface est vraiment l'une des plus soignées que j'ai vues. On sent qu'ils pensent vraiment aux étudiants.",
-        },
-        {
-          id: "nicolas",
-          name: "Nicolas S.",
-          subline: "Plus de 40 candidatures envoyées",
-          quote: "Hirly change complètement la façon de chercher un emploi.",
-        },
-        {
-          id: "sarah",
-          name: "Sarah B.",
-          subline: "En recherche de CDI",
-          quote:
-            "Remplir son profil une seule fois et swiper sur des offres pertinentes, ça change vraiment la donne.",
-        },
-        {
-          id: "hugo",
-          name: "Hugo S.",
-          subline: "Designer",
-          quote:
-            "Une plateforme bienveillante et efficace. Un vrai soulagement quand on peine à trouver un emploi.",
-        },
-      ],
-      [
-        {
-          id: "antoine",
-          name: "Antoine B.",
-          subline: "CDI dans une grande banque",
-          quote:
-            "Avec Hirly, j'ai eu plus de 10 entretiens et décroché un CDI dans une grande banque. J'ai déjà recommandé l'appli à 7 personnes.",
-        },
-        {
-          id: "camille",
-          name: "Camille R.",
-          subline: "Alternance dans un grand groupe",
-          quote:
-            "Postuler offre par offre ne donnait plus rien. Hirly m'a redonné confiance dans ma recherche.",
-        },
-        {
-          id: "julie",
-          name: "Julie T.",
-          subline: "CDI en marketing",
-          quote:
-            "J'ai accepté une offre dans une entreprise où j'avais postulé via Hirly. Le processus a été beaucoup plus simple.",
-        },
-        {
-          id: "marc",
-          name: "Marc D.",
-          subline: "Responsable RH",
-          quote:
-            "En tant que RH, je conseille toujours d'adapter son CV. Cette appli comble vraiment ce manque. Les résultats se voient.",
-        },
-        {
-          id: "emma",
-          name: "Emma L.",
-          subline: "Entretiens chez plusieurs grands comptes",
-          quote:
-            "Je suis bluffée par le nombre d'entretiens depuis que j'utilise Hirly. Des entreprises que je n'aurais jamais trouvées seule.",
-        },
-        {
-          id: "david",
-          name: "David P.",
-          subline: "Entretien dans la tech",
-          quote:
-            "Swiper au lieu de remplir des formulaires sans fin, ça me fait gagner un temps fou.",
-        },
-        {
-          id: "ines",
-          name: "Inès V.",
-          subline: "Dernière étape dans un grand groupe",
-          quote:
-            "La recherche d'emploi, c'est épuisant. Hirly enlève une grosse partie du stress.",
-        },
-      ],
-    ];
+    [
+      {
+        id: "thomas",
+        name: "Thomas W.",
+        subline: "Plusieurs entretiens en quelques jours",
+        quote:
+          "Je n'avais jamais décroché d'entretiens aussi vite. Je ne sais pas si c'est la chance, mais franchement, ça marche.",
+      },
+      {
+        id: "verified",
+        name: "Utilisateur vérifié",
+        subline: "Avis 5 étoiles",
+        quote:
+          "Rien ne vaut Hirly. J'ai entre 5 et 10 entretiens par semaine. C'est devenu mon quotidien.",
+      },
+      {
+        id: "karim",
+        name: "Karim J.",
+        subline: "Plus de 5 entretiens",
+        quote: "Super appli : j'ai déjà décroché plus de 5 entretiens grâce à elle.",
+      },
+      {
+        id: "lea",
+        name: "Léa M.",
+        subline: "Étudiante en école de commerce",
+        quote:
+          "L'interface est vraiment l'une des plus soignées que j'ai vues. On sent qu'ils pensent vraiment aux étudiants.",
+      },
+      {
+        id: "nicolas",
+        name: "Nicolas S.",
+        subline: "Plus de 40 candidatures envoyées",
+        quote: "Hirly change complètement la façon de chercher un emploi.",
+      },
+      {
+        id: "sarah",
+        name: "Sarah B.",
+        subline: "En recherche de CDI",
+        quote:
+          "Remplir son profil une seule fois et swiper sur des offres pertinentes, ça change vraiment la donne.",
+      },
+      {
+        id: "hugo",
+        name: "Hugo S.",
+        subline: "Designer",
+        quote:
+          "Une plateforme bienveillante et efficace. Un vrai soulagement quand on peine à trouver un emploi.",
+      },
+    ],
+    [
+      {
+        id: "antoine",
+        name: "Antoine B.",
+        subline: "CDI dans une grande banque",
+        quote:
+          "Avec Hirly, j'ai eu plus de 10 entretiens et décroché un CDI dans une grande banque. J'ai déjà recommandé l'appli à 7 personnes.",
+      },
+      {
+        id: "camille",
+        name: "Camille R.",
+        subline: "Alternance dans un grand groupe",
+        quote:
+          "Postuler offre par offre ne donnait plus rien. Hirly m'a redonné confiance dans ma recherche.",
+      },
+      {
+        id: "julie",
+        name: "Julie T.",
+        subline: "CDI en marketing",
+        quote:
+          "J'ai accepté une offre dans une entreprise où j'avais postulé via Hirly. Le processus a été beaucoup plus simple.",
+      },
+      {
+        id: "marc",
+        name: "Marc D.",
+        subline: "Responsable RH",
+        quote:
+          "En tant que RH, je conseille toujours d'adapter son CV. Cette appli comble vraiment ce manque. Les résultats se voient.",
+      },
+      {
+        id: "emma",
+        name: "Emma L.",
+        subline: "Entretiens chez plusieurs grands comptes",
+        quote:
+          "Je suis bluffée par le nombre d'entretiens depuis que j'utilise Hirly. Des entreprises que je n'aurais jamais trouvées seule.",
+      },
+      {
+        id: "david",
+        name: "David P.",
+        subline: "Entretien dans la tech",
+        quote:
+          "Swiper au lieu de remplir des formulaires sans fin, ça me fait gagner un temps fou.",
+      },
+      {
+        id: "ines",
+        name: "Inès V.",
+        subline: "Dernière étape dans un grand groupe",
+        quote: "La recherche d'emploi, c'est épuisant. Hirly enlève une grosse partie du stress.",
+      },
+    ],
+  ];
 }
 
 function getGermanReviewColumns() {
@@ -187,8 +190,8 @@ function getItalianReviewColumns() {
 function getEnglishReviewColumnsWithVerifiedLabel(verifiedUserLabel) {
   return getEnglishReviewColumns().map((column) =>
     column.map((review) =>
-      review.id === "verified" ? { ...review, name: verifiedUserLabel } : review
-    )
+      review.id === "verified" ? { ...review, name: verifiedUserLabel } : review,
+    ),
   );
 }
 

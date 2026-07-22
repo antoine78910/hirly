@@ -13,11 +13,7 @@ export function TrainingLocaleProvider({ children, locale = "fr" }) {
 
   const value = useMemo(() => ({ lang, setLang, t }), [lang, setLang, t]);
 
-  return (
-    <TrainingLocaleContext.Provider value={value}>
-      {children}
-    </TrainingLocaleContext.Provider>
-  );
+  return <TrainingLocaleContext.Provider value={value}>{children}</TrainingLocaleContext.Provider>;
 }
 
 export function useTrainingLocale() {

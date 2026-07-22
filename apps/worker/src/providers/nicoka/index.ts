@@ -1,13 +1,6 @@
 import { z } from "zod";
-import {
-  IngestionError,
-  type SourceAdapter,
-  type SourceContext,
-} from "@hirly/ingestion";
-import {
-  DisabledProviderTransport,
-  type ProviderCore,
-} from "../core";
+import { IngestionError, type SourceAdapter, type SourceContext } from "@hirly/ingestion";
+import { DisabledProviderTransport, type ProviderCore } from "../core";
 import {
   FixtureOnlyAtsSourceAdapter,
   type AtsFixtureCursor,
@@ -24,7 +17,11 @@ import { approveAtsInventoryShadowScope } from "../ats-inventory-readiness";
 
 const nicokaIdSchema = z.union([z.string(), z.number()]).transform(String);
 const optionalText = z.string().trim().max(100_000).nullable().optional();
-const tenantSchema = z.string().min(1).max(128).regex(/^[a-z0-9][a-z0-9_-]*$/i);
+const tenantSchema = z
+  .string()
+  .min(1)
+  .max(128)
+  .regex(/^[a-z0-9][a-z0-9_-]*$/i);
 
 export const nicokaRawJobSchema = z
   .object({
@@ -81,10 +78,7 @@ const rateLimit = { requestsPerMinute: 60, concurrency: 1 } as const;
 function normalizeCountry(value: string | null | undefined, fallback: string) {
   const countryCode = value?.toUpperCase() ?? fallback.toUpperCase();
   if (!/^[A-Z]{2}$/.test(countryCode)) {
-    throw new IngestionError(
-      "invalid_input",
-      "Nicoka country must be an ISO alpha-2 code",
-    );
+    throw new IngestionError("invalid_input", "Nicoka country must be an ISO alpha-2 code");
   }
   return countryCode;
 }
@@ -95,29 +89,26 @@ function nicokaTenantFromApplyUrl(value: string): string {
     return decodePath(url)[0] ?? "";
   }
   const suffix = ".nicoka.com";
-  return url.hostname.endsWith(suffix)
-    ? url.hostname.slice(0, -suffix.length)
-    : "";
+  return url.hostname.endsWith(suffix) ? url.hostname.slice(0, -suffix.length) : "";
 }
 
 function decodePath(url: URL): string[] {
-  return url.pathname.split("/").filter(Boolean).map((part) => {
-    try {
-      return decodeURIComponent(part);
-    } catch {
-      throw new IngestionError(
-        "invalid_input",
-        "Nicoka canonical URL contains an invalid encoded path",
-      );
-    }
-  });
+  return url.pathname
+    .split("/")
+    .filter(Boolean)
+    .map((part) => {
+      try {
+        return decodeURIComponent(part);
+      } catch {
+        throw new IngestionError(
+          "invalid_input",
+          "Nicoka canonical URL contains an invalid encoded path",
+        );
+      }
+    });
 }
 
-function requireNicokaApplyUrl(
-  value: string,
-  tenantKey: string,
-  postingUid: string,
-): string {
+function requireNicokaApplyUrl(value: string, tenantKey: string, postingUid: string): string {
   const url = new URL(value);
   const tenant = tenantKey.toLowerCase();
   const parts = decodePath(url).map((part) => part.toLowerCase());
@@ -147,32 +138,22 @@ function requireNicokaApplyUrl(
 
 function sourceUrl(tenantKey: string, postingId: string): string {
   const parsedTenantKey = tenantSchema.parse(tenantKey).toLowerCase();
-  const url = new URL(
-    `https://${parsedTenantKey}.nicoka.com/api/jobs/published`,
-  );
+  const url = new URL(`https://${parsedTenantKey}.nicoka.com/api/jobs/published`);
   url.searchParams.set("jobid", postingId);
   return url.href;
 }
 
-function normalized(
-  rawValue: NicokaRawJob,
-  tenantKey: string,
-  fallbackCountryCode: string,
-) {
+function normalized(rawValue: NicokaRawJob, tenantKey: string, fallbackCountryCode: string) {
   const raw = nicokaRawJobSchema.parse(rawValue);
   const parsedTenantKey = tenantSchema.parse(tenantKey).toLowerCase();
   const postingId = raw.id;
-  const canonicalApplyUrl = requireNicokaApplyUrl(
-    raw.applicationUrl,
-    parsedTenantKey,
-    raw.uid,
-  );
+  const canonicalApplyUrl = requireNicokaApplyUrl(raw.applicationUrl, parsedTenantKey, raw.uid);
   const description = [raw.description, raw.requirements, raw.benefits]
     .filter((value): value is string => Boolean(value))
     .join("\n\n");
-  const location = [raw.city, raw.address_state]
-    .filter((value): value is string => Boolean(value))
-    .join(", ") || "Remote";
+  const location =
+    [raw.city, raw.address_state].filter((value): value is string => Boolean(value)).join(", ") ||
+    "Remote";
   return {
     envelope: {
       provider: "nicoka" as const,
@@ -213,11 +194,7 @@ export const nicokaProvider: ProviderCore<NicokaRawJob> = {
     provider: "nicoka",
     normalizeRaw(raw) {
       const parsed = nicokaRawJobSchema.parse(raw);
-      return normalized(
-        parsed,
-        nicokaTenantFromApplyUrl(parsed.applicationUrl),
-        "ZZ",
-      );
+      return normalized(parsed, nicokaTenantFromApplyUrl(parsed.applicationUrl), "ZZ");
     },
   },
   transport: new DisabledProviderTransport<NicokaRawJob>("nicoka"),
@@ -245,12 +222,7 @@ export function createNicokaFixtureSourceAdapter(
   rows: readonly NicokaRawJob[],
   fixturePolicyId: string,
 ): SourceAdapter<NicokaRawJob, AtsFixtureCursor, AtsFixtureScope> {
-  return new NicokaFixtureSourceAdapter(
-    "nicoka",
-    rateLimit,
-    rows,
-    fixturePolicyId,
-  );
+  return new NicokaFixtureSourceAdapter("nicoka", rateLimit, rows, fixturePolicyId);
 }
 
 export interface NicokaShadowBudgets {
@@ -266,30 +238,36 @@ export interface NicokaShadowOptions {
   readonly budgets?: Partial<NicokaShadowBudgets>;
 }
 
-export function createNicokaShadowTransport(options: NicokaShadowOptions):
-  BoundAtsTrialTransport & {
-    readonly shadowOnly: true;
-    readonly environment: NicokaEnvironment;
-    fetch(signal: AbortSignal): Promise<readonly NicokaRawJob[]>;
-  } {
+export function createNicokaShadowTransport(
+  options: NicokaShadowOptions,
+): BoundAtsTrialTransport & {
+  readonly shadowOnly: true;
+  readonly environment: NicokaEnvironment;
+  fetch(signal: AbortSignal): Promise<readonly NicokaRawJob[]>;
+} {
   const approvedTenantId = tenantSchema.parse(options.approvedTenantId).toLowerCase();
-  const budgets = z.object({
-    maxPages: z.number().int().positive().max(20),
-    maxBytesPerPage: z.number().int().positive().max(10_000_000),
-    timeoutMsPerPage: z.number().int().positive().max(60_000),
-  }).strict().parse({
-    maxPages: 10,
-    maxBytesPerPage: 2_000_000,
-    timeoutMsPerPage: 10_000,
-    ...options.budgets,
-  });
+  const budgets = z
+    .object({
+      maxPages: z.number().int().positive().max(20),
+      maxBytesPerPage: z.number().int().positive().max(10_000_000),
+      timeoutMsPerPage: z.number().int().positive().max(60_000),
+    })
+    .strict()
+    .parse({
+      maxPages: 10,
+      maxBytesPerPage: 2_000_000,
+      timeoutMsPerPage: 10_000,
+      ...options.budgets,
+    });
   const fetch = options.fetch ?? globalThis.fetch;
-  const host = options.environment === "trial"
-    ? "trial.nicoka.com"
-    : `${approvedTenantId.toLowerCase()}.nicoka.com`;
-  const basePath = options.environment === "trial"
-    ? `/${encodeURIComponent(approvedTenantId)}/api/jobs/published`
-    : "/api/jobs/published";
+  const host =
+    options.environment === "trial"
+      ? "trial.nicoka.com"
+      : `${approvedTenantId.toLowerCase()}.nicoka.com`;
+  const basePath =
+    options.environment === "trial"
+      ? `/${encodeURIComponent(approvedTenantId)}/api/jobs/published`
+      : "/api/jobs/published";
   const perPageBudgets: AtsTrialTransportBudgets = {
     maxRequests: 1,
     maxPages: 1,
@@ -366,11 +344,13 @@ export function createNicokaShadowTransport(options: NicokaShadowOptions):
   };
 }
 
-export function createApprovedNicokaShadowTransport(options: NicokaShadowOptions & {
-  readonly countryCode: string;
-  readonly policy: unknown;
-  readonly now?: Date;
-}) {
+export function createApprovedNicokaShadowTransport(
+  options: NicokaShadowOptions & {
+    readonly countryCode: string;
+    readonly policy: unknown;
+    readonly now?: Date;
+  },
+) {
   const approval = approveAtsInventoryShadowScope({
     policy: options.policy,
     provider: "nicoka",

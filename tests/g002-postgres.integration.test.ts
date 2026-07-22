@@ -17,18 +17,7 @@ async function psql(sql: string): Promise<SqlResult> {
     throw new Error("G002_TEST_DATABASE_URL is required");
   }
   const process = Bun.spawn(
-    [
-      "psql",
-      databaseUrl,
-      "-X",
-      "-v",
-      "ON_ERROR_STOP=1",
-      "-A",
-      "-t",
-      "-q",
-      "-c",
-      sql,
-    ],
+    ["psql", databaseUrl, "-X", "-v", "ON_ERROR_STOP=1", "-A", "-t", "-q", "-c", sql],
     { stdout: "pipe", stderr: "pipe" },
   );
   const [exitCode, stdout, stderr] = await Promise.all([
@@ -44,16 +33,7 @@ async function applyFile(relativePath: string): Promise<void> {
     throw new Error("G002_TEST_DATABASE_URL is required");
   }
   const process = Bun.spawn(
-    [
-      "psql",
-      databaseUrl,
-      "-X",
-      "-v",
-      "ON_ERROR_STOP=1",
-      "-q",
-      "-f",
-      join(repoRoot, relativePath),
-    ],
+    ["psql", databaseUrl, "-X", "-v", "ON_ERROR_STOP=1", "-q", "-f", join(repoRoot, relativePath)],
     { stdout: "pipe", stderr: "pipe" },
   );
   const [exitCode, stderr] = await Promise.all([
@@ -68,9 +48,7 @@ async function applyFile(relativePath: string): Promise<void> {
 function migrationPath(): string {
   const directory = join(repoRoot, "backend", "db", "migrations");
   const migration = readdirSync(directory).find(
-    (name) =>
-      name.endsWith("_typescript_worker_foundation.sql") &&
-      !name.endsWith(".down.sql"),
+    (name) => name.endsWith("_typescript_worker_foundation.sql") && !name.endsWith(".down.sql"),
   );
   if (!migration) {
     throw new Error("TypeScript worker foundation migration is missing");
@@ -177,16 +155,11 @@ describe("G002 real-Postgres durability and security", () => {
         SELECT pg_sleep(0.5);
         COMMIT;
       `);
-    const [first, second] = await Promise.all([
-      claim("worker-a"),
-      claim("worker-b"),
-    ]);
+    const [first, second] = await Promise.all([claim("worker-a"), claim("worker-b")]);
 
     expect(first.exitCode, first.stderr).toBe(0);
     expect(second.exitCode, second.stderr).toBe(0);
-    expect(
-      [claimedCount(first.stdout), claimedCount(second.stdout)].sort(),
-    ).toEqual([0, 1]);
+    expect([claimedCount(first.stdout), claimedCount(second.stdout)].sort()).toEqual([0, 1]);
     expect(
       await assertSql(`
         SELECT count(*) FROM public.worker_tasks WHERE status = 'running';
@@ -351,9 +324,7 @@ describe("G002 real-Postgres durability and security", () => {
       WHERE task.task_key = 'provider-task';
     `);
     expect(blockedWrite.exitCode).not.toBe(0);
-    expect(blockedWrite.stderr).toContain(
-      "provider authorization or writer ownership changed",
-    );
+    expect(blockedWrite.stderr).toContain("provider authorization or writer ownership changed");
     expect(
       await assertSql(`
         SELECT count(*) FROM public.jobs
@@ -406,9 +377,7 @@ describe("G002 real-Postgres durability and security", () => {
       WHERE task.task_key = 'collision-task';
     `);
     expect(collision.exitCode).not.toBe(0);
-    expect(collision.stderr).toContain(
-      "existing provider identity maps to another job id",
-    );
+    expect(collision.stderr).toContain("existing provider identity maps to another job id");
     expect(
       await assertSql(`
         SELECT job_id, title FROM public.jobs
@@ -433,16 +402,8 @@ describe("G002 real-Postgres durability and security", () => {
       SELECT count(*) FROM worker_private.claim_tasks('batch-worker', 1, 30);
     `);
 
-    const validFirst = canonicalJob(
-      "g002-batch-1",
-      "job_2635481a3f4a54e7",
-      "First",
-    );
-    const invalidSecond = canonicalJob(
-      "g002-batch-2",
-      "job_0000000000000000",
-      "Second",
-    );
+    const validFirst = canonicalJob("g002-batch-1", "job_2635481a3f4a54e7", "First");
+    const invalidSecond = canonicalJob("g002-batch-2", "job_0000000000000000", "Second");
     const rejectedBatch = await psql(`
       SELECT worker_private.write_jobs_and_complete(
         task.id, task.lease_token, task.claim_generation, task.lease_owner,
@@ -462,11 +423,7 @@ describe("G002 real-Postgres durability and security", () => {
       `),
     ).toBe("0|running");
 
-    const validSecond = canonicalJob(
-      "g002-batch-2",
-      "job_5251dce1e263d0be",
-      "Second",
-    );
+    const validSecond = canonicalJob("g002-batch-2", "job_5251dce1e263d0be", "Second");
     expect(
       await assertSql(`
         SELECT worker_private.write_jobs_and_complete(
@@ -506,10 +463,7 @@ describe("G002 real-Postgres durability and security", () => {
           'g002-schedule', '${nextDue}'::timestamptz
         )).id IS NOT NULL;
       `);
-    const [firstScheduler, secondScheduler] = await Promise.all([
-      enqueue(),
-      enqueue(),
-    ]);
+    const [firstScheduler, secondScheduler] = await Promise.all([enqueue(), enqueue()]);
     expect(firstScheduler.exitCode).toBe(0);
     expect(secondScheduler.exitCode).toBe(0);
     expect(
@@ -598,11 +552,7 @@ describe("G002 real-Postgres durability and security", () => {
       );
       SELECT count(*) FROM worker_private.claim_tasks('write-first-worker', 1, 30);
     `);
-    const job = canonicalJob(
-      "g002-write-first",
-      "job_7022729131d5a949",
-      "Write First",
-    );
+    const job = canonicalJob("g002-write-first", "job_7022729131d5a949", "Write First");
     const writeFirst = psql(`
       BEGIN;
       SELECT worker_private.write_jobs_and_complete(
@@ -620,10 +570,7 @@ describe("G002 real-Postgres durability and security", () => {
         'apec', 'blocked', 'test-downgrade', clock_timestamp()
       )).authorization_status;
     `);
-    const [writeResult, downgradeResult] = await Promise.all([
-      writeFirst,
-      downgradeSecond,
-    ]);
+    const [writeResult, downgradeResult] = await Promise.all([writeFirst, downgradeSecond]);
     expect(writeResult.exitCode, writeResult.stderr).toBe(0);
     expect(downgradeResult.exitCode, downgradeResult.stderr).toBe(0);
     expect(
@@ -712,9 +659,7 @@ describe("G002 real-Postgres durability and security", () => {
   runIntegration("rolls back only foundation objects and reapplies cleanly", async () => {
     await resetFixtureState();
     await applyFile(rollbackPath());
-    expect(await assertSql(`SELECT to_regclass('public.jobs') IS NOT NULL;`)).toBe(
-      "t",
-    );
+    expect(await assertSql(`SELECT to_regclass('public.jobs') IS NOT NULL;`)).toBe("t");
     expect(
       await assertSql(`
         SELECT count(*) FROM (
@@ -747,8 +692,9 @@ describe("G002 real-Postgres durability and security", () => {
 
 test("G002 real-Postgres suite is opt-in outside CI service setup", () => {
   if (!databaseUrl) {
-    expect(readFileSync(join(repoRoot, "backend", "db", "jobs_inventory_schema.sql"), "utf8"))
-      .toContain("CREATE TABLE IF NOT EXISTS jobs");
+    expect(
+      readFileSync(join(repoRoot, "backend", "db", "jobs_inventory_schema.sql"), "utf8"),
+    ).toContain("CREATE TABLE IF NOT EXISTS jobs");
   } else {
     expect(databaseUrl).toMatch(/^postgres(?:ql)?:\/\//);
   }

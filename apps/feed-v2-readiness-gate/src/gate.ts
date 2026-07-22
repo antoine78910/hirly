@@ -34,7 +34,7 @@ export interface FeedV2ReadinessEvidence {
 
 const object = (value: unknown): Record<string, unknown> | null =>
   value !== null && typeof value === "object" && !Array.isArray(value)
-    ? value as Record<string, unknown>
+    ? (value as Record<string, unknown>)
     : null;
 
 const number = (value: unknown): number | null =>
@@ -52,20 +52,23 @@ function validInternalUrl(value: string | undefined): boolean {
 
 function sideEffects(body: Record<string, unknown>): boolean {
   const refreshes = Array.isArray(body.refresh_results) ? body.refresh_results : [];
-  return body.background_refresh_scheduled === true
-    || body.jsearch_attempted === true
-    || body.provider_refresh_attempted === true
-    || refreshes.some((entry) => object(entry)?.attempted === true);
+  return (
+    body.background_refresh_scheduled === true ||
+    body.jsearch_attempted === true ||
+    body.provider_refresh_attempted === true ||
+    refreshes.some((entry) => object(entry)?.attempted === true)
+  );
 }
 
-export function evaluateFeedV2Readiness(
-  input: FeedV2ReadinessInput = {},
-): FeedV2ReadinessEvidence {
+export function evaluateFeedV2Readiness(input: FeedV2ReadinessInput = {}): FeedV2ReadinessEvidence {
   const reasons: string[] = [];
   const sloMs = number(input.sloMs) ?? 1_500;
-  const cohort = [...new Set((input.cohortUserIds ?? []).map((value) => value.trim()).filter(Boolean))];
-  const cohortReady = cohort.length === 0
-    || Boolean(input.smokeCandidateId && cohort.includes(input.smokeCandidateId));
+  const cohort = [
+    ...new Set((input.cohortUserIds ?? []).map((value) => value.trim()).filter(Boolean)),
+  ];
+  const cohortReady =
+    cohort.length === 0 ||
+    Boolean(input.smokeCandidateId && cohort.includes(input.smokeCandidateId));
   const healthLatency = number(input.health?.latencyMs);
   const checks = {
     delegationEnabled: input.delegationEnabled === true,
@@ -76,7 +79,8 @@ export function evaluateFeedV2Readiness(
     healthRoutingEnabled: input.health?.routingEnabled === true,
     healthWithinSlo: healthLatency !== null && healthLatency <= sloMs,
   };
-  for (const [key, passed] of Object.entries(checks)) if (!passed) reasons.push(`configuration:${key}`);
+  for (const [key, passed] of Object.entries(checks))
+    if (!passed) reasons.push(`configuration:${key}`);
 
   const smoke = input.publicSmoke;
   const body = object(smoke?.body);
@@ -91,12 +95,17 @@ export function evaluateFeedV2Readiness(
     if (latency === null || latency > sloMs) reasons.push("smoke:latency_exceeded");
     if (!body) reasons.push("smoke:invalid_body");
     else {
-      if (body.feed_mode === "legacy_jsearch_only" || body.fallback_used === "legacy_jsearch_only") {
+      if (
+        body.feed_mode === "legacy_jsearch_only" ||
+        body.fallback_used === "legacy_jsearch_only"
+      ) {
         reasons.push("smoke:legacy_jsearch_only");
       }
       if (sideEffects(body)) reasons.push("smoke:get_side_effect_detected");
-      const fetched = number(body.total_count) ?? number(body.jsearch_count) ?? number(body.fetched_count) ?? 0;
-      if (jobs && jobs.length === 0 && fetched > 0) reasons.push("smoke:empty_despite_fetched_inventory");
+      const fetched =
+        number(body.total_count) ?? number(body.jsearch_count) ?? number(body.fetched_count) ?? 0;
+      if (jobs && jobs.length === 0 && fetched > 0)
+        reasons.push("smoke:empty_despite_fetched_inventory");
       if (!jobs) reasons.push("smoke:jobs_missing");
     }
   }
@@ -105,7 +114,8 @@ export function evaluateFeedV2Readiness(
   return {
     schemaVersion: "hirly.feed-v2-readiness.v1",
     configurationStatus,
-    deploymentStatus: configurationStatus === "READY" && unmetReasons.length === 0 ? "READY" : "NOT_READY",
+    deploymentStatus:
+      configurationStatus === "READY" && unmetReasons.length === 0 ? "READY" : "NOT_READY",
     unmetReasons,
     checks,
     smoke: {

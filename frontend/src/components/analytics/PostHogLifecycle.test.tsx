@@ -4,8 +4,9 @@ import { createRoot, type Root } from "react-dom/client";
 import PostHogLifecycle from "./PostHogLifecycle";
 import * as posthogBoundary from "../../lib/posthogClient";
 
-(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean })
-  .IS_REACT_ACT_ENVIRONMENT = true;
+(
+  globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
+).IS_REACT_ACT_ENVIRONMENT = true;
 
 let mockCurrentUser: {
   analytics_user_id: string;
@@ -14,9 +15,13 @@ let mockCurrentUser: {
 } | null = null;
 let mockPathname = "/";
 
-jest.mock("react-router-dom", () => ({
-  useLocation: () => ({ pathname: mockPathname }),
-}), { virtual: true });
+jest.mock(
+  "react-router-dom",
+  () => ({
+    useLocation: () => ({ pathname: mockPathname }),
+  }),
+  { virtual: true },
+);
 
 jest.mock("../../context/AuthContext", () => ({
   useAuth: () => ({ user: mockCurrentUser }),
@@ -78,10 +83,10 @@ describe("PostHogLifecycle", () => {
     act(() => {
       root.render(<PostHogLifecycle />);
     });
-    expect(mockIdentifyPostHogUser).toHaveBeenCalledWith(
-      "123e4567-e89b-12d3-a456-426614174000",
-      { email: "user@example.com", name: "Ada Lovelace" },
-    );
+    expect(mockIdentifyPostHogUser).toHaveBeenCalledWith("123e4567-e89b-12d3-a456-426614174000", {
+      email: "user@example.com",
+      name: "Ada Lovelace",
+    });
     expect(mockIdentifyPostHogUser.mock.invocationCallOrder[0]).toBeLessThan(
       mockCapturePostHogPageview.mock.invocationCallOrder[0],
     );

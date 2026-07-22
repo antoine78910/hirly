@@ -97,8 +97,9 @@ export function scoreLocationResult(query, result) {
 }
 
 export function sortLocationResults(query, results) {
-  return [...(results || [])]
-    .sort((a, b) => scoreLocationResult(query, b) - scoreLocationResult(query, a));
+  return [...(results || [])].sort(
+    (a, b) => scoreLocationResult(query, b) - scoreLocationResult(query, a),
+  );
 }
 
 export function preferFranceLocationSearch(query) {
@@ -114,9 +115,9 @@ export function isResolvedLocation(locationData, typedValue = "") {
     return false;
   }
   return Boolean(
-    locationData.place_id
-    || (locationData.lat != null && locationData.lng != null)
-    || ["nominatim", "google", "photon"].includes(locationData.source),
+    locationData.place_id ||
+      (locationData.lat != null && locationData.lng != null) ||
+      ["nominatim", "google", "photon"].includes(locationData.source),
   );
 }
 
@@ -125,11 +126,45 @@ function scorePhotonResult(query, result) {
 }
 
 const FRENCH_CITY_MARKERS = new Set([
-  "dijon", "paris", "lyon", "marseille", "toulouse", "nice", "nantes", "strasbourg",
-  "lille", "montpellier", "rennes", "grenoble", "bordeaux", "reims", "metz", "nancy",
-  "angers", "caen", "rouen", "tours", "besancon", "brest", "amiens", "orleans",
-  "perpignan", "bayonne", "pau", "avignon", "annecy", "chambery", "valence", "nimes",
-  "mulhouse", "colmar", "lorient", "vannes", "quimper", "saint etienne", "clermont ferrant",
+  "dijon",
+  "paris",
+  "lyon",
+  "marseille",
+  "toulouse",
+  "nice",
+  "nantes",
+  "strasbourg",
+  "lille",
+  "montpellier",
+  "rennes",
+  "grenoble",
+  "bordeaux",
+  "reims",
+  "metz",
+  "nancy",
+  "angers",
+  "caen",
+  "rouen",
+  "tours",
+  "besancon",
+  "brest",
+  "amiens",
+  "orleans",
+  "perpignan",
+  "bayonne",
+  "pau",
+  "avignon",
+  "annecy",
+  "chambery",
+  "valence",
+  "nimes",
+  "mulhouse",
+  "colmar",
+  "lorient",
+  "vannes",
+  "quimper",
+  "saint etienne",
+  "clermont ferrant",
 ]);
 
 function looksLikeFranceLocation(text) {
@@ -148,11 +183,14 @@ export function enrichLocationData(locationData) {
   if (!label) return locationData;
 
   const isFrench = looksLikeFranceLocation(label);
-  const displayLabel = isFrench && !label.toLowerCase().includes("france")
-    ? `${label.split(",")[0].trim()}, France`
-    : label;
-  const countryCode = String(locationData.country_code || "").toLowerCase().trim()
-    || (isFrench ? "fr" : "");
+  const displayLabel =
+    isFrench && !label.toLowerCase().includes("france")
+      ? `${label.split(",")[0].trim()}, France`
+      : label;
+  const countryCode =
+    String(locationData.country_code || "")
+      .toLowerCase()
+      .trim() || (isFrench ? "fr" : "");
 
   return {
     ...locationData,
@@ -173,21 +211,22 @@ export function buildTypedLocationResult(query) {
     .join(" ");
 
   const isFrench = looksLikeFranceLocation(label);
-  const displayLabel = isFrench && !label.toLowerCase().includes("france")
-    ? `${label}, France`
-    : label;
+  const displayLabel =
+    isFrench && !label.toLowerCase().includes("france") ? `${label}, France` : label;
 
-  return [enrichLocationData({
-    id: `typed:${normalizeLabel(displayLabel)}`,
-    label: displayLabel,
-    source: "typed",
-    place_id: "",
-    country: isFrench ? "France" : "",
-    country_code: isFrench ? "fr" : "",
-    lat: null,
-    lng: null,
-    kind: "city",
-  })];
+  return [
+    enrichLocationData({
+      id: `typed:${normalizeLabel(displayLabel)}`,
+      label: displayLabel,
+      source: "typed",
+      place_id: "",
+      country: isFrench ? "France" : "",
+      country_code: isFrench ? "fr" : "",
+      lat: null,
+      lng: null,
+      kind: "city",
+    }),
+  ];
 }
 
 /** Browser-side fallback using Photon, restricted to France. */
@@ -240,11 +279,7 @@ export function rankLocationSuggestions(labels, hint, limit = 12) {
   const list = Array.isArray(labels) ? labels : [];
   if (!list.length) return [];
 
-  const country = (hint || "")
-    .split(",")
-    .slice(-1)[0]
-    ?.trim()
-    .toLowerCase();
+  const country = (hint || "").split(",").slice(-1)[0]?.trim().toLowerCase();
 
   if (!country || country === "anywhere") {
     return list.slice(0, limit);

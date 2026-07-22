@@ -1,9 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
-import type {
-  CareerSourceCandidate,
-  CareerSourceCandidateRegistration,
-} from "@hirly/contracts";
+import type { CareerSourceCandidate, CareerSourceCandidateRegistration } from "@hirly/contracts";
 import {
   ATS_DISCOVERY_RESOURCE_LIMITS,
   AtsDiscoveryRejectedError,
@@ -13,9 +10,7 @@ import {
   type AtsDiscoveryRejectionCode,
 } from "../src/ats-discovery";
 
-function candidate(
-  input: CareerSourceCandidateRegistration,
-): CareerSourceCandidate {
+function candidate(input: CareerSourceCandidateRegistration): CareerSourceCandidate {
   return {
     ...input,
     policyId: null,
@@ -84,31 +79,16 @@ describe("G011 SSRF-safe ATS tenant discovery", () => {
     ["https://jobs.eu.lever.co/acme/123", "https://jobs.eu.lever.co/acme"],
     ["https://jobs.ashbyhq.com/acme/123", "https://jobs.ashbyhq.com/acme"],
     ["https://apply.workable.com/acme/j/123", "https://apply.workable.com/acme"],
-    [
-      "https://jobs.smartrecruiters.com/acme/123-role",
-      "https://jobs.smartrecruiters.com/acme",
-    ],
-    [
-      "https://acme.jobs.personio.de/job/123",
-      "https://acme.jobs.personio.de",
-    ],
+    ["https://jobs.smartrecruiters.com/acme/123-role", "https://jobs.smartrecruiters.com/acme"],
+    ["https://acme.jobs.personio.de/job/123", "https://acme.jobs.personio.de"],
     ["https://acme.recruitee.com/o/role", "https://acme.recruitee.com"],
-    [
-      "https://acme.teamtailor.com/jobs/123-role",
-      "https://acme.teamtailor.com/jobs",
-    ],
+    ["https://acme.teamtailor.com/jobs/123-role", "https://acme.teamtailor.com/jobs"],
     [
       "https://careers.flatchr.io/fr/company/acme/jobs/123",
       "https://careers.flatchr.io/fr/company/acme",
     ],
-    [
-      "https://acme.nicoka.com/api/jobs/published?jobid=123",
-      "https://acme.nicoka.com",
-    ],
-    [
-      "https://trial.nicoka.com/acme/api/jobs/published?jobid=123",
-      "https://trial.nicoka.com/acme",
-    ],
+    ["https://acme.nicoka.com/api/jobs/published?jobid=123", "https://acme.nicoka.com"],
+    ["https://trial.nicoka.com/acme/api/jobs/published?jobid=123", "https://trial.nicoka.com/acme"],
   ])("registers canonical query-free base URL for %s", async (url, baseUrl) => {
     const registrations: CareerSourceCandidateRegistration[] = [];
     await registerDiscoveredAtsTenant(
@@ -119,9 +99,7 @@ describe("G011 SSRF-safe ATS tenant discovery", () => {
         },
       },
       {
-        redirectChain: [
-          { url, resolvedAddresses: ["93.184.216.34"] },
-        ],
+        redirectChain: [{ url, resolvedAddresses: ["93.184.216.34"] }],
         countryCodes: ["FR"],
       },
     );
@@ -198,15 +176,11 @@ describe("G011 SSRF-safe ATS tenant discovery", () => {
     ["https://j\u043Ebs.lever.co/acme/123", "unsupported_ats_url"],
   ])("rejects hostile URL %s with %s", (url, code) => {
     try {
-      validateAtsDiscoveryRedirectChain([
-        { url, resolvedAddresses: ["93.184.216.34"] },
-      ]);
+      validateAtsDiscoveryRedirectChain([{ url, resolvedAddresses: ["93.184.216.34"] }]);
       throw new Error("expected rejection");
     } catch (error) {
       expect(error).toBeInstanceOf(AtsDiscoveryRejectedError);
-      expect((error as AtsDiscoveryRejectedError).code).toBe(
-        code as AtsDiscoveryRejectionCode,
-      );
+      expect((error as AtsDiscoveryRejectedError).code).toBe(code as AtsDiscoveryRejectionCode);
     }
   });
 
@@ -249,10 +223,7 @@ describe("G011 SSRF-safe ATS tenant discovery", () => {
         resolvedAddresses: ["1.1.1.1"],
       },
     ]);
-    expect(chain.hops.map((hop) => hop.pinnedAddress)).toEqual([
-      "93.184.216.34",
-      "1.1.1.1",
-    ]);
+    expect(chain.hops.map((hop) => hop.pinnedAddress)).toEqual(["93.184.216.34", "1.1.1.1"]);
     expect(chain.hops[0]).toMatchObject({
       tlsServerName: "job-boards.greenhouse.io",
       hostHeader: "job-boards.greenhouse.io",
@@ -262,13 +233,10 @@ describe("G011 SSRF-safe ATS tenant discovery", () => {
   test("enforces redirect, URL, and DNS answer bounds", () => {
     expect(() =>
       validateAtsDiscoveryRedirectChain(
-        Array.from(
-          { length: ATS_DISCOVERY_RESOURCE_LIMITS.maxRedirects + 2 },
-          () => ({
-            url: "https://jobs.lever.co/acme/123",
-            resolvedAddresses: ["93.184.216.34"],
-          }),
-        ),
+        Array.from({ length: ATS_DISCOVERY_RESOURCE_LIMITS.maxRedirects + 2 }, () => ({
+          url: "https://jobs.lever.co/acme/123",
+          resolvedAddresses: ["93.184.216.34"],
+        })),
       ),
     ).toThrow("redirect count");
     expect(() =>
@@ -340,10 +308,7 @@ describe("G011 SSRF-safe ATS tenant discovery", () => {
   });
 
   test("contains no HTTP fetch or application-submission implementation", () => {
-    const source = readFileSync(
-      new URL("../src/ats-discovery.ts", import.meta.url),
-      "utf8",
-    );
+    const source = readFileSync(new URL("../src/ats-discovery.ts", import.meta.url), "utf8");
     expect(source).not.toMatch(/\bfetch\s*\(/);
     expect(source).not.toMatch(/node:https?|undici|playwright/i);
     expect(source).not.toMatch(/submit|application.*create|candidate.*create/i);

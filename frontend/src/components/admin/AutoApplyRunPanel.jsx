@@ -1,13 +1,7 @@
 import { Loader2, Terminal, X } from "lucide-react";
 import AutoApplyRunConsole from "./AutoApplyRunConsole";
 
-export default function AutoApplyRunPanel({
-  open,
-  onClose,
-  running,
-  runLabel,
-  report,
-}) {
+export default function AutoApplyRunPanel({ open, onClose, running, runLabel, report }) {
   if (!open) return null;
 
   return (
@@ -43,10 +37,12 @@ export default function AutoApplyRunPanel({
           {running ? (
             <div className="flex h-full min-h-[240px] flex-col items-center justify-center gap-3 text-center">
               <Loader2 className="h-8 w-8 animate-spin text-violet-400" />
-              <p className="font-display text-base font-semibold text-white">{runLabel || "Running auto-apply…"}</p>
+              <p className="font-display text-base font-semibold text-white">
+                {runLabel || "Running auto-apply…"}
+              </p>
               <p className="max-w-sm text-sm text-zinc-400">
-                The browser run continues on the server (avoids Railway gateway timeouts).
-                This console polls until inspect → classify → resolve → plan → submit → verify finishes.
+                The browser run continues on the server (avoids Railway gateway timeouts). This
+                console polls until inspect → classify → resolve → plan → submit → verify finishes.
               </p>
             </div>
           ) : report ? (

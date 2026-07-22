@@ -19,8 +19,12 @@ function CoverLetterEmptyState({ onUpload, uploading, t }) {
         <FileText className="h-6 w-6" aria-hidden />
       </div>
       <div className="max-w-sm space-y-1">
-        <p className="shell-title text-base font-semibold">{t("profile.documents.noCoverLetter")}</p>
-        <p className="text-sm leading-relaxed shell-body">{t("profile.documents.noCoverLetterDesc")}</p>
+        <p className="shell-title text-base font-semibold">
+          {t("profile.documents.noCoverLetter")}
+        </p>
+        <p className="text-sm leading-relaxed shell-body">
+          {t("profile.documents.noCoverLetterDesc")}
+        </p>
       </div>
       <Button
         type="button"
@@ -72,7 +76,10 @@ export default function ProfileCoverLetterSection({ profile, onCoverLetterChange
       // Bypass the Vercel /api rewrite for large uploads (avoids proxy timeouts).
       const base = (getDirectApiBase() || "").replace(/\/+$/, "");
       const url = base ? `${base}/profile/cover-letter` : "/profile/cover-letter";
-      await api.post(url, form, { timeout: 120000, headers: { "Content-Type": "multipart/form-data" } });
+      await api.post(url, form, {
+        timeout: 120000,
+        headers: { "Content-Type": "multipart/form-data" },
+      });
       toast.success(t("profile.documents.coverLetterUploadSuccess"));
       await onCoverLetterChange?.();
     } catch (error) {
@@ -146,7 +153,9 @@ export default function ProfileCoverLetterSection({ profile, onCoverLetterChange
       {hasCoverLetter ? (
         <div className="space-y-4">
           <div className="shell-surface-sm rounded-md border px-4 py-3">
-            <p className="shell-title truncate text-sm font-medium">{profile.cover_letter_filename}</p>
+            <p className="shell-title truncate text-sm font-medium">
+              {profile.cover_letter_filename}
+            </p>
             {profile.cover_letter_uploaded_at ? (
               <p className="mt-0.5 text-sm shell-body">
                 {t("profile.documents.uploadedOn", {
@@ -166,11 +175,21 @@ export default function ProfileCoverLetterSection({ profile, onCoverLetterChange
               <Upload className="h-4 w-4" />
               {uploading ? t("common.loading") : t("profile.documents.replaceCoverLetter")}
             </Button>
-            <Button type="button" variant="outline" className="shell-border rounded-full" onClick={viewCoverLetter}>
+            <Button
+              type="button"
+              variant="outline"
+              className="shell-border rounded-full"
+              onClick={viewCoverLetter}
+            >
               <Eye className="h-4 w-4" />
               {t("profile.documents.viewCoverLetter")}
             </Button>
-            <Button type="button" variant="outline" className="shell-border rounded-full" onClick={downloadCoverLetter}>
+            <Button
+              type="button"
+              variant="outline"
+              className="shell-border rounded-full"
+              onClick={downloadCoverLetter}
+            >
               <Download className="h-4 w-4" />
               {t("profile.documents.downloadCoverLetter")}
             </Button>

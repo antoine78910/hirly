@@ -2,11 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { createDatabase, type Database } from "../packages/db/src";
 
-const read = (path: string): string =>
-  readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
-const primaryUp = read(
-  "backend/db/migrations/20260721002300_candidate_projection_primary.sql",
-);
+const read = (path: string): string => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
+const primaryUp = read("backend/db/migrations/20260721002300_candidate_projection_primary.sql");
 const primaryDown = read(
   "backend/db/migrations/20260721002300_candidate_projection_primary.down.sql",
 );
@@ -32,9 +29,7 @@ describe("candidate matching common migration contracts", () => {
 
   test("uses primary row triggers and a transactional deletion RPC", () => {
     for (const table of ["profiles", "swipes", "applications", "users"]) {
-      expect(primaryUp).toContain(
-        `AFTER INSERT OR UPDATE OR DELETE ON public.${table}`,
-      );
+      expect(primaryUp).toContain(`AFTER INSERT OR UPDATE OR DELETE ON public.${table}`);
     }
     expect(primaryUp).toContain(
       "entity_family IN ('profiles', 'swipes', 'applications', 'users', 'deletion')",
@@ -85,14 +80,10 @@ describe("candidate matching common migration contracts", () => {
       "candidate_action_projection_reader",
       "candidate_action_group_aliases_reader",
     ]) {
-      const definition = inventoryUp.match(
-        new RegExp(`CREATE POLICY ${policy}[^;]+;`, "s"),
-      )?.[0];
+      const definition = inventoryUp.match(new RegExp(`CREATE POLICY ${policy}[^;]+;`, "s"))?.[0];
       expect(definition).toContain("USING (false)");
     }
-    expect(inventoryUp).not.toMatch(
-      /GRANT SELECT ON public\.candidate_projection_tombstones/,
-    );
+    expect(inventoryUp).not.toMatch(/GRANT SELECT ON public\.candidate_projection_tombstones/);
     for (const functionName of [
       "read_candidate_search_profile",
       "read_candidate_actions",
@@ -103,15 +94,9 @@ describe("candidate matching common migration contracts", () => {
       );
     }
     expect(inventoryUp).not.toContain("hirly.matching_candidate_id");
-    expect(inventoryUp).toContain(
-      "PRIMARY KEY (alias_group_id, canonical_group_id)",
-    );
-    expect(inventoryUp).toContain(
-      "candidate action group aliases cannot contain cycles",
-    );
-    expect(inventoryUp).toContain(
-      "CREATE OR REPLACE FUNCTION public.candidate_group_is_excluded",
-    );
+    expect(inventoryUp).toContain("PRIMARY KEY (alias_group_id, canonical_group_id)");
+    expect(inventoryUp).toContain("candidate action group aliases cannot contain cycles");
+    expect(inventoryUp).toContain("CREATE OR REPLACE FUNCTION public.candidate_group_is_excluded");
     expect(inventoryUp).toMatch(
       /WITH RECURSIVE excluded_groups[\s\S]+JOIN excluded_groups[\s\S]+alias\.alias_group_id = excluded_groups\.group_id/,
     );
@@ -121,16 +106,10 @@ describe("candidate matching common migration contracts", () => {
   });
 
   test("keeps polymorphic trigger records behind table-specific branches", () => {
-    expect(versionGuardFix).toContain(
-      "IF TG_TABLE_NAME = 'candidate_search_profiles' THEN",
-    );
-    expect(versionGuardFix).toContain(
-      "ELSIF TG_TABLE_NAME = 'candidate_action_projection' THEN",
-    );
+    expect(versionGuardFix).toContain("IF TG_TABLE_NAME = 'candidate_search_profiles' THEN");
+    expect(versionGuardFix).toContain("ELSIF TG_TABLE_NAME = 'candidate_action_projection' THEN");
     expect(versionGuardFix).toContain("NEW.version <= OLD.version");
-    expect(versionGuardFix).toContain(
-      "NEW.candidate_version <= OLD.candidate_version",
-    );
+    expect(versionGuardFix).toContain("NEW.candidate_version <= OLD.candidate_version");
     expect(versionGuardFix).not.toMatch(
       /TG_TABLE_NAME\s*=\s*'candidate_search_profiles'\s+AND\s+NEW\.version/i,
     );
@@ -143,9 +122,7 @@ describe("candidate matching common migration contracts", () => {
 const databaseUrl = process.env.CANDIDATE_MATCHING_MIGRATION_TEST_DATABASE_URL;
 const describePostgres = databaseUrl ? describe : describe.skip;
 
-async function withDisposableDatabase<T>(
-  callback: (sql: Database) => Promise<T>,
-): Promise<T> {
+async function withDisposableDatabase<T>(callback: (sql: Database) => Promise<T>): Promise<T> {
   if (!databaseUrl) {
     throw new Error("CANDIDATE_MATCHING_MIGRATION_TEST_DATABASE_URL is required");
   }
@@ -436,15 +413,11 @@ describePostgres("candidate matching migrations on disposable PostgreSQL", () =>
               AND role_family_codes && ARRAY['software-engineering']::text[]
           `;
         });
-        expect(planRow?.["QUERY PLAN"]).toMatch(
-          /job_search_documents_(features|retrieval)_idx/,
-        );
+        expect(planRow?.["QUERY PLAN"]).toMatch(/job_search_documents_(features|retrieval)_idx/);
 
         await sql.unsafe(inventoryDown);
         await sql.unsafe(primaryDown);
-        const [preserved] = await sql<
-          { jobs: string; users: string; projection: string | null }[]
-        >`
+        const [preserved] = await sql<{ jobs: string; users: string; projection: string | null }[]>`
           SELECT
             to_regclass('public.jobs')::text AS jobs,
             to_regclass('public.users')::text AS users,

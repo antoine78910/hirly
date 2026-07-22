@@ -3,7 +3,14 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 
 const summarizeQuestion = (item) => {
   if (typeof item === "string") return item;
-  return item?.label || item?.field_label || item?.question || item?.field_name || item?.name || "Unknown field";
+  return (
+    item?.label ||
+    item?.field_label ||
+    item?.question ||
+    item?.field_name ||
+    item?.name ||
+    "Unknown field"
+  );
 };
 
 const stepTone = (state) => {
@@ -17,21 +24,23 @@ const stepTone = (state) => {
 export function buildAdminPipelineSteps(app = {}) {
   const packageReady = ["generated", "generated_text_only"].includes(app.package_status);
   const queueStatus = app.auto_apply_queue_status;
-  const missing = Array.isArray(app.prepared_missing_information) ? app.prepared_missing_information : [];
-  const needsInfo = (
-    app.manual_status === "needs_user_input"
-    || app.user_facing_submission_status === "action_required"
-    || app.submission_status === "action_required"
-    || missing.length > 0
-  ) && app.submission_status !== "submitted";
-  const submitted = (
-    app.submission_status === "submitted"
-    || app.manual_status === "manually_submitted"
-    || app.user_facing_submission_status === "submitted"
-    || queueStatus === "succeeded"
-  );
+  const missing = Array.isArray(app.prepared_missing_information)
+    ? app.prepared_missing_information
+    : [];
+  const needsInfo =
+    (app.manual_status === "needs_user_input" ||
+      app.user_facing_submission_status === "action_required" ||
+      app.submission_status === "action_required" ||
+      missing.length > 0) &&
+    app.submission_status !== "submitted";
+  const submitted =
+    app.submission_status === "submitted" ||
+    app.manual_status === "manually_submitted" ||
+    app.user_facing_submission_status === "submitted" ||
+    queueStatus === "succeeded";
 
-  const queueDone = submitted || ["succeeded", "failed", "skipped", "running"].includes(queueStatus);
+  const queueDone =
+    submitted || ["succeeded", "failed", "skipped", "running"].includes(queueStatus);
   const queueCurrent = ["queued", "awaiting_review", "running"].includes(queueStatus);
 
   return [
@@ -44,17 +53,18 @@ export function buildAdminPipelineSteps(app = {}) {
     {
       key: "queue",
       label: "Queue",
-      state: submitted || queueStatus === "succeeded"
-        ? "done"
-        : queueCurrent
-          ? "current"
-          : queueStatus === "failed" && needsInfo
-            ? "blocked"
-            : queueStatus
-              ? "done"
-              : packageReady
-                ? "todo"
-                : "todo",
+      state:
+        submitted || queueStatus === "succeeded"
+          ? "done"
+          : queueCurrent
+            ? "current"
+            : queueStatus === "failed" && needsInfo
+              ? "blocked"
+              : queueStatus
+                ? "done"
+                : packageReady
+                  ? "todo"
+                  : "todo",
       detail: queueStatus ? String(queueStatus).replaceAll("_", " ") : "—",
     },
     {
@@ -99,7 +109,13 @@ export function AdminPipelineSteps({ application, compact = false }) {
             >
               {step.label}
               <span className="font-normal opacity-80">· {step.detail}</span>
-              {clickable ? (openInfo ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />) : null}
+              {clickable ? (
+                openInfo ? (
+                  <ChevronDown className="h-3 w-3" />
+                ) : (
+                  <ChevronRight className="h-3 w-3" />
+                )
+              ) : null}
             </Tag>
           );
         })}
@@ -115,10 +131,16 @@ export function AdminPipelineSteps({ application, compact = false }) {
               <li key={index}>
                 <span className="font-medium">{summarizeQuestion(item)}</span>
                 {item?.field_type || item?.type ? (
-                  <span className="text-orange-800/80"> · type: {item.field_type || item.type}</span>
+                  <span className="text-orange-800/80">
+                    {" "}
+                    · type: {item.field_type || item.type}
+                  </span>
                 ) : null}
                 {Array.isArray(item?.options) && item.options.length ? (
-                  <span className="text-orange-800/80"> · options: {item.options.slice(0, 6).join(", ")}</span>
+                  <span className="text-orange-800/80">
+                    {" "}
+                    · options: {item.options.slice(0, 6).join(", ")}
+                  </span>
                 ) : null}
               </li>
             ))}

@@ -39,11 +39,15 @@ function StepToast({ step, state }) {
           <Logo size={16} />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-[9px] font-semibold uppercase tracking-wide text-zinc-400">{BRAND.NAME}</p>
+          <p className="text-[9px] font-semibold uppercase tracking-wide text-zinc-400">
+            {BRAND.NAME}
+          </p>
           {state === "active" ? (
             <ShimmerStatus>{step.status}</ShimmerStatus>
           ) : (
-            <p className={`mt-0.5 flex items-center gap-1.5 text-xs font-semibold leading-snug ${done ? "text-zinc-900" : "text-zinc-500"}`}>
+            <p
+              className={`mt-0.5 flex items-center gap-1.5 text-xs font-semibold leading-snug ${done ? "text-zinc-900" : "text-zinc-500"}`}
+            >
               {done ? (
                 <span className="grid h-3.5 w-3.5 shrink-0 place-items-center rounded-full bg-emerald-500 text-white">
                   <Check className="h-2 w-2" strokeWidth={2.5} aria-hidden />
@@ -67,11 +71,19 @@ function resolveToastState(index, activeStep, stepsLength) {
   return "hidden";
 }
 
-export default function LandingMobileApplyStepToasts({ steps, activeStep, bottomClassName = "bottom-14" }) {
+export default function LandingMobileApplyStepToasts({
+  steps,
+  activeStep,
+  bottomClassName = "bottom-14",
+}) {
   if (activeStep < 0) return null;
 
   const visibleSteps = steps
-    .map((step, index) => ({ step, index, state: resolveToastState(index, activeStep, steps.length) }))
+    .map((step, index) => ({
+      step,
+      index,
+      state: resolveToastState(index, activeStep, steps.length),
+    }))
     .filter(({ state }) => state !== "hidden");
 
   if (visibleSteps.length === 0) return null;

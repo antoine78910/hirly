@@ -27,7 +27,7 @@ describe("landing FAQ localization", () => {
 
     const supportLink = faq.find(({ id }) => id === "technical-issue").answer[0].parts[3];
     expect(supportLink).toEqual(
-      englishFaq.find(({ id }) => id === "technical-issue").answer[0].parts[3]
+      englishFaq.find(({ id }) => id === "technical-issue").answer[0].parts[3],
     );
   });
 

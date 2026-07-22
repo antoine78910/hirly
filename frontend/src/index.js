@@ -19,8 +19,4 @@ const app = posthogClient ? (
 ) : (
   <App />
 );
-root.render(
-  <React.StrictMode>
-    {app}
-  </React.StrictMode>,
-);
+root.render(<React.StrictMode>{app}</React.StrictMode>);

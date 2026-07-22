@@ -65,8 +65,7 @@ describe("PR0-S scorecard boundary regressions", () => {
     const reversed = completeInput();
     reversed.observations = [...reversed.observations!].reverse();
 
-    expect(buildSupplyReadinessScorecard(reversed))
-      .toEqual(buildSupplyReadinessScorecard(forward));
+    expect(buildSupplyReadinessScorecard(reversed)).toEqual(buildSupplyReadinessScorecard(forward));
   });
 
   test("treats an exception expiring exactly at evaluation time as expired", () => {
@@ -88,36 +87,39 @@ describe("PR0-S scorecard boundary regressions", () => {
   });
 
   test("fails closed on absent, future, or wrong-segment Product approval", () => {
-    expect(() => buildSupplyReadinessScorecard(completeInput(8), {
-      exception: supplyException({ approvedByProduct: "" }),
-    })).toThrow("SUPPLY_READINESS_REFUSED");
-
-    expect(() => buildSupplyReadinessScorecard(completeInput(8), {
-      exception: supplyException({ approvedAt: "2026-07-22T09:00:00.000Z" }),
-      evaluatedAt: "2026-07-21T09:00:00.000Z",
-    })).toThrow("exception approval is later than evaluation time");
-
-    expect(() => buildSupplyReadinessScorecard(completeInput(8), {
-      exception: supplyException({
-        segment: {
-          countryCode: "FR",
-          cohortId: "lyon-35km",
-          roleFamilyId: "fullstack-engineering",
-        },
+    expect(() =>
+      buildSupplyReadinessScorecard(completeInput(8), {
+        exception: supplyException({ approvedByProduct: "" }),
       }),
-    })).toThrow("exception segment does not match scorecard segment");
+    ).toThrow("SUPPLY_READINESS_REFUSED");
+
+    expect(() =>
+      buildSupplyReadinessScorecard(completeInput(8), {
+        exception: supplyException({ approvedAt: "2026-07-22T09:00:00.000Z" }),
+        evaluatedAt: "2026-07-21T09:00:00.000Z",
+      }),
+    ).toThrow("exception approval is later than evaluation time");
+
+    expect(() =>
+      buildSupplyReadinessScorecard(completeInput(8), {
+        exception: supplyException({
+          segment: {
+            countryCode: "FR",
+            cohortId: "lyon-35km",
+            roleFamilyId: "fullstack-engineering",
+          },
+        }),
+      }),
+    ).toThrow("exception segment does not match scorecard segment");
   });
 
   test("refuses malformed runtime booleans instead of scoring truthy values", () => {
     const input = completeInput();
     input.observations = input.observations!.map((observation, index) =>
-      index === 0
-        ? { ...observation, fresh: "yes" as unknown as boolean }
-        : observation,
+      index === 0 ? { ...observation, fresh: "yes" as unknown as boolean } : observation,
     );
 
-    expect(() => buildSupplyReadinessScorecard(input))
-      .toThrow("SUPPLY_READINESS_REFUSED");
+    expect(() => buildSupplyReadinessScorecard(input)).toThrow("SUPPLY_READINESS_REFUSED");
   });
 
   test("keeps scorecards informational rather than authorizing rollout", () => {

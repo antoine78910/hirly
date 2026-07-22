@@ -10,7 +10,9 @@ export default function SEOHead({ title, description, keywords, canonical, alter
   useEffect(() => {
     const prev = document.title;
     document.title = title;
-    return () => { document.title = prev; };
+    return () => {
+      document.title = prev;
+    };
   }, [title]);
 
   useEffect(() => {
@@ -39,7 +41,10 @@ export default function SEOHead({ title, description, keywords, canonical, alter
       document.head.appendChild(link);
     }
     const prev = link.getAttribute("href");
-    link.setAttribute("href", canonical.startsWith("http") ? canonical : `https://tryhirly.com${canonical}`);
+    link.setAttribute(
+      "href",
+      canonical.startsWith("http") ? canonical : `https://tryhirly.com${canonical}`,
+    );
     return () => {
       if (created) link.remove();
       else link.setAttribute("href", prev ?? "");

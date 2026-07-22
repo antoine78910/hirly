@@ -1,9 +1,6 @@
 /** Display status helpers shared by Tracker and Review. */
 
-import {
-  hasApplicationDocuments,
-  isApplicationGenerating,
-} from "./applicationDocuments";
+import { hasApplicationDocuments, isApplicationGenerating } from "./applicationDocuments";
 
 export function resolveDisplayStatus({
   status,
@@ -21,13 +18,21 @@ export function resolveDisplayStatus({
   ].filter(Boolean);
 
   // Terminal expiry must override older generic status fields such as `pending`.
-  if (user_facing_submission_status === "expired" || submission_status === "expired" || manual_status === "offer_expired" || admin_status === "offer_expired") return "expired";
+  if (
+    user_facing_submission_status === "expired" ||
+    submission_status === "expired" ||
+    manual_status === "offer_expired" ||
+    admin_status === "offer_expired"
+  )
+    return "expired";
   if (values.some((v) => ["submitted", "manually_submitted"].includes(v))) return "submitted";
-  if (values.some((v) => ["action_required", "needs_user_input"].includes(v))) return "action_required";
+  if (values.some((v) => ["action_required", "needs_user_input"].includes(v)))
+    return "action_required";
   // Security / bot walls must win over remapped `pending` so users see the CTA.
   if (values.includes("blocked_captcha")) return "blocked_captcha";
   if (values.some((v) => ["prepare_failed", "blocked", "failed"].includes(v))) return "failed";
-  if (values.some((v) => ["pending", "manual_review_needed", "manual_in_progress"].includes(v))) return "pending";
+  if (values.some((v) => ["pending", "manual_review_needed", "manual_in_progress"].includes(v)))
+    return "pending";
   if (values.some((v) => ["ready", "prepared"].includes(v))) return "prepared";
   if (user_facing_submission_status === "pending") return "pending";
   return "pending";
@@ -35,9 +40,11 @@ export function resolveDisplayStatus({
 
 function isApplicationSubmitted(application) {
   const displayStatus = resolveDisplayStatus(application);
-  return displayStatus === "submitted"
-    || application?.submission_status === "submitted"
-    || application?.submission_status === "manually_submitted";
+  return (
+    displayStatus === "submitted" ||
+    application?.submission_status === "submitted" ||
+    application?.submission_status === "manually_submitted"
+  );
 }
 
 export function isAwaitingUserDocumentReview(application) {
@@ -54,11 +61,10 @@ export function isAwaitingUserDocumentReview(application) {
   if (application.user_facing_submission_status === "prepared") return true;
   if (["prepared", "ready"].includes(application.submission_status)) return true;
 
-  const packageReady = application.generation_status === "generated"
-    || (
-      application.package_status
-      && !["not_generated", "pending_generation", "failed"].includes(application.package_status)
-    );
+  const packageReady =
+    application.generation_status === "generated" ||
+    (application.package_status &&
+      !["not_generated", "pending_generation", "failed"].includes(application.package_status));
   return Boolean(packageReady && application.submission_status === "not_submitted");
 }
 
@@ -68,11 +74,9 @@ export function isPreparedForDocumentReview(application) {
 
 export function filterApplicationsForReview(applications, reviewDocumentsEnabled) {
   if (!reviewDocumentsEnabled) return [];
-  return (applications || [])
-    .filter(isAwaitingUserDocumentReview)
-    .sort((a, b) => {
-      const aTime = Date.parse(a.awaiting_review_at || a.updated_at || a.created_at || 0);
-      const bTime = Date.parse(b.awaiting_review_at || b.updated_at || b.created_at || 0);
-      return bTime - aTime;
-    });
+  return (applications || []).filter(isAwaitingUserDocumentReview).sort((a, b) => {
+    const aTime = Date.parse(a.awaiting_review_at || a.updated_at || a.created_at || 0);
+    const bTime = Date.parse(b.awaiting_review_at || b.updated_at || b.created_at || 0);
+    return bTime - aTime;
+  });
 }

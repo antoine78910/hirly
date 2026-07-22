@@ -1,9 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
-import {
-  sourceTrialManifestSchema,
-  type SourceTrialManifest,
-} from "@hirly/contracts";
+import { sourceTrialManifestSchema, type SourceTrialManifest } from "@hirly/contracts";
 import { createDatabase } from "@hirly/db";
 import {
   parseCspTrialResourceManifest,
@@ -20,9 +17,7 @@ import {
 import { PostgresSourceTrialEvidenceRepository } from "./source-trial-cli";
 
 type FrenchTrialSource = "csp" | "data-gouv";
-type FrenchSourceTrialPreview =
-  | CspSourceTrialPreview
-  | DataGouvSourceTrialPreview;
+type FrenchSourceTrialPreview = CspSourceTrialPreview | DataGouvSourceTrialPreview;
 
 export type FrenchSourceTrialCliCommand =
   | {
@@ -45,14 +40,9 @@ export type FrenchSourceTrialCliCommand =
 
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
 
-export function parseFrenchSourceTrialArgs(
-  args: string[],
-): FrenchSourceTrialCliCommand {
+export function parseFrenchSourceTrialArgs(args: string[]): FrenchSourceTrialCliCommand {
   const [source, type, ...rest] = args;
-  if (
-    !["csp", "data-gouv"].includes(source ?? "") ||
-    !["preview", "run"].includes(type ?? "")
-  ) {
+  if (!["csp", "data-gouv"].includes(source ?? "") || !["preview", "run"].includes(type ?? "")) {
     throw new Error(
       "usage: french-source-trial <csp|data-gouv> <preview|run> --manifest <path> --resource-manifest <path> --approved-manifest-digest <sha256> [--response <path>] --output <path>",
     );
@@ -134,18 +124,15 @@ export async function runFrenchSourceTrialCli(
       command.source === "csp"
         ? await previewCspSourceTrial({
             manifest,
-            resourceManifest:
-              parseCspTrialResourceManifest(resourceDocument),
+            resourceManifest: parseCspTrialResourceManifest(resourceDocument),
             approvedManifestDigests,
             fetch: async () => fixtureResponse(fixture, "text/csv"),
           })
         : await previewDataGouvSourceTrial({
             manifest,
-            resourceManifest:
-              parseDataGouvTrialResourceManifest(resourceDocument),
+            resourceManifest: parseDataGouvTrialResourceManifest(resourceDocument),
             approvedManifestDigests,
-            fetch: async () =>
-              fixtureResponse(fixture, "application/json"),
+            fetch: async () => fixtureResponse(fixture, "application/json"),
           });
     await writeOutput(command.outputPath, result);
     return result;
@@ -153,9 +140,7 @@ export async function runFrenchSourceTrialCli(
 
   const databaseUrl = environment.SOURCE_TRIAL_DATABASE_URL?.trim();
   if (!databaseUrl) {
-    throw new Error(
-      "SOURCE_TRIAL_DATABASE_URL is required for a policy-gated evidence run",
-    );
+    throw new Error("SOURCE_TRIAL_DATABASE_URL is required for a policy-gated evidence run");
   }
   const repository = new PostgresSourceTrialEvidenceRepository(
     createDatabase(databaseUrl, { max: 2 }),
@@ -165,15 +150,13 @@ export async function runFrenchSourceTrialCli(
       command.source === "csp"
         ? await persistCspSourceTrial({
             manifest,
-            resourceManifest:
-              parseCspTrialResourceManifest(resourceDocument),
+            resourceManifest: parseCspTrialResourceManifest(resourceDocument),
             approvedManifestDigests,
             repository,
           })
         : await persistDataGouvSourceTrial({
             manifest,
-            resourceManifest:
-              parseDataGouvTrialResourceManifest(resourceDocument),
+            resourceManifest: parseDataGouvTrialResourceManifest(resourceDocument),
             approvedManifestDigests,
             repository,
           });
@@ -184,12 +167,8 @@ export async function runFrenchSourceTrialCli(
   }
 }
 
-async function readSourceTrialManifest(
-  path: string,
-): Promise<SourceTrialManifest> {
-  return sourceTrialManifestSchema.parse(
-    JSON.parse(await readFile(resolve(path), "utf8")),
-  );
+async function readSourceTrialManifest(path: string): Promise<SourceTrialManifest> {
+  return sourceTrialManifestSchema.parse(JSON.parse(await readFile(resolve(path), "utf8")));
 }
 
 function fixtureResponse(body: string, contentType: string): Response {
@@ -211,11 +190,13 @@ async function writeOutput(path: string, value: unknown): Promise<void> {
 if (import.meta.main) {
   const command = parseFrenchSourceTrialArgs(process.argv.slice(2));
   const result = await runFrenchSourceTrialCli(command, process.env);
-  console.log(JSON.stringify({
-    source: command.source,
-    runId: result.runId,
-    output: command.outputPath,
-    canonicalWrites: false,
-    sourceActivationChanges: false,
-  }));
+  console.log(
+    JSON.stringify({
+      source: command.source,
+      runId: result.runId,
+      output: command.outputPath,
+      canonicalWrites: false,
+      sourceActivationChanges: false,
+    }),
+  );
 }

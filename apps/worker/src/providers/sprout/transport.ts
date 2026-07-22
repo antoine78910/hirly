@@ -16,7 +16,10 @@ export interface SproutSecretResolver {
 }
 
 export interface SproutTokenRefresher {
-  refresh(refreshToken: string, signal: AbortSignal): Promise<{ accessToken: string; refreshToken: string }>;
+  refresh(
+    refreshToken: string,
+    signal: AbortSignal,
+  ): Promise<{ accessToken: string; refreshToken: string }>;
 }
 
 export interface SproutHttpTransportOptions {
@@ -255,7 +258,11 @@ export class SproutHttpTransport implements SproutRuntimeTransport<SproutRawJob>
         await this.sleep(backoffMs, signal);
         continue;
       }
-      if ((response.status === 401 || response.status === 403) && !refreshed && this.options.tokenRefresher) {
+      if (
+        (response.status === 401 || response.status === 403) &&
+        !refreshed &&
+        this.options.tokenRefresher
+      ) {
         refreshed = true;
         try {
           const next = await this.options.tokenRefresher.refresh(refreshToken, signal);
@@ -286,8 +293,7 @@ export class SproutHttpTransport implements SproutRuntimeTransport<SproutRawJob>
           attempt: attempt + 1,
           nextAttempt: attempt + 2,
           status: response.status,
-          classification:
-            response.status === 429 ? "rate_limited" : "upstream_unavailable",
+          classification: response.status === 429 ? "rate_limited" : "upstream_unavailable",
           backoffMs,
         });
         await this.sleep(backoffMs, signal);
@@ -307,9 +313,7 @@ export class SproutHttpTransport implements SproutRuntimeTransport<SproutRawJob>
       try {
         parsed = parseSproutResponse(decoded);
       } catch (error) {
-        const diagnostics = error instanceof SproutResponseSchemaError
-          ? error.diagnostics
-          : [];
+        const diagnostics = error instanceof SproutResponseSchemaError ? error.diagnostics : [];
         observe(this.options.onOperation, {
           type: "schema_drift",
           attempt: attempt + 1,
@@ -320,10 +324,13 @@ export class SproutHttpTransport implements SproutRuntimeTransport<SproutRawJob>
         throw new SproutSchemaDriftError({
           status: response.status,
           responseBytes: body.byteLength,
-          response: body.byteLength <= 1_000_000 ? decoded : {
-            retained: false,
-            reason: "response_exceeds_error_ledger_budget",
-          },
+          response:
+            body.byteLength <= 1_000_000
+              ? decoded
+              : {
+                  retained: false,
+                  reason: "response_exceeds_error_ledger_budget",
+                },
           schemaDiagnostics: diagnostics,
         });
       }

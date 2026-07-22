@@ -3,22 +3,60 @@ export const comparePages = [
     slug: "hirly-vs-linkedin",
     title: "Hirly vs LinkedIn : lequel choisir pour trouver un emploi en 2026 ?",
     metaTitle: "Hirly vs LinkedIn : comparatif honnête pour les candidats 2026",
-    metaDescription: "Hirly vs LinkedIn : forces, limites, différences clés. Lequel choisir pour une recherche d'emploi active en 2026 ? Comparatif honnête avec tableau de features.",
+    metaDescription:
+      "Hirly vs LinkedIn : forces, limites, différences clés. Lequel choisir pour une recherche d'emploi active en 2026 ? Comparatif honnête avec tableau de features.",
     competitor: "LinkedIn",
     hirlyTagline: "Matching IA + auto-candidature ATS en 1 swipe",
     competitorTagline: "Réseau professionnel #1, visibilité passive",
-    verdict: "Hirly est meilleur pour postuler activement et rapidement. LinkedIn est meilleur pour la visibilité passive et le réseau. Les deux sont complémentaires.",
+    verdict:
+      "Hirly est meilleur pour postuler activement et rapidement. LinkedIn est meilleur pour la visibilité passive et le réseau. Les deux sont complémentaires.",
     features: [
-      { feature: "Recherche d'offres", hirly: "Matching IA personnalisé", competitor: "Recherche par mots-clés" },
-      { feature: "Candidature automatique", hirly: "Oui — 1 swipe suffit", competitor: "Non — formulaire manuel" },
-      { feature: "Génération CV adapté", hirly: "Oui, par IA pour chaque offre", competitor: "Non" },
-      { feature: "Lettre de motivation IA", hirly: "Oui, personnalisée à chaque offre", competitor: "Non" },
-      { feature: "Soumission ATS directe", hirly: "Greenhouse, Lever", competitor: "Non — redirections externes" },
-      { feature: "Suivi des candidatures", hirly: "Tracker intégré", competitor: "Basique (My Jobs)" },
+      {
+        feature: "Recherche d'offres",
+        hirly: "Matching IA personnalisé",
+        competitor: "Recherche par mots-clés",
+      },
+      {
+        feature: "Candidature automatique",
+        hirly: "Oui — 1 swipe suffit",
+        competitor: "Non — formulaire manuel",
+      },
+      {
+        feature: "Génération CV adapté",
+        hirly: "Oui, par IA pour chaque offre",
+        competitor: "Non",
+      },
+      {
+        feature: "Lettre de motivation IA",
+        hirly: "Oui, personnalisée à chaque offre",
+        competitor: "Non",
+      },
+      {
+        feature: "Soumission ATS directe",
+        hirly: "Greenhouse, Lever",
+        competitor: "Non — redirections externes",
+      },
+      {
+        feature: "Suivi des candidatures",
+        hirly: "Tracker intégré",
+        competitor: "Basique (My Jobs)",
+      },
       { feature: "Réseau professionnel", hirly: "Non", competitor: "Oui — référence mondiale" },
-      { feature: "Visibilité passive", hirly: "Non", competitor: "Oui — les recruteurs vous trouvent" },
-      { feature: "Volume d'offres", hirly: "Restreint (tech/startup)", competitor: "Très large (toutes catégories)" },
-      { feature: "Prix candidat", hirly: "Gratuit + plans payants", competitor: "Gratuit + Premium €29/mois" },
+      {
+        feature: "Visibilité passive",
+        hirly: "Non",
+        competitor: "Oui — les recruteurs vous trouvent",
+      },
+      {
+        feature: "Volume d'offres",
+        hirly: "Restreint (tech/startup)",
+        competitor: "Très large (toutes catégories)",
+      },
+      {
+        feature: "Prix candidat",
+        hirly: "Gratuit + plans payants",
+        competitor: "Gratuit + Premium €29/mois",
+      },
     ],
     sections: [
       {
@@ -39,30 +77,72 @@ export const comparePages = [
       },
     ],
     faq: [
-      { id: 1, question: "Peut-on utiliser Hirly et LinkedIn en même temps ?", answer: "Oui, et c'est la combinaison recommandée. LinkedIn pour la visibilité passive et le réseau, Hirly pour les candidatures actives automatisées." },
-      { id: 2, question: "Hirly soumet-il aux offres LinkedIn ?", answer: "Hirly se concentre sur les offres accessibles via Greenhouse et Lever. Les offres uniquement sur LinkedIn (sans ATS externe) ne sont pas couvertes pour l'instant." },
-      { id: 3, question: "LinkedIn Premium vaut-il la peine ?", answer: "LinkedIn Premium apporte principalement InMail et des insights sur les candidatures. Pour une recherche active, Hirly offre plus de valeur concrète au même prix." },
-      { id: 4, question: "Les recruteurs préfèrent-ils les candidatures LinkedIn ou ATS ?", answer: "La plupart des entreprises tech gèrent les candidatures dans leur ATS, pas dans LinkedIn. La soumission directe via API ATS (Hirly) est souvent plus fiable qu'une candidature LinkedIn Easy Apply." },
+      {
+        id: 1,
+        question: "Peut-on utiliser Hirly et LinkedIn en même temps ?",
+        answer:
+          "Oui, et c'est la combinaison recommandée. LinkedIn pour la visibilité passive et le réseau, Hirly pour les candidatures actives automatisées.",
+      },
+      {
+        id: 2,
+        question: "Hirly soumet-il aux offres LinkedIn ?",
+        answer:
+          "Hirly se concentre sur les offres accessibles via Greenhouse et Lever. Les offres uniquement sur LinkedIn (sans ATS externe) ne sont pas couvertes pour l'instant.",
+      },
+      {
+        id: 3,
+        question: "LinkedIn Premium vaut-il la peine ?",
+        answer:
+          "LinkedIn Premium apporte principalement InMail et des insights sur les candidatures. Pour une recherche active, Hirly offre plus de valeur concrète au même prix.",
+      },
+      {
+        id: 4,
+        question: "Les recruteurs préfèrent-ils les candidatures LinkedIn ou ATS ?",
+        answer:
+          "La plupart des entreprises tech gèrent les candidatures dans leur ATS, pas dans LinkedIn. La soumission directe via API ATS (Hirly) est souvent plus fiable qu'une candidature LinkedIn Easy Apply.",
+      },
     ],
   },
   {
     slug: "hirly-vs-indeed",
     title: "Hirly vs Indeed : comparatif honnête pour les candidats actifs",
     metaTitle: "Hirly vs Indeed : quel jobboard en 2026 ?",
-    metaDescription: "Hirly vs Indeed : volume vs qualité, candidature manuelle vs automatique. Comparatif honnête pour choisir le bon outil selon votre profil et secteur.",
+    metaDescription:
+      "Hirly vs Indeed : volume vs qualité, candidature manuelle vs automatique. Comparatif honnête pour choisir le bon outil selon votre profil et secteur.",
     competitor: "Indeed",
     hirlyTagline: "Matching IA + auto-candidature ATS en 1 swipe",
     competitorTagline: "Le plus grand agrégateur d'offres d'emploi mondial",
-    verdict: "Indeed gagne sur le volume et la couverture sectorielle. Hirly gagne sur l'expérience candidat, la personnalisation et la vitesse de candidature. Pour la tech et les startups, Hirly est plus efficace.",
+    verdict:
+      "Indeed gagne sur le volume et la couverture sectorielle. Hirly gagne sur l'expérience candidat, la personnalisation et la vitesse de candidature. Pour la tech et les startups, Hirly est plus efficace.",
     features: [
-      { feature: "Volume d'offres", hirly: "Restreint (tech/startup)", competitor: "Très large (toutes catégories)" },
-      { feature: "Candidature automatique", hirly: "Oui — 1 swipe suffit", competitor: "Non — formulaire par offre" },
+      {
+        feature: "Volume d'offres",
+        hirly: "Restreint (tech/startup)",
+        competitor: "Très large (toutes catégories)",
+      },
+      {
+        feature: "Candidature automatique",
+        hirly: "Oui — 1 swipe suffit",
+        competitor: "Non — formulaire par offre",
+      },
       { feature: "Génération CV adapté", hirly: "Oui, par IA", competitor: "Non" },
       { feature: "Lettre de motivation IA", hirly: "Oui, personnalisée", competitor: "Non" },
-      { feature: "Soumission ATS directe", hirly: "Greenhouse, Lever", competitor: "Non — redirections externes" },
+      {
+        feature: "Soumission ATS directe",
+        hirly: "Greenhouse, Lever",
+        competitor: "Non — redirections externes",
+      },
       { feature: "Indeed Apply", hirly: "Non applicable", competitor: "Oui (formulaire rapide)" },
-      { feature: "Matching IA", hirly: "Score de matching par profil", competitor: "Correspondance basique par mots-clés" },
-      { feature: "Alertes emploi", hirly: "Matching affiné par comportement", competitor: "Alertes email par mots-clés" },
+      {
+        feature: "Matching IA",
+        hirly: "Score de matching par profil",
+        competitor: "Correspondance basique par mots-clés",
+      },
+      {
+        feature: "Alertes emploi",
+        hirly: "Matching affiné par comportement",
+        competitor: "Alertes email par mots-clés",
+      },
       { feature: "Suivi candidatures", hirly: "Tracker intégré complet", competitor: "Basique" },
       { feature: "Prix candidat", hirly: "Gratuit + plans payants", competitor: "Gratuit" },
     ],
@@ -85,10 +165,30 @@ export const comparePages = [
       },
     ],
     faq: [
-      { id: 1, question: "Indeed est-il meilleur qu'Hirly pour trouver un emploi ?", answer: "Ça dépend du secteur. Pour la tech et les startups, Hirly est plus efficace. Pour les secteurs traditionnels, Indeed a une meilleure couverture." },
-      { id: 2, question: "Indeed Apply est-il aussi rapide que Hirly ?", answer: "Indeed Apply accélère le remplissage des formulaires mais ne génère pas de candidature personnalisée. Hirly adapte le CV et la LM à chaque offre automatiquement." },
-      { id: 3, question: "Peut-on utiliser Hirly et Indeed ensemble ?", answer: "Oui. Indeed pour la veille et la couverture large, Hirly pour les candidatures actives automatisées dans la tech." },
-      { id: 4, question: "Indeed donne-t-il des retours sur les candidatures ?", answer: "Indeed fournit des données basiques (nombre de vues). Le suivi détaillé des candidatures est limité. Hirly intègre un tracker complet avec historique et rappels." },
+      {
+        id: 1,
+        question: "Indeed est-il meilleur qu'Hirly pour trouver un emploi ?",
+        answer:
+          "Ça dépend du secteur. Pour la tech et les startups, Hirly est plus efficace. Pour les secteurs traditionnels, Indeed a une meilleure couverture.",
+      },
+      {
+        id: 2,
+        question: "Indeed Apply est-il aussi rapide que Hirly ?",
+        answer:
+          "Indeed Apply accélère le remplissage des formulaires mais ne génère pas de candidature personnalisée. Hirly adapte le CV et la LM à chaque offre automatiquement.",
+      },
+      {
+        id: 3,
+        question: "Peut-on utiliser Hirly et Indeed ensemble ?",
+        answer:
+          "Oui. Indeed pour la veille et la couverture large, Hirly pour les candidatures actives automatisées dans la tech.",
+      },
+      {
+        id: 4,
+        question: "Indeed donne-t-il des retours sur les candidatures ?",
+        answer:
+          "Indeed fournit des données basiques (nombre de vues). Le suivi détaillé des candidatures est limité. Hirly intègre un tracker complet avec historique et rappels.",
+      },
     ],
   },
 ];

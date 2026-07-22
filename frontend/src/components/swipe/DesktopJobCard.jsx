@@ -81,7 +81,9 @@ function DetailSection({ title, bullets, body, theme, expanded = false, t }) {
         ) : null}
       </h3>
       {body ? (
-        <p className={`text-sm whitespace-pre-wrap ${theme.cardAboutBody} ${expanded ? "" : "line-clamp-6"}`}>
+        <p
+          className={`text-sm whitespace-pre-wrap ${theme.cardAboutBody} ${expanded ? "" : "line-clamp-6"}`}
+        >
           {body}
         </p>
       ) : null}
@@ -109,7 +111,9 @@ export default function DesktopJobCard({ job, theme, t, lang }) {
 
   return (
     <div className="flex min-h-0 h-full flex-1 flex-col">
-      <div className={`flex h-1/4 min-h-0 shrink-0 items-center border-b px-5 py-3 pr-24 lg:px-6 lg:pr-28 ${theme.cardHeader}`}>
+      <div
+        className={`flex h-1/4 min-h-0 shrink-0 items-center border-b px-5 py-3 pr-24 lg:px-6 lg:pr-28 ${theme.cardHeader}`}
+      >
         <div className="flex min-w-0 flex-1 items-center gap-3 sm:gap-4">
           <CompanyLogo job={job} size="lg" rounded="2xl" className="shrink-0" />
           <div className="min-w-0 flex-1">
@@ -126,73 +130,74 @@ export default function DesktopJobCard({ job, theme, t, lang }) {
                 className={`!bg-violet-100 !text-violet-700 dark:!bg-violet-500/15 dark:!text-violet-300 ${theme.cardBadge || ""}`}
               />
             </div>
-            <p className={`mt-0.5 truncate text-sm font-medium sm:text-base ${theme.cardCompany}`}>{job.company}</p>
+            <p className={`mt-0.5 truncate text-sm font-medium sm:text-base ${theme.cardCompany}`}>
+              {job.company}
+            </p>
           </div>
         </div>
       </div>
 
       <div className="flex h-3/4 min-h-0 flex-col">
-      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-6 py-4 pb-24 outline-none lg:px-8 lg:py-5 lg:pb-28">
-        <div className={`flex flex-wrap items-center gap-x-4 gap-y-2 text-sm ${theme.cardMeta}`}>
-          <span className="inline-flex min-w-0 items-center gap-1.5">
-            <MapPin className="size-4 shrink-0" aria-hidden="true" />
-            <span className="truncate">{location}</span>
-          </span>
-          {salaryLabel ? (
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-6 py-4 pb-24 outline-none lg:px-8 lg:py-5 lg:pb-28">
+          <div className={`flex flex-wrap items-center gap-x-4 gap-y-2 text-sm ${theme.cardMeta}`}>
             <span className="inline-flex min-w-0 items-center gap-1.5">
-              <DollarSign className="size-4 shrink-0" aria-hidden="true" />
-              <span className="truncate">{salaryLabel}</span>
+              <MapPin className="size-4 shrink-0" aria-hidden="true" />
+              <span className="truncate">{location}</span>
             </span>
-          ) : null}
-          <span className="inline-flex items-center gap-1.5">
-            <Calendar className="size-4 shrink-0" aria-hidden="true" />
-            {formatPosted(job.posted_at, t)}
-          </span>
-        </div>
-
-        {previewText ? (
-          <p className={`line-clamp-2 text-sm leading-relaxed ${theme.cardAboutBody || theme.cardMeta}`}>
-            {previewText}
-          </p>
-        ) : null}
-
-        {badges.length > 0 ? (
-          <div className="flex flex-wrap gap-2">
-            {badges.map((badge) => (
-              <JobBadge key={badge.label} label={badge.label} icon={badge.icon} theme={theme} />
-            ))}
+            {salaryLabel ? (
+              <span className="inline-flex min-w-0 items-center gap-1.5">
+                <DollarSign className="size-4 shrink-0" aria-hidden="true" />
+                <span className="truncate">{salaryLabel}</span>
+              </span>
+            ) : null}
+            <span className="inline-flex items-center gap-1.5">
+              <Calendar className="size-4 shrink-0" aria-hidden="true" />
+              {formatPosted(job.posted_at, t)}
+            </span>
           </div>
-        ) : null}
 
-        <JobOfferDetails job={job} t={t} lang={lang} theme={theme} />
-
-        <div className="space-y-4">
-          {about ? (
-            <DetailSection
-              title="About This Role"
-              body={about}
-              theme={theme}
-              t={t}
-            />
+          {previewText ? (
+            <p
+              className={`line-clamp-2 text-sm leading-relaxed ${theme.cardAboutBody || theme.cardMeta}`}
+            >
+              {previewText}
+            </p>
           ) : null}
 
-          {detailSections.map((section) => (
-            <DetailSection
-              key={section.title}
-              title={section.title}
-              bullets={section.bullets}
-              theme={theme}
-              t={t}
-            />
-          ))}
-          <JobRomeProfile job={job} t={t} enabled />
-        </div>
+          {badges.length > 0 ? (
+            <div className="flex flex-wrap gap-2">
+              {badges.map((badge) => (
+                <JobBadge key={badge.label} label={badge.label} icon={badge.icon} theme={theme} />
+              ))}
+            </div>
+          ) : null}
 
-        <div className="flex flex-col items-center justify-center gap-2 pt-2 pb-1">
-          <Logo size={44} className="h-11 w-11" />
-          <p className={`text-center text-sm font-semibold font-display ${theme.cardCompany}`}>{BRAND.NAME}</p>
+          <JobOfferDetails job={job} t={t} lang={lang} theme={theme} />
+
+          <div className="space-y-4">
+            {about ? (
+              <DetailSection title="About This Role" body={about} theme={theme} t={t} />
+            ) : null}
+
+            {detailSections.map((section) => (
+              <DetailSection
+                key={section.title}
+                title={section.title}
+                bullets={section.bullets}
+                theme={theme}
+                t={t}
+              />
+            ))}
+            <JobRomeProfile job={job} t={t} enabled />
+          </div>
+
+          <div className="flex flex-col items-center justify-center gap-2 pt-2 pb-1">
+            <Logo size={44} className="h-11 w-11" />
+            <p className={`text-center text-sm font-semibold font-display ${theme.cardCompany}`}>
+              {BRAND.NAME}
+            </p>
+          </div>
         </div>
-      </div>
       </div>
     </div>
   );

@@ -31,9 +31,7 @@ describe("analytics governance contract", () => {
       analyticsRegistry.events.length,
     );
     expect(resolveAnalyticsEventName("auth_success")).toBe("auth_ui_succeeded");
-    expect(resolveAnalyticsEventName("job_swiped_right")).toBe(
-      "job_application_created",
-    );
+    expect(resolveAnalyticsEventName("job_swiped_right")).toBe("job_application_created");
     expect(resolveAnalyticsEventName("not_registered")).toBeNull();
   });
 
@@ -62,9 +60,7 @@ describe("analytics governance contract", () => {
       (event) => event.name === "subscription_activated",
     );
     expect(activation).toHaveLength(1);
-    expect(resolveAnalyticsEventName("subscription_activated")).toBe(
-      "subscription_activated",
-    );
+    expect(resolveAnalyticsEventName("subscription_activated")).toBe("subscription_activated");
     expect(activation[0]).toMatchObject({
       schemaVersion: 1,
       authoritativeSource: "backend",
@@ -79,9 +75,7 @@ describe("analytics governance contract", () => {
       },
     });
 
-    const churn = analyticsRegistry.events.find(
-      (event) => event.name === "subscription_churned",
-    );
+    const churn = analyticsRegistry.events.find((event) => event.name === "subscription_churned");
     expect(churn).toMatchObject({
       authoritativeSource: "backend",
       identityPolicy: "identified",
@@ -121,9 +115,7 @@ describe("analytics governance contract", () => {
   });
 
   test("does not change existing signup and successful-payment definitions", () => {
-    expect(
-      analyticsRegistry.events.find((event) => event.name === "user_signed_up"),
-    ).toEqual({
+    expect(analyticsRegistry.events.find((event) => event.name === "user_signed_up")).toEqual({
       name: "user_signed_up",
       schemaVersion: 1,
       definition: "A durable user account was created by the backend.",
@@ -138,9 +130,7 @@ describe("analytics governance contract", () => {
       },
       legacyAliases: ["signup_completed"],
     });
-    expect(
-      analyticsRegistry.events.find((event) => event.name === "payment_succeeded"),
-    ).toEqual({
+    expect(analyticsRegistry.events.find((event) => event.name === "payment_succeeded")).toEqual({
       name: "payment_succeeded",
       schemaVersion: 1,
       definition: "A Stripe webhook confirmed a successful payment.",
@@ -174,10 +164,7 @@ describe("analytics governance contract", () => {
   test("classifies client occurrence time without promoting stale history", () => {
     const receivedAt = "2026-07-20T12:00:00+00:00";
     expect(
-      classifyAnalyticsOccurrence(
-        "2026-07-20T11:59:30+00:00",
-        receivedAt,
-      ).timestampQuality,
+      classifyAnalyticsOccurrence("2026-07-20T11:59:30+00:00", receivedAt).timestampQuality,
     ).toBe("validated_client_occurrence");
     for (const occurredAt of [
       "2026-07-20T12:05:01+00:00",
@@ -185,9 +172,9 @@ describe("analytics governance contract", () => {
       "invalid",
       null,
     ]) {
-      expect(
-        classifyAnalyticsOccurrence(occurredAt, receivedAt).timestampQuality,
-      ).toBe("server_received_at");
+      expect(classifyAnalyticsOccurrence(occurredAt, receivedAt).timestampQuality).toBe(
+        "server_received_at",
+      );
     }
   });
 

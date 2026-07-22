@@ -74,13 +74,14 @@ function decodeDemoCursor(cursor, resource, scopeHash) {
     if (signature !== demoCursorSignature(body)) throw demoCursorError();
     const payload = JSON.parse(body);
     if (
-      payload?.v !== 1
-      || payload?.resource !== resource
-      || !["next", "previous"].includes(payload?.direction)
-      || payload?.scope_hash !== scopeHash
-      || typeof payload?.sort_at !== "string"
-      || typeof payload?.id !== "string"
-    ) throw demoCursorError();
+      payload?.v !== 1 ||
+      payload?.resource !== resource ||
+      !["next", "previous"].includes(payload?.direction) ||
+      payload?.scope_hash !== scopeHash ||
+      typeof payload?.sort_at !== "string" ||
+      typeof payload?.id !== "string"
+    )
+      throw demoCursorError();
     return payload;
   } catch (error) {
     if (error?.response?.status === 422) throw error;
@@ -99,31 +100,40 @@ function cursorAdminRows(rows, params, { resource, sortField, idField, scope }) 
   const limit = Math.min(200, Math.max(1, Number.parseInt(params.limit || "100", 10) || 100));
   const scopeHash = demoScopeHash({ resource, limit, ...scope });
   const cursor = decodeDemoCursor(params.cursor, resource, scopeHash);
-  const sorted = [...rows].sort((left, right) => compareDemoAdminRows(left, right, sortField, idField));
+  const sorted = [...rows].sort((left, right) =>
+    compareDemoAdminRows(left, right, sortField, idField),
+  );
   let start = 0;
   if (cursor) {
     const anchor = { [sortField]: cursor.sort_at, [idField]: cursor.id };
-    const insertion = sorted.findIndex((row) => compareDemoAdminRows(row, anchor, sortField, idField) >= 0);
-    const anchorIndex = sorted.findIndex((row) => (
-      String(row?.[sortField] || "-infinity") === cursor.sort_at
-      && String(row?.[idField] || "") === cursor.id
-    ));
-    const boundary = anchorIndex >= 0 ? anchorIndex : (insertion >= 0 ? insertion : sorted.length);
-    start = cursor.direction === "previous"
-      ? Math.max(0, boundary - limit)
-      : Math.min(sorted.length, boundary + (anchorIndex >= 0 ? 1 : 0));
+    const insertion = sorted.findIndex(
+      (row) => compareDemoAdminRows(row, anchor, sortField, idField) >= 0,
+    );
+    const anchorIndex = sorted.findIndex(
+      (row) =>
+        String(row?.[sortField] || "-infinity") === cursor.sort_at &&
+        String(row?.[idField] || "") === cursor.id,
+    );
+    const boundary = anchorIndex >= 0 ? anchorIndex : insertion >= 0 ? insertion : sorted.length;
+    start =
+      cursor.direction === "previous"
+        ? Math.max(0, boundary - limit)
+        : Math.min(sorted.length, boundary + (anchorIndex >= 0 ? 1 : 0));
   }
   const pageRows = sorted.slice(start, start + limit);
   const hasPrevious = start > 0;
   const hasNext = start + pageRows.length < sorted.length;
-  const makeCursor = (row, direction) => row ? encodeDemoCursor({
-    v: 1,
-    resource,
-    direction,
-    sort_at: String(row?.[sortField] || "-infinity"),
-    id: String(row?.[idField] || ""),
-    scope_hash: scopeHash,
-  }) : null;
+  const makeCursor = (row, direction) =>
+    row
+      ? encodeDemoCursor({
+          v: 1,
+          resource,
+          direction,
+          sort_at: String(row?.[sortField] || "-infinity"),
+          id: String(row?.[idField] || ""),
+          scope_hash: scopeHash,
+        })
+      : null;
   const now = new Date().toISOString();
   return {
     rows: pageRows,
@@ -142,10 +152,10 @@ function cursorAdminRows(rows, params, { resource, sortField, idField, scope }) 
 
 function findJob(jobId) {
   return (
-    state.feedJobs.find((j) => j.job_id === jobId)
-    || state.applications.find((a) => a.job_id === jobId)?.job
-    || [...state.historyRight, ...state.historyLeft].find((r) => r.job_id === jobId)?.job
-    || DEMO_JOBS.find((j) => j.job_id === jobId)
+    state.feedJobs.find((j) => j.job_id === jobId) ||
+    state.applications.find((a) => a.job_id === jobId)?.job ||
+    [...state.historyRight, ...state.historyLeft].find((r) => r.job_id === jobId)?.job ||
+    DEMO_JOBS.find((j) => j.job_id === jobId)
   );
 }
 
@@ -216,7 +226,8 @@ export function getDemoResponse(config) {
     if (body?.target_role) DEMO_PROFILE.target_role = body.target_role;
     if (body?.target_roles) DEMO_PROFILE.target_roles = body.target_roles;
     if (body?.target_location !== undefined) DEMO_PROFILE.target_location = body.target_location;
-    if (body?.target_location_data !== undefined) DEMO_PROFILE.target_location_data = body.target_location_data;
+    if (body?.target_location_data !== undefined)
+      DEMO_PROFILE.target_location_data = body.target_location_data;
     if (body?.remote_preference) DEMO_PROFILE.remote_preference = body.remote_preference;
     return { ok: true };
   }
@@ -261,7 +272,9 @@ export function getDemoResponse(config) {
 
   if (method === "delete" && path.startsWith("/profile/documents/")) {
     const id = path.replace("/profile/documents/", "");
-    DEMO_PROFILE.additional_documents = (DEMO_PROFILE.additional_documents || []).filter((doc) => doc.id !== id);
+    DEMO_PROFILE.additional_documents = (DEMO_PROFILE.additional_documents || []).filter(
+      (doc) => doc.id !== id,
+    );
     return { ok: true };
   }
 
@@ -368,7 +381,10 @@ export function getDemoResponse(config) {
   }
 
   if (method === "post" && /^\/training\/courses\/[^/]+\/enroll$/.test(path)) {
-    return { ok: true, enrollment: { enrolled: true, progress_percent: 0, completed_module_ids: [] } };
+    return {
+      ok: true,
+      enrollment: { enrolled: true, progress_percent: 0, completed_module_ids: [] },
+    };
   }
 
   if (method === "post" && /^\/training\/courses\/[^/]+\/modules\/[^/]+\/complete$/.test(path)) {
@@ -396,18 +412,33 @@ export function getDemoResponse(config) {
   }
 
   if (method === "get" && path === "/admin/users") {
-    const query = String(params.q || "").trim().toLowerCase();
-    const payingOnly = ["1", "true", "yes"].includes(String(params.paying_only || "").toLowerCase());
-    const allUsers = [{
-      user_id: "demo-user", email: "demo@hirly.app", name: "Demo User",
-      is_premium: true, plan: "pro", credits_total: 100, credits_remaining: 84,
-      profile_completion: 100, cv_uploaded: true, total_applications: state.applications.length,
-      total_swipes: state.historyRight.length + state.historyLeft.length,
-      right_swipes: state.historyRight.length, left_swipes: state.historyLeft.length,
-      last_active_at: "2026-07-20T12:00:00+00:00",
-    }];
+    const query = String(params.q || "")
+      .trim()
+      .toLowerCase();
+    const payingOnly = ["1", "true", "yes"].includes(
+      String(params.paying_only || "").toLowerCase(),
+    );
+    const allUsers = [
+      {
+        user_id: "demo-user",
+        email: "demo@hirly.app",
+        name: "Demo User",
+        is_premium: true,
+        plan: "pro",
+        credits_total: 100,
+        credits_remaining: 84,
+        profile_completion: 100,
+        cv_uploaded: true,
+        total_applications: state.applications.length,
+        total_swipes: state.historyRight.length + state.historyLeft.length,
+        right_swipes: state.historyRight.length,
+        left_swipes: state.historyLeft.length,
+        last_active_at: "2026-07-20T12:00:00+00:00",
+      },
+    ];
     const matching = allUsers.filter((user) => {
-      const searchMatches = !query || [user.user_id, user.email, user.name].join(" ").toLowerCase().includes(query);
+      const searchMatches =
+        !query || [user.user_id, user.email, user.name].join(" ").toLowerCase().includes(query);
       return searchMatches && (!payingOnly || user.is_premium);
     });
     const paged = cursorAdminRows(matching, params, {
@@ -430,7 +461,12 @@ export function getDemoResponse(config) {
       resource: "user-analytics",
       sortField: "last_active_at",
       idField: "user_id",
-      scope: { q: String(params.q || "").trim().toLowerCase() || null },
+      scope: {
+        q:
+          String(params.q || "")
+            .trim()
+            .toLowerCase() || null,
+      },
     });
     const { rows, ...metadata } = paged;
     return {
@@ -438,9 +474,13 @@ export function getDemoResponse(config) {
       users: rows,
       ...metadata,
       summary: {
-        total_users: 0, onboarding_completed: 0, onboarding_in_progress: 0,
-        onboarding_never_started: 0, avg_time_spent_minutes: 0,
-        total_swipes: 0, total_applications: 0,
+        total_users: 0,
+        onboarding_completed: 0,
+        onboarding_in_progress: 0,
+        onboarding_never_started: 0,
+        avg_time_spent_minutes: 0,
+        total_swipes: 0,
+        total_applications: 0,
       },
       onboarding_dropoff: { by_step: [], never_started: 0, in_progress: 0, completed: 0 },
       answer_distributions: [],
@@ -471,15 +511,19 @@ export function getDemoResponse(config) {
   if (method === "get" && path.startsWith("/admin/applications")) {
     const filter = params.filter || params.status || "all";
     const normalized = clone(state.applications);
-    const matching = filter === "all"
-      ? normalized
-      : normalized.filter((application) => (
-        application.submission_status === filter
-        || application.manual_status === filter
-        || (filter === "prepared" && ["ready", "prepared"].includes(application.submission_status))
-      ));
-    const activeQueue = normalized
-      .filter((application) => ["queued", "running", "awaiting_review"].includes(application.auto_apply_queue_status));
+    const matching =
+      filter === "all"
+        ? normalized
+        : normalized.filter(
+            (application) =>
+              application.submission_status === filter ||
+              application.manual_status === filter ||
+              (filter === "prepared" &&
+                ["ready", "prepared"].includes(application.submission_status)),
+          );
+    const activeQueue = normalized.filter((application) =>
+      ["queued", "running", "awaiting_review"].includes(application.auto_apply_queue_status),
+    );
     const queueItems = activeQueue.slice(0, 20);
     const paged = cursorAdminRows(matching, params, {
       resource: "applications",
@@ -593,7 +637,13 @@ export function getDemoResponse(config) {
   }
 
   if (method === "post" && path === "/admin/influencers") {
-    return { ok: true, influencer: { influencer_id: `demo_inf_${Date.now()}`, ...(typeof body === "string" ? JSON.parse(body) : body) } };
+    return {
+      ok: true,
+      influencer: {
+        influencer_id: `demo_inf_${Date.now()}`,
+        ...(typeof body === "string" ? JSON.parse(body) : body),
+      },
+    };
   }
 
   if (method === "post" && /^\/admin\/influencers\/[^/]+\/grant-demo$/.test(path)) {

@@ -100,8 +100,12 @@ export default function RoleAutocomplete({
   };
 
   const dropdownTitle = isFrench(lang)
-    ? (trimmedValue ? "Métiers correspondants" : "Métiers suggérés")
-    : (trimmedValue ? "Matching roles" : "Suggested roles");
+    ? trimmedValue
+      ? "Métiers correspondants"
+      : "Métiers suggérés"
+    : trimmedValue
+      ? "Matching roles"
+      : "Suggested roles";
 
   return (
     <div className="min-w-0 flex-1" data-testid={testId}>
@@ -145,10 +149,14 @@ export default function RoleAutocomplete({
                     data-testid={`${testId}-option`}
                     role="option"
                   >
-                    <Briefcase className={`mt-0.5 h-4 w-4 shrink-0 ${light ? "text-violet-500" : "text-sprout-mint"}`} />
+                    <Briefcase
+                      className={`mt-0.5 h-4 w-4 shrink-0 ${light ? "text-violet-500" : "text-sprout-mint"}`}
+                    />
                     <span className="min-w-0">
                       <span className="block">{translateRoleLabel(role, lang)}</span>
-                      <span className={`block mt-0.5 ${badgeClass}`}>{translateRoleGroupLabel(group, lang)}</span>
+                      <span className={`block mt-0.5 ${badgeClass}`}>
+                        {translateRoleGroupLabel(group, lang)}
+                      </span>
                     </span>
                   </button>
                 ))}

@@ -41,8 +41,8 @@ export default function DemoWelcomeModal({ open, onOpenChange, onDismiss }) {
                 {DEMO_CREDITS_MAX} crédits sur votre solde
               </p>
               <p className="mt-1 leading-relaxed text-zinc-600">
-                Lorsque votre solde atteint 0, il se réinitialise automatiquement à {DEMO_CREDITS_MAX}.
-                En pratique, vous disposez de crédits illimités pour vos démos.
+                Lorsque votre solde atteint 0, il se réinitialise automatiquement à{" "}
+                {DEMO_CREDITS_MAX}. En pratique, vous disposez de crédits illimités pour vos démos.
               </p>
             </div>
           </div>
@@ -52,8 +52,8 @@ export default function DemoWelcomeModal({ open, onOpenChange, onDismiss }) {
             <div className="text-sm text-zinc-700">
               <p className="font-semibold text-zinc-900">Aucune candidature réelle envoyée</p>
               <p className="mt-1 leading-relaxed text-zinc-600">
-                Pour ne pas déranger les entreprises, un swipe à droite n&apos;envoie jamais votre candidature
-                à l&apos;employeur. Tout reste en local sur ce compte.
+                Pour ne pas déranger les entreprises, un swipe à droite n&apos;envoie jamais votre
+                candidature à l&apos;employeur. Tout reste en local sur ce compte.
               </p>
             </div>
           </div>
@@ -63,8 +63,8 @@ export default function DemoWelcomeModal({ open, onOpenChange, onDismiss }) {
             <div className="text-sm text-zinc-700">
               <p className="font-semibold text-zinc-900">Inbox et notifications simulées</p>
               <p className="mt-1 leading-relaxed text-zinc-600">
-                Les messages et mises à jour que vous verrez ici sont factices : ils servent uniquement
-                à illustrer le fonctionnement de l&apos;application.
+                Les messages et mises à jour que vous verrez ici sont factices : ils servent
+                uniquement à illustrer le fonctionnement de l&apos;application.
               </p>
             </div>
           </div>

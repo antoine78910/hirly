@@ -1,7 +1,12 @@
 import { motion } from "framer-motion";
 
 /** Brand gradient switch — used for AI settings and other premium toggles. */
-export default function ViralToggle({ checked, onChange, testId, offClassName = "bg-zinc-200 dark:bg-zinc-700" }) {
+export default function ViralToggle({
+  checked,
+  onChange,
+  testId,
+  offClassName = "bg-zinc-200 dark:bg-zinc-700",
+}) {
   return (
     <button
       type="button"
@@ -10,9 +15,7 @@ export default function ViralToggle({ checked, onChange, testId, offClassName = 
       data-testid={testId}
       onClick={() => onChange(!checked)}
       className={`relative h-7 w-12 shrink-0 rounded-full transition-all duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/30 ${
-        checked
-          ? "gradient-linkedin shadow-[0_0_16px_rgba(124,58,237,0.35)]"
-          : offClassName
+        checked ? "gradient-linkedin shadow-[0_0_16px_rgba(124,58,237,0.35)]" : offClassName
       }`}
     >
       <motion.span

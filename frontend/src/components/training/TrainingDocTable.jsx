@@ -27,7 +27,9 @@ function TableCellContent({ cell }) {
   if (cell?.type === "tag") {
     const palette = TAG_COLORS[cell.color] || TAG_COLORS.yellow;
     return (
-      <span className={`inline-flex rounded-full border px-2.5 py-0.5 text-xs font-semibold ${palette}`}>
+      <span
+        className={`inline-flex rounded-full border px-2.5 py-0.5 text-xs font-semibold ${palette}`}
+      >
         {cell.text}
       </span>
     );

@@ -86,9 +86,7 @@ describe("worker HTTP plane", () => {
       logger: createJsonLogger(() => {}),
       health: { ready: true },
     });
-    expect(
-      (await fetch(`${server.url}control/enqueue`, { method: "POST" })).status,
-    ).toBe(401);
+    expect((await fetch(`${server.url}control/enqueue`, { method: "POST" })).status).toBe(401);
     const response = await fetch(`${server.url}control/enqueue`, {
       method: "POST",
       headers: {

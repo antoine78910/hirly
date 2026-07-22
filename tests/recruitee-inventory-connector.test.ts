@@ -12,10 +12,7 @@ import {
   type ProviderTransport,
   type SourceContext,
 } from "../packages/ingestion/src";
-import {
-  assertProviderTransportActive,
-  getProviderModule,
-} from "../apps/worker/src/providers";
+import { assertProviderTransportActive, getProviderModule } from "../apps/worker/src/providers";
 import {
   createRecruiteeFixtureSourceAdapter,
   createRecruiteeTrialTransport,
@@ -42,10 +39,7 @@ interface RecruiteeFixture {
 
 async function fixture(): Promise<RecruiteeFixture> {
   return JSON.parse(
-    await readFile(
-      new URL("./fixtures/g011/recruitee.json", import.meta.url),
-      "utf8",
-    ),
+    await readFile(new URL("./fixtures/g011/recruitee.json", import.meta.url), "utf8"),
   ) as RecruiteeFixture;
 }
 
@@ -81,9 +75,7 @@ describe("Recruitee inventory connector", () => {
       canonicalWriteReady: false,
       rateLimit: { requestsPerMinute: 1, concurrency: 1 },
     });
-    expect(recruiteeProvider.transport.constructor.name).toBe(
-      "DisabledProviderTransport",
-    );
+    expect(recruiteeProvider.transport.constructor.name).toBe("DisabledProviderTransport");
     expect(() => assertProviderTransportActive("recruitee")).toThrow(
       "provider transport is inactive: recruitee",
     );
@@ -107,9 +99,7 @@ describe("Recruitee inventory connector", () => {
       "2026-07-21T10:11",
       "2026-07-21T10:11:12UTC",
     ]) {
-      expect(() =>
-        recruiteeRawJobSchema.parse({ ...data.raw[0], published_at }),
-      ).toThrow();
+      expect(() => recruiteeRawJobSchema.parse({ ...data.raw[0], published_at })).toThrow();
     }
   });
 
@@ -134,10 +124,14 @@ describe("Recruitee inventory connector", () => {
 
     const malformed = createRecruiteeTrialTransport({
       approvedTenantId: "vaulttec",
-      fetch: async () => new Response(JSON.stringify({
-        ...response,
-        offers: [{ ...response.offers[0], published_at: "2026-07-21T10:11:12UTC" }],
-      }), { status: 200 }),
+      fetch: async () =>
+        new Response(
+          JSON.stringify({
+            ...response,
+            offers: [{ ...response.offers[0], published_at: "2026-07-21T10:11:12UTC" }],
+          }),
+          { status: 200 },
+        ),
     });
     await expect(malformed.fetch(new AbortController().signal)).rejects.toMatchObject({
       classification: "malformed",
@@ -155,10 +149,8 @@ describe("Recruitee inventory connector", () => {
     expect(data.provenance.containsPersonalData).toBe(false);
     expect(occurrence).toMatchObject({
       externalId: "vaulttec:4401",
-      canonicalSourceUrl:
-        "https://vaulttec.recruitee.com/o/ingenieur-plateforme",
-      canonicalApplyUrl:
-        "https://vaulttec.recruitee.com/o/ingenieur-plateforme",
+      canonicalSourceUrl: "https://vaulttec.recruitee.com/o/ingenieur-plateforme",
+      canonicalApplyUrl: "https://vaulttec.recruitee.com/o/ingenieur-plateforme",
       atsPostingId: "4401",
       job: {
         title: "Ingénieur plateforme",
@@ -169,9 +161,7 @@ describe("Recruitee inventory connector", () => {
         description: "Construire des services fiables.",
       },
     });
-    expect(canonical.jobId).toBe(
-      stableJobId("recruitee", "vaulttec:4401"),
-    );
+    expect(canonical.jobId).toBe(stableJobId("recruitee", "vaulttec:4401"));
     expect(canonical.jobId).toBe("job_50b64f88b279b00b");
     expect(canonical.selectedApplyUrl).toBe(occurrence.canonicalApplyUrl);
     expect(canonical.validationStatus).toBe("valid");
@@ -205,9 +195,7 @@ describe("Recruitee inventory connector", () => {
       nextCursor: { version: "g011-fixture-v1", offset: 1 },
     });
     expect(pages[1]).toMatchObject({ complete: true, nextCursor: null });
-    expect(adapter.validateActive(rows[0], fixedNow).reason).toContain(
-      "complete successful scope",
-    );
+    expect(adapter.validateActive(rows[0], fixedNow).reason).toContain("complete successful scope");
 
     const invalid = adapter.discover({
       source: entry,
@@ -215,9 +203,7 @@ describe("Recruitee inventory connector", () => {
       cursor: { version: "g011-fixture-v1", offset: 99 },
       signal: new AbortController().signal,
     });
-    await expect(invalid[Symbol.asyncIterator]().next()).rejects.toBeInstanceOf(
-      IngestionError,
-    );
+    await expect(invalid[Symbol.asyncIterator]().next()).rejects.toBeInstanceOf(IngestionError);
   });
 
   test("rejects lookalike, credentialed, queried and cross-offer URLs", async () => {
@@ -233,9 +219,9 @@ describe("Recruitee inventory connector", () => {
       "https://vaulttec.recruitee.com/o/another-offer",
       "https://vaulttec.recruitee.com/o/ingenieur-plateforme?token=secret",
     ]) {
-      expect(() =>
-        adapter.normalize({ ...original, careers_url }, context(entry)),
-      ).toThrow(IngestionError);
+      expect(() => adapter.normalize({ ...original, careers_url }, context(entry))).toThrow(
+        IngestionError,
+      );
     }
   });
 
@@ -290,10 +276,7 @@ describe("Recruitee inventory connector", () => {
       recruiter_phone: "+33 6 12 34 56 78",
       authorization_token: "never-persist-this",
     });
-    const canonical = toCanonicalJob(
-      recruiteeProvider.adapter.normalizeRaw(raw),
-      fixedNow,
-    );
+    const canonical = toCanonicalJob(recruiteeProvider.adapter.normalizeRaw(raw), fixedNow);
     expect(canonical.data).toMatchObject({
       contact_email: "[REDACTED]",
       recruiter_phone: "[REDACTED]",
@@ -405,12 +388,11 @@ describe("Recruitee inventory connector", () => {
   test("fails closed on Recruitee trial schema drift and byte budgets", async () => {
     const drifted = createRecruiteeTrialTransport({
       approvedTenantId: "vaulttec",
-      fetch: async () =>
-        new Response(JSON.stringify({ offers: [{ id: 1 }] }), { status: 200 }),
+      fetch: async () => new Response(JSON.stringify({ offers: [{ id: 1 }] }), { status: 200 }),
     });
-    await expect(
-      drifted.fetch(new AbortController().signal),
-    ).rejects.toMatchObject({ classification: "malformed" });
+    await expect(drifted.fetch(new AbortController().signal)).rejects.toMatchObject({
+      classification: "malformed",
+    });
 
     const oversized = createRecruiteeTrialTransport({
       approvedTenantId: "vaulttec",
@@ -421,8 +403,8 @@ describe("Recruitee inventory connector", () => {
           headers: { "content-length": "999" },
         }),
     });
-    await expect(
-      oversized.fetch(new AbortController().signal),
-    ).rejects.toMatchObject({ classification: "budget_exceeded" });
+    await expect(oversized.fetch(new AbortController().signal)).rejects.toMatchObject({
+      classification: "budget_exceeded",
+    });
   });
 });

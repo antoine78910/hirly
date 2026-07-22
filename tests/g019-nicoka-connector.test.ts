@@ -29,10 +29,7 @@ async function fixture(): Promise<{
   raw: NicokaRawJob[];
 }> {
   return JSON.parse(
-    await readFile(
-      new URL("./fixtures/g019/nicoka.json", import.meta.url),
-      "utf8",
-    ),
+    await readFile(new URL("./fixtures/g019/nicoka.json", import.meta.url), "utf8"),
   );
 }
 
@@ -76,10 +73,8 @@ describe("G019 Nicoka shadow connector", () => {
     const occurrence = adapter.normalize(rows[0], context(entry));
     expect(occurrence).toMatchObject({
       externalId: "acme:76",
-      canonicalSourceUrl:
-        "https://acme.nicoka.com/api/jobs/published?jobid=76",
-      canonicalApplyUrl:
-        "https://acme.nicoka.com/public/jobs/1-sanitized-php/apply",
+      canonicalSourceUrl: "https://acme.nicoka.com/api/jobs/published?jobid=76",
+      canonicalApplyUrl: "https://acme.nicoka.com/public/jobs/1-sanitized-php/apply",
       atsPostingId: "76",
       job: {
         countryCode: "FR",
@@ -93,13 +88,12 @@ describe("G019 Nicoka shadow connector", () => {
     expect(canonical.validationStatus).toBe("valid");
     expect(canonical.manualFulfillmentReady).toBe(true);
     expect(canonical.autoApplySupported).toBe(false);
-    expect(validateApplyability(occurrence.job, context(entry).fetchedAt))
-      .toMatchObject({
-        atsProvider: "nicoka",
-        applyabilityTier: "B",
-        manualFulfillmentReady: true,
-        autoApplySupported: false,
-      });
+    expect(validateApplyability(occurrence.job, context(entry).fetchedAt)).toMatchObject({
+      atsProvider: "nicoka",
+      applyabilityTier: "B",
+      manualFulfillmentReady: true,
+      autoApplySupported: false,
+    });
   });
 
   test("deduplicates fixture pages through stable canonical upserts", async () => {
@@ -114,16 +108,14 @@ describe("G019 Nicoka shadow connector", () => {
       signal: new AbortController().signal,
     })) {
       ids.push(
-        ...page.items.map((row) =>
-          toCanonicalJob(adapter.normalize(row, context(entry)).job, context(entry).fetchedAt)
-            .jobId
+        ...page.items.map(
+          (row) =>
+            toCanonicalJob(adapter.normalize(row, context(entry)).job, context(entry).fetchedAt)
+              .jobId,
         ),
       );
     }
-    expect(ids).toEqual([
-      stableJobId("nicoka", "acme:76"),
-      stableJobId("nicoka", "acme:77"),
-    ]);
+    expect(ids).toEqual([stableJobId("nicoka", "acme:76"), stableJobId("nicoka", "acme:77")]);
     expect(new Set([...ids, ...ids]).size).toBe(2);
   });
 
@@ -162,12 +154,11 @@ describe("G019 Nicoka shadow connector", () => {
       "https://acme.nicoka.com/public/jobs/1-sanitized-php/apply#token",
       "https://acme.nicoka.com/public/jobs/1-sanitized-php/apply?token=secret",
     ]) {
-      expect(() =>
-        adapter.normalize({ ...data.raw[0], applicationUrl }, context(entry)),
-      ).toThrow(IngestionError);
+      expect(() => adapter.normalize({ ...data.raw[0], applicationUrl }, context(entry))).toThrow(
+        IngestionError,
+      );
     }
-    expect(() => nicokaRawJobSchema.parse({ ...data.raw[0], jobid: 999 }))
-      .toThrow();
+    expect(() => nicokaRawJobSchema.parse({ ...data.raw[0], jobid: 999 })).toThrow();
   });
 
   test("reconciles bounded production and trial pagination without credentials", async () => {
@@ -210,9 +201,7 @@ describe("G019 Nicoka shadow connector", () => {
       approvedTenantId: "acme",
       environment: "trial",
       fetch: async (input) => {
-        expect(input).toBe(
-          "https://trial.nicoka.com/acme/api/jobs/published?page=1",
-        );
+        expect(input).toBe("https://trial.nicoka.com/acme/api/jobs/published?page=1");
         return Response.json({
           queryUid: "trial-fixture",
           offset: 0,
@@ -232,35 +221,39 @@ describe("G019 Nicoka shadow connector", () => {
     const drift = createNicokaShadowTransport({
       approvedTenantId: "acme",
       environment: "production",
-      fetch: async () => Response.json({
-        queryUid: "drift",
-        offset: 0,
-        limit: 1,
-        page: 2,
-        pages: 2,
-        total: 2,
-        data: [data.raw[0]],
-      }),
+      fetch: async () =>
+        Response.json({
+          queryUid: "drift",
+          offset: 0,
+          limit: 1,
+          page: 2,
+          pages: 2,
+          total: 2,
+          data: [data.raw[0]],
+        }),
     });
-    await expect(drift.fetch(new AbortController().signal)).rejects
-      .toBeInstanceOf(AtsTrialTransportError);
+    await expect(drift.fetch(new AbortController().signal)).rejects.toBeInstanceOf(
+      AtsTrialTransportError,
+    );
 
     const budget = createNicokaShadowTransport({
       approvedTenantId: "acme",
       environment: "production",
       budgets: { maxPages: 1 },
-      fetch: async () => Response.json({
-        queryUid: "budget",
-        offset: 0,
-        limit: 1,
-        page: 1,
-        pages: 2,
-        total: 2,
-        data: [data.raw[0]],
-      }),
+      fetch: async () =>
+        Response.json({
+          queryUid: "budget",
+          offset: 0,
+          limit: 1,
+          page: 1,
+          pages: 2,
+          total: 2,
+          data: [data.raw[0]],
+        }),
     });
-    await expect(budget.fetch(new AbortController().signal)).rejects
-      .toMatchObject({ classification: "budget_exceeded" });
+    await expect(budget.fetch(new AbortController().signal)).rejects.toMatchObject({
+      classification: "budget_exceeded",
+    });
   });
 
   test("seals a complete shadow scorecard only after page, offset, and total reconciliation", async () => {
@@ -334,5 +327,4 @@ describe("G019 Nicoka shadow connector", () => {
       reconciliation: [{ additions: [], updates: [], removals: [] }],
     });
   });
-
 });

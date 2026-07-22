@@ -6,7 +6,10 @@ const migration = readFileSync(
   "utf8",
 );
 const rollback = readFileSync(
-  new URL("../backend/db/migrations/20260720000400_job_supply_observability.down.sql", import.meta.url),
+  new URL(
+    "../backend/db/migrations/20260720000400_job_supply_observability.down.sql",
+    import.meta.url,
+  ),
   "utf8",
 );
 const runner = readFileSync(
@@ -17,12 +20,12 @@ const queries = readFileSync(
   new URL("../apps/job-ingestion-audit/src/queries.ts", import.meta.url),
   "utf8",
 );
-const careerSourcesDefinition = migration.match(
-  /CREATE TABLE IF NOT EXISTS public\.career_sources \([\s\S]*?\n\);/,
-)?.[0] ?? "";
-const censusManifestDefinition = migration.match(
-  /CREATE TABLE IF NOT EXISTS public\.france_travail_census_manifests \([\s\S]*?\n\);/,
-)?.[0] ?? "";
+const careerSourcesDefinition =
+  migration.match(/CREATE TABLE IF NOT EXISTS public\.career_sources \([\s\S]*?\n\);/)?.[0] ?? "";
+const censusManifestDefinition =
+  migration.match(
+    /CREATE TABLE IF NOT EXISTS public\.france_travail_census_manifests \([\s\S]*?\n\);/,
+  )?.[0] ?? "";
 
 describe("G008 job-supply observability contract", () => {
   test("extends the existing run ledger and adds the required baselines", () => {
@@ -47,22 +50,17 @@ describe("G008 job-supply observability contract", () => {
   });
 
   test("keeps provider_registry as the sole writer authority and every source disabled", () => {
-    expect(migration).not.toMatch(
-      /\b(?:UPDATE|INSERT\s+INTO)\s+(?:public\.)?provider_registry\b/i,
-    );
+    expect(migration).not.toMatch(/\b(?:UPDATE|INSERT\s+INTO)\s+(?:public\.)?provider_registry\b/i);
     expect(migration).toContain(
       "provider text NOT NULL REFERENCES public.provider_registry(provider)",
     );
-    expect(migration.match(/enabled boolean NOT NULL DEFAULT false/g)?.length)
-      .toBeGreaterThanOrEqual(2);
-    expect(migration).toContain(
-      "CREATE OR REPLACE VIEW public.career_source_activation_status",
-    );
+    expect(
+      migration.match(/enabled boolean NOT NULL DEFAULT false/g)?.length,
+    ).toBeGreaterThanOrEqual(2);
+    expect(migration).toContain("CREATE OR REPLACE VIEW public.career_source_activation_status");
     expect(migration).toContain("registry.writer_runtime IN ('python', 'typescript')");
     expect(careerSourcesDefinition).not.toContain("writer_runtime");
-    expect(migration).not.toMatch(
-      /GRANT INSERT ON public\.(?:career_sources|source_policy)/i,
-    );
+    expect(migration).not.toMatch(/GRANT INSERT ON public\.(?:career_sources|source_policy)/i);
     for (const policyGate of [
       "NEW.commercial_use_allowed",
       "NEW.redisplay_allowed",

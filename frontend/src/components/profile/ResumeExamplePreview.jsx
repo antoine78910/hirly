@@ -10,12 +10,7 @@ export default function ResumeExamplePreview({ active = true, compact = false })
   return (
     <div className="space-y-2" data-testid="resume-example-preview">
       <p className="text-xs leading-relaxed shell-body">{t("resumeSheet.exampleResumeHint")}</p>
-      <ResumeCurrentPreview
-        profile={profile}
-        active={active}
-        compact={compact}
-        isExample
-      />
+      <ResumeCurrentPreview profile={profile} active={active} compact={compact} isExample />
     </div>
   );
 }

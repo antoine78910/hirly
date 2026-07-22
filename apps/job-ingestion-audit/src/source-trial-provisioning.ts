@@ -4,24 +4,13 @@ import {
   type CapturedSourcePolicyEvidence,
 } from "./source-policy-result";
 
-const UUID =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const SHA256 = /^[0-9a-f]{64}$/;
 const TRIAL_KEY = /^[a-z0-9]+(?:[a-z0-9._:-]*[a-z0-9])?$/;
 const PROVIDERS = new Set(["data_gouv", "greenhouse", "lever"]);
 const ENVIRONMENTS = new Set(["development", "test", "staging"]);
-const ACCESS_METHODS = new Set([
-  "open_data",
-  "partner_feed",
-  "public_api",
-  "tenant_feed",
-]);
-const REQUIRED_RIGHTS = [
-  "commercial_use",
-  "redisplay",
-  "retention",
-  "access_method",
-];
+const ACCESS_METHODS = new Set(["open_data", "partner_feed", "public_api", "tenant_feed"]);
+const REQUIRED_RIGHTS = ["commercial_use", "redisplay", "retention", "access_method"];
 
 export interface SourceTrialProvisioningInput {
   schemaVersion: "hirly.source-trial-provisioning.v1";
@@ -82,11 +71,7 @@ function object(value: unknown, path: string): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
-function exactKeys(
-  value: Record<string, unknown>,
-  keys: readonly string[],
-  path: string,
-): void {
+function exactKeys(value: Record<string, unknown>, keys: readonly string[], path: string): void {
   const actual = Object.keys(value).sort();
   const expected = [...keys].sort();
   if (JSON.stringify(actual) !== JSON.stringify(expected)) {
@@ -111,9 +96,7 @@ function uuid(value: unknown, path: string): string {
 function timestamp(value: unknown, path: string): string {
   const parsed = text(value, path, 64);
   if (
-    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/.test(
-      parsed,
-    ) ||
+    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/.test(parsed) ||
     !Number.isFinite(Date.parse(parsed))
   ) {
     fail(`${path} must be an ISO timestamp with an explicit timezone`);
@@ -121,11 +104,7 @@ function timestamp(value: unknown, path: string): string {
   return new Date(parsed).toISOString();
 }
 
-function positiveInteger(
-  value: unknown,
-  path: string,
-  maximum: number,
-): number {
+function positiveInteger(value: unknown, path: string, maximum: number): number {
   if (!Number.isSafeInteger(value) || (value as number) < 1 || (value as number) > maximum) {
     fail(`${path} must be an integer between 1 and ${maximum}`);
   }
@@ -201,7 +180,8 @@ function parseInput(value: unknown): SourceTrialProvisioningInput {
   }
   const countryCodes = (rawCountryCodes as unknown[]).map((entry, index) => {
     const code = text(entry, `source.countryCodes[${index}]`, 2);
-    if (!/^[A-Z]{2}$/.test(code)) fail(`source.countryCodes[${index}] must be ISO alpha-2 uppercase`);
+    if (!/^[A-Z]{2}$/.test(code))
+      fail(`source.countryCodes[${index}] must be ISO alpha-2 uppercase`);
     return code;
   });
   if (new Set(countryCodes).size !== countryCodes.length) {
@@ -256,11 +236,7 @@ function parseInput(value: unknown): SourceTrialProvisioningInput {
     "policy.tenantSelectionEvidence",
   );
   exactKeys(selectionValue, ["reference", "sha256"], "policy.tenantSelectionEvidence");
-  const selectionSha256 = text(
-    selectionValue.sha256,
-    "policy.tenantSelectionEvidence.sha256",
-    64,
-  );
+  const selectionSha256 = text(selectionValue.sha256, "policy.tenantSelectionEvidence.sha256", 64);
   if (!SHA256.test(selectionSha256)) {
     fail("policy.tenantSelectionEvidence.sha256 must be lowercase SHA-256");
   }
@@ -305,11 +281,7 @@ function parseInput(value: unknown): SourceTrialProvisioningInput {
       expiresAt: policyExpiresAt,
       maxTotalRuns: positiveInteger(policyValue.maxTotalRuns, "policy.maxTotalRuns", 1_000),
       approvedBy: text(policyValue.approvedBy, "policy.approvedBy", 512),
-      approvalReference: text(
-        policyValue.approvalReference,
-        "policy.approvalReference",
-        2_048,
-      ),
+      approvalReference: text(policyValue.approvalReference, "policy.approvalReference", 2_048),
       tenantSelectionEvidence: {
         reference: text(
           selectionValue.reference,
@@ -330,11 +302,7 @@ function parseInput(value: unknown): SourceTrialProvisioningInput {
           "manifest.budget.maxCandidates",
           1_000_000,
         ),
-        maxBytes: positiveInteger(
-          budgetValue.maxBytes,
-          "manifest.budget.maxBytes",
-          1_073_741_824,
-        ),
+        maxBytes: positiveInteger(budgetValue.maxBytes, "manifest.budget.maxBytes", 1_073_741_824),
       },
     },
   };
@@ -348,8 +316,7 @@ export function provisionSourceTrial(
   const reviewed = verifyPersistedSourcePolicyResult(policyEvidenceValue, {
     provider: input.source.provider,
     sourceKey: input.source.sourceKey,
-    resourceKey:
-      input.source.provider === "data_gouv" ? input.source.tenantKey : null,
+    resourceKey: input.source.provider === "data_gouv" ? input.source.tenantKey : null,
     tenantKey: input.source.tenantKey,
   });
   if (reviewed.status !== "EVIDENCE_CAPTURED") {
@@ -365,8 +332,7 @@ export function provisionSourceTrial(
   ) {
     fail("reviewed policy does not match source access or trial approver");
   }
-  const selectedEvidence =
-    approved.evidence[input.policyEvidence.selectedEvidenceIndex];
+  const selectedEvidence = approved.evidence[input.policyEvidence.selectedEvidenceIndex];
   if (!selectedEvidence) fail("selected rights evidence does not exist");
   if (!["licence_text", "written_permission"].includes(selectedEvidence.kind)) {
     fail("selected rights evidence cannot authorize a source trial");
@@ -499,8 +465,6 @@ COMMIT;
   return {
     manifest,
     sql,
-    digest: createHash("sha256")
-      .update(stableJson({ manifest, sql }))
-      .digest("hex"),
+    digest: createHash("sha256").update(stableJson({ manifest, sql })).digest("hex"),
   };
 }

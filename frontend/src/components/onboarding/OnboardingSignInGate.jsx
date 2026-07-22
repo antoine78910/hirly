@@ -9,7 +9,8 @@ export default function OnboardingSignInGate() {
       <p className="font-display font-bold text-lg text-zinc-900 mb-4">{BRAND.NAME}</p>
       <p className="text-zinc-900 font-semibold text-lg">Sign in to save your progress</p>
       <p className={`text-sm ${ob.muted} mt-2 leading-relaxed`}>
-        You can preview the onboarding flow. To upload your resume and start swiping, sign in with Google or email.
+        You can preview the onboarding flow. To upload your resume and start swiping, sign in with
+        Google or email.
       </p>
       <Button
         asChild

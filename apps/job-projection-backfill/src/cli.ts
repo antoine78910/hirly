@@ -55,13 +55,16 @@ export function parseProjectionBackfillArgs(argv: string[]): ProjectionBackfillC
 
 export async function runProjectionBackfillCli(argv: string[]): Promise<void> {
   const command = parseProjectionBackfillArgs(argv);
-  if (command.execute && process.env.HIRLY_JOB_PROJECTION_BACKFILL_ACK !== "ENQUEUE_BOUNDED_PROJECTION_TASKS") {
+  if (
+    command.execute &&
+    process.env.HIRLY_JOB_PROJECTION_BACKFILL_ACK !== "ENQUEUE_BOUNDED_PROJECTION_TASKS"
+  ) {
     throw new Error("execute_requires_operator_acknowledgement");
   }
   const databaseUrl = process.env.HIRLY_JOB_PROJECTION_BACKFILL_DATABASE_URL;
   if (!databaseUrl) throw new Error("missing_backfill_database_url");
   const fromFile = command.checkpointPath
-    ? JSON.parse(await readFile(command.checkpointPath, "utf8")) as ProjectionBackfillCheckpoint
+    ? (JSON.parse(await readFile(command.checkpointPath, "utf8")) as ProjectionBackfillCheckpoint)
     : null;
   if (fromFile && command.cursor) throw new Error("checkpoint_and_cursor_are_mutually_exclusive");
   const checkpoint = fromFile ?? {
@@ -83,7 +86,10 @@ export async function runProjectionBackfillCli(argv: string[]): Promise<void> {
       rollbackDenylist: command.rollbackDenylist,
     });
     if (command.checkpointOutPath) {
-      await writeFile(command.checkpointOutPath, `${JSON.stringify(progress.checkpoint, null, 2)}\n`);
+      await writeFile(
+        command.checkpointOutPath,
+        `${JSON.stringify(progress.checkpoint, null, 2)}\n`,
+      );
     }
     console.log(JSON.stringify(progress));
   } finally {

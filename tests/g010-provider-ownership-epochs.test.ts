@@ -12,7 +12,8 @@ const rollback = readFileSync(join(directory, rollbackName), "utf8");
 describe("G010 whole-provider ownership epoch migration", () => {
   test("has exactly one 00700 forward/rollback pair", () => {
     expect(
-      readdirSync(directory).filter((name) => name.startsWith("20260720000700_"))
+      readdirSync(directory)
+        .filter((name) => name.startsWith("20260720000700_"))
         .sort(),
     ).toEqual([rollbackName, forwardName]);
   });
@@ -21,9 +22,7 @@ describe("G010 whole-provider ownership epoch migration", () => {
     expect(migration).toContain(
       "ADD COLUMN IF NOT EXISTS ownership_epoch bigint NOT NULL DEFAULT 0",
     );
-    expect(migration).toContain(
-      "registry.ownership_epoch = claim.ownership_epoch",
-    );
+    expect(migration).toContain("registry.ownership_epoch = claim.ownership_epoch");
     const migrationWithoutFreshFranceTravailSeed = migration.replace(
       /INSERT INTO public\.provider_registry \([\s\S]*?'france_travail'[\s\S]*?ON CONFLICT \(provider\) DO NOTHING;/,
       "",
@@ -59,9 +58,7 @@ describe("G010 whole-provider ownership epoch migration", () => {
     }
     expect(migration).toContain("provider_work_claims_live_operation_unique");
     expect(migration).toContain("provider_work_claims_task_attempt_unique");
-    expect(migration).toContain(
-      "INSERT INTO public.provider_work_claims AS inserted_claim",
-    );
+    expect(migration).toContain("INSERT INTO public.provider_work_claims AS inserted_claim");
     expect(migration).toContain("FROM public.worker_tasks AS task");
     expect(migration).toContain("task.provider = p_provider");
     expect(migration).toContain("inserted_claim.provider");
@@ -73,22 +70,15 @@ describe("G010 whole-provider ownership epoch migration", () => {
     expect(migration).toContain(
       "ADD COLUMN IF NOT EXISTS lifecycle_claims_ready boolean NOT NULL DEFAULT false",
     );
-    expect(migration).toContain(
-      "provider lifecycle claim boundary is not ready",
-    );
-    expect(migration).toContain(
-      "worker_private.enable_provider_claim_enforcement",
-    );
+    expect(migration).toContain("provider lifecycle claim boundary is not ready");
+    expect(migration).toContain("worker_private.enable_provider_claim_enforcement");
     expect(migration).toContain("BEFORE INSERT OR UPDATE OR DELETE ON public.jobs");
-    expect(migration).toContain(
-      "registry.ownership_epoch = claim.ownership_epoch",
-    );
+    expect(migration).toContain("registry.ownership_epoch = claim.ownership_epoch");
   });
 
   test("keeps security-definer routines private and preserves Python row shape", () => {
-    const securityDefiners = migration.match(
-      /SECURITY DEFINER[\s\S]*?SET search_path = [^\n]+/g,
-    ) ?? [];
+    const securityDefiners =
+      migration.match(/SECURITY DEFINER[\s\S]*?SET search_path = [^\n]+/g) ?? [];
     expect(securityDefiners.length).toBeGreaterThan(0);
     for (const definition of securityDefiners) {
       expect(definition).toContain("SET search_path = pg_catalog");
@@ -120,11 +110,7 @@ describe("G010 whole-provider ownership epoch migration", () => {
     expect(rollback).toContain("DROP TABLE IF EXISTS public.provider_work_claims");
     expect(rollback).toContain("DROP COLUMN IF EXISTS ownership_epoch");
     expect(rollback).toContain("DROP COLUMN IF EXISTS lifecycle_claims_ready");
-    expect(rollback).toContain(
-      "GRANT EXECUTE ON FUNCTION worker_private.set_provider_writer",
-    );
-    expect(rollback).toContain(
-      "GRANT EXECUTE ON FUNCTION worker_private.write_jobs_and_complete",
-    );
+    expect(rollback).toContain("GRANT EXECUTE ON FUNCTION worker_private.set_provider_writer");
+    expect(rollback).toContain("GRANT EXECUTE ON FUNCTION worker_private.write_jobs_and_complete");
   });
 });

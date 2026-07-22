@@ -111,7 +111,8 @@ function requireBoolean(value: unknown, path: string): boolean {
 }
 
 function requireNonNegativeInteger(value: unknown, path: string): number {
-  if (!Number.isSafeInteger(value) || (value as number) < 0) fail(`${path} must be a non-negative integer`);
+  if (!Number.isSafeInteger(value) || (value as number) < 0)
+    fail(`${path} must be a non-negative integer`);
   return value as number;
 }
 
@@ -126,7 +127,8 @@ function parseJob(value: unknown, path: string): TrialJob {
   const matchedUserIds = (record.matchedUserIds as unknown[]).map((id, index) =>
     requireString(id, `${path}.matchedUserIds[${index}]`),
   );
-  if (new Set(matchedUserIds).size !== matchedUserIds.length) fail(`${path}.matchedUserIds contains duplicates`);
+  if (new Set(matchedUserIds).size !== matchedUserIds.length)
+    fail(`${path}.matchedUserIds contains duplicates`);
   return {
     provider: requireString(record.provider, `${path}.provider`),
     tenant: requireString(record.tenant, `${path}.tenant`),
@@ -139,7 +141,10 @@ function parseJob(value: unknown, path: string): TrialJob {
     relevant: requireBoolean(record.relevant, `${path}.relevant`),
     actionable: requireBoolean(record.actionable, `${path}.actionable`),
     applyUrlKind: kind as TrialJob["applyUrlKind"],
-    knownApplicationRoute: requireBoolean(record.knownApplicationRoute, `${path}.knownApplicationRoute`),
+    knownApplicationRoute: requireBoolean(
+      record.knownApplicationRoute,
+      `${path}.knownApplicationRoute`,
+    ),
     available: requireBoolean(record.available, `${path}.available`),
     matchedUserIds,
   };
@@ -149,7 +154,8 @@ export function parseTrialBaseline(value: unknown): TrialBaseline {
   if (!isRecord(value)) fail("baseline must be an object");
   const record = value as Record<string, unknown>;
   if (record.schemaVersion !== 1) fail("baseline.schemaVersion must equal 1");
-  if (record.status !== "COMPLETE") fail("baseline status must be COMPLETE (BLOCKED_EXTERNAL is not scoreable)");
+  if (record.status !== "COMPLETE")
+    fail("baseline status must be COMPLETE (BLOCKED_EXTERNAL is not scoreable)");
   if (record.sample !== false) fail("baseline sample must be false");
   if (!Array.isArray(record.paidUserIds) || record.paidUserIds.length === 0) {
     fail("baseline.paidUserIds must be a non-empty array");
@@ -158,7 +164,8 @@ export function parseTrialBaseline(value: unknown): TrialBaseline {
   const paidUserIds = (record.paidUserIds as unknown[]).map((id, index) =>
     requireString(id, `baseline.paidUserIds[${index}]`),
   );
-  if (new Set(paidUserIds).size !== paidUserIds.length) fail("baseline.paidUserIds contains duplicates");
+  if (new Set(paidUserIds).size !== paidUserIds.length)
+    fail("baseline.paidUserIds contains duplicates");
   return {
     schemaVersion: 1,
     status: "COMPLETE",
@@ -168,9 +175,17 @@ export function parseTrialBaseline(value: unknown): TrialBaseline {
     policyDigest: requireString(record.policyDigest, "baseline.policyDigest"),
     controlDigest: requireString(record.controlDigest, "baseline.controlDigest"),
     paidUserIds,
-    currentJobs: (record.currentJobs as unknown[]).map((job, index) => parseJob(job, `baseline.currentJobs[${index}]`)),
-    expectedRequests: requireNonNegativeInteger(record.expectedRequests, "baseline.expectedRequests"),
-    expectedCostMinor: requireNonNegativeInteger(record.expectedCostMinor, "baseline.expectedCostMinor"),
+    currentJobs: (record.currentJobs as unknown[]).map((job, index) =>
+      parseJob(job, `baseline.currentJobs[${index}]`),
+    ),
+    expectedRequests: requireNonNegativeInteger(
+      record.expectedRequests,
+      "baseline.expectedRequests",
+    ),
+    expectedCostMinor: requireNonNegativeInteger(
+      record.expectedCostMinor,
+      "baseline.expectedCostMinor",
+    ),
   };
 }
 
@@ -181,14 +196,18 @@ export function parseTrialSnapshots(value: unknown): TrialSnapshot[] {
     if (!isRecord(entry)) fail(`${path} must be an object`);
     const record = entry as Record<string, unknown>;
     if (record.schemaVersion !== 1) fail(`${path}.schemaVersion must equal 1`);
-    if (record.status !== "COMPLETE") fail(`${path} status must be COMPLETE (BLOCKED_EXTERNAL is not scoreable)`);
+    if (record.status !== "COMPLETE")
+      fail(`${path} status must be COMPLETE (BLOCKED_EXTERNAL is not scoreable)`);
     if (record.sample !== false) fail(`${path}.sample must be false`);
     if (record.complete !== true) fail(`${path}.complete must be true`);
     if (!Array.isArray(record.jobs) || record.jobs.length === 0) {
-      fail(`${path}.jobs must contain at least one observed job; zero-volume runs are not complete snapshots`);
+      fail(
+        `${path}.jobs must contain at least one observed job; zero-volume runs are not complete snapshots`,
+      );
     }
     const capturedAt = requireString(record.capturedAt, `${path}.capturedAt`);
-    if (!Number.isFinite(Date.parse(capturedAt))) fail(`${path}.capturedAt must be an ISO timestamp`);
+    if (!Number.isFinite(Date.parse(capturedAt)))
+      fail(`${path}.capturedAt must be an ISO timestamp`);
     return {
       schemaVersion: 1,
       status: "COMPLETE",
@@ -201,7 +220,9 @@ export function parseTrialSnapshots(value: unknown): TrialSnapshot[] {
       controlDigest: requireString(record.controlDigest, `${path}.controlDigest`),
       requests: requireNonNegativeInteger(record.requests, `${path}.requests`),
       costMinor: requireNonNegativeInteger(record.costMinor, `${path}.costMinor`),
-      jobs: (record.jobs as unknown[]).map((job, jobIndex) => parseJob(job, `${path}.jobs[${jobIndex}]`)),
+      jobs: (record.jobs as unknown[]).map((job, jobIndex) =>
+        parseJob(job, `${path}.jobs[${jobIndex}]`),
+      ),
     };
   });
 }
@@ -247,7 +268,9 @@ function canonicalize(value: unknown): unknown {
 }
 
 export function stableDigest(value: unknown): string {
-  return createHash("sha256").update(JSON.stringify(canonicalize(value))).digest("hex");
+  return createHash("sha256")
+    .update(JSON.stringify(canonicalize(value)))
+    .digest("hex");
 }
 
 function eligible(job: TrialJob): boolean {
@@ -288,29 +311,49 @@ export function buildTrialScorecard(
   );
   const providerAccumulator = new Map<
     string,
-    { provider: string; tenant: string; userCounts: number[]; raw: number; duplicates: number; unavailable: number;
-      canonical: number; knownRoute: number; eligibleUnique: number; affected: Set<string> }
+    {
+      provider: string;
+      tenant: string;
+      userCounts: number[];
+      raw: number;
+      duplicates: number;
+      unavailable: number;
+      canonical: number;
+      knownRoute: number;
+      eligibleUnique: number;
+      affected: Set<string>;
+    }
   >();
   const runIdentitySets: { id: string; identities: Set<string> }[] = [];
   let allUniqueEligible = 0;
 
   for (const [snapshotIndex, snapshot] of orderedSnapshots.entries()) {
-    const sortedJobs = [...snapshot.jobs].sort((a, b) => stableJobId(a).localeCompare(stableJobId(b)));
+    const sortedJobs = [...snapshot.jobs].sort((a, b) =>
+      stableJobId(a).localeCompare(stableJobId(b)),
+    );
     const claimed = new Set<string>();
     const uniqueByProvider = new Map<string, TrialJob[]>();
     const identitySet = new Set<string>();
     for (const job of sortedJobs) {
       const key = `${job.provider}\u0000${job.tenant}`;
       const accumulator = providerAccumulator.get(key) ?? {
-        provider: job.provider, tenant: job.tenant,
+        provider: job.provider,
+        tenant: job.tenant,
         userCounts: Array(snapshotIndex * users.length).fill(0) as number[],
-        raw: 0, duplicates: 0,
-        unavailable: 0, canonical: 0, knownRoute: 0, eligibleUnique: 0, affected: new Set<string>(),
+        raw: 0,
+        duplicates: 0,
+        unavailable: 0,
+        canonical: 0,
+        knownRoute: 0,
+        eligibleUnique: 0,
+        affected: new Set<string>(),
       };
       accumulator.raw += 1;
       if (!job.available) accumulator.unavailable += 1;
       const keys = identityKeys(job);
-      const duplicate = keys.some((candidate) => baselineKeys.has(candidate) || claimed.has(candidate));
+      const duplicate = keys.some(
+        (candidate) => baselineKeys.has(candidate) || claimed.has(candidate),
+      );
       if (duplicate) {
         accumulator.duplicates += 1;
       } else {
@@ -347,7 +390,10 @@ export function buildTrialScorecard(
         tenant: entry.tenant,
         primaryMetric: p50,
         jobsPerPaidUser: { p10, p50, p90 },
-        feedExhaustionRate: rate(entry.userCounts.filter((count) => count === 0).length, entry.userCounts.length),
+        feedExhaustionRate: rate(
+          entry.userCounts.filter((count) => count === 0).length,
+          entry.userCounts.length,
+        ),
         canonicalApplyUrlRate: rate(entry.canonical, entry.eligibleUnique),
         knownApplicationRouteRate: rate(entry.knownRoute, entry.eligibleUnique),
         duplicateRate: rate(entry.duplicates, entry.raw),

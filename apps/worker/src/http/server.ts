@@ -9,11 +9,7 @@ import {
 import type { Logger } from "@hirly/observability";
 import { z } from "zod";
 import type { RuntimeConfig } from "../runtime/config";
-import type {
-  Enqueuer,
-  QueueRepository,
-  RuntimeStore,
-} from "../runtime/types";
+import type { Enqueuer, QueueRepository, RuntimeStore } from "../runtime/types";
 import { assertProviderTransportActive } from "../providers";
 
 interface HealthState {
@@ -56,17 +52,16 @@ async function parseEnqueueRequest(request: Request): Promise<EnqueueRun> {
         provider: z.null(),
         idempotencyKey: z.string().min(1).max(256),
         triggerSource: z.literal("http"),
-        tasks: z
-          .tuple([
-            z
-              .object({
-                taskKey: z.literal("inventory-maintenance"),
-                taskType: z.literal("inventory.maintenance"),
-                payload: z.object({}).strict(),
-                maxAttempts: z.number().int().positive().max(10).optional(),
-              })
-              .strict(),
-          ]),
+        tasks: z.tuple([
+          z
+            .object({
+              taskKey: z.literal("inventory-maintenance"),
+              taskType: z.literal("inventory.maintenance"),
+              payload: z.object({}).strict(),
+              maxAttempts: z.number().int().positive().max(10).optional(),
+            })
+            .strict(),
+        ]),
       })
       .strict(),
     z
@@ -75,22 +70,21 @@ async function parseEnqueueRequest(request: Request): Promise<EnqueueRun> {
         provider: providerSchema,
         idempotencyKey: z.string().min(1).max(256),
         triggerSource: z.literal("http"),
-        tasks: z
-          .tuple([
-            z
-              .object({
-                taskKey: z.string().regex(/^[a-z]+:[a-z0-9_-]+$/),
-                taskType: z.literal("provider.fetch_page"),
-                payload: z
-                  .object({
-                    cursor: z.string().max(512).optional(),
-                    fixtureId: z.string().max(128).optional(),
-                  })
-                  .strict(),
-                maxAttempts: z.number().int().positive().max(10).optional(),
-              })
-              .strict(),
-          ]),
+        tasks: z.tuple([
+          z
+            .object({
+              taskKey: z.string().regex(/^[a-z]+:[a-z0-9_-]+$/),
+              taskType: z.literal("provider.fetch_page"),
+              payload: z
+                .object({
+                  cursor: z.string().max(512).optional(),
+                  fixtureId: z.string().max(128).optional(),
+                })
+                .strict(),
+              maxAttempts: z.number().int().positive().max(10).optional(),
+            })
+            .strict(),
+        ]),
       })
       .strict(),
   ]);
@@ -137,99 +131,87 @@ export function createHttpHandler(input: {
   health: HealthState;
 }) {
   return async function fetch(request: Request): Promise<Response> {
-      const url = new URL(request.url);
-      if (request.method === "GET" && url.pathname === "/health/live") {
-        return json(
-          healthSchema.parse({
-            status: "live",
-            contractVersion: CONTRACT_VERSION,
-          }),
-        );
-      }
-      if (request.method === "GET" && url.pathname === "/health/ready") {
-        const databaseReady = input.health.ready
-          ? await Promise.race([
-              input.queue.ping().catch(() => false),
-              new Promise<false>((resolve) =>
-                setTimeout(() => resolve(false), 1_000),
-              ),
-            ])
-          : false;
-        const ready = input.health.ready && databaseReady;
-        return json(
-          healthSchema.parse({
-            status: ready ? "ready" : "not_ready",
-            contractVersion: CONTRACT_VERSION,
-          }),
-          ready ? 200 : 503,
-        );
-      }
-      if (!url.pathname.startsWith("/control/")) {
-        return json({ error: "not_found" }, 404);
-      }
-      const authFailure = authenticate(
-        request,
-        input.config.WORKER_CONTROL_ENABLED
-          ? input.config.WORKER_CONTROL_TOKEN
-          : undefined,
+    const url = new URL(request.url);
+    if (request.method === "GET" && url.pathname === "/health/live") {
+      return json(
+        healthSchema.parse({
+          status: "live",
+          contractVersion: CONTRACT_VERSION,
+        }),
       );
-      if (authFailure) return authFailure;
-      if (!input.health.ready) return json({ error: "draining" }, 503);
-
-      try {
-        if (request.method === "POST" && url.pathname === "/control/enqueue") {
-          const body = await parseEnqueueRequest(request);
-          if (body.provider) {
-            const provider = providerSchema.parse(body.provider);
-            await input.store.assertProviderRunnable(provider);
-            assertProviderTransportActive(provider);
-          }
-          const runId = await input.queue.enqueue(body);
-          input.logger.emit({
-            service: "hirly-worker",
-            version: "0.1.0",
-            environment: input.config.NODE_ENV,
-            event: "worker.http_enqueued",
-            severity: "info",
-            runId,
-            triggerSource: "http",
-            details: {
-              actorFingerprint: createHash("sha256")
-                .update(request.headers.get("authorization") ?? "")
-                .digest("hex")
-                .slice(0, 12),
-            },
-          });
-          return json({ runId }, 202);
-        }
-        const runMatch = url.pathname.match(
-          /^\/control\/runs\/([0-9a-f-]{36})$/,
-        );
-        if (request.method === "GET" && runMatch) {
-          const run = await input.store.getRun(runMatch[1]!);
-          return run ? json(run) : json({ error: "not_found" }, 404);
-        }
-      } catch (error) {
-        const authorizationBlocked =
-          error instanceof Error &&
-          (error.message === "authorization_blocked" ||
-            "code" in error &&
-              (error as { code?: string }).code === "authorization_blocked");
-        const status =
-          error instanceof PayloadTooLargeError
-            ? 413
-            : authorizationBlocked
-              ? 409
-              : 400;
-        const code =
-          error instanceof PayloadTooLargeError
-            ? "payload_too_large"
-            : authorizationBlocked
-              ? "authorization_blocked"
-              : "invalid_input";
-        return json({ error: code }, status);
-      }
+    }
+    if (request.method === "GET" && url.pathname === "/health/ready") {
+      const databaseReady = input.health.ready
+        ? await Promise.race([
+            input.queue.ping().catch(() => false),
+            new Promise<false>((resolve) => setTimeout(() => resolve(false), 1_000)),
+          ])
+        : false;
+      const ready = input.health.ready && databaseReady;
+      return json(
+        healthSchema.parse({
+          status: ready ? "ready" : "not_ready",
+          contractVersion: CONTRACT_VERSION,
+        }),
+        ready ? 200 : 503,
+      );
+    }
+    if (!url.pathname.startsWith("/control/")) {
       return json({ error: "not_found" }, 404);
+    }
+    const authFailure = authenticate(
+      request,
+      input.config.WORKER_CONTROL_ENABLED ? input.config.WORKER_CONTROL_TOKEN : undefined,
+    );
+    if (authFailure) return authFailure;
+    if (!input.health.ready) return json({ error: "draining" }, 503);
+
+    try {
+      if (request.method === "POST" && url.pathname === "/control/enqueue") {
+        const body = await parseEnqueueRequest(request);
+        if (body.provider) {
+          const provider = providerSchema.parse(body.provider);
+          await input.store.assertProviderRunnable(provider);
+          assertProviderTransportActive(provider);
+        }
+        const runId = await input.queue.enqueue(body);
+        input.logger.emit({
+          service: "hirly-worker",
+          version: "0.1.0",
+          environment: input.config.NODE_ENV,
+          event: "worker.http_enqueued",
+          severity: "info",
+          runId,
+          triggerSource: "http",
+          details: {
+            actorFingerprint: createHash("sha256")
+              .update(request.headers.get("authorization") ?? "")
+              .digest("hex")
+              .slice(0, 12),
+          },
+        });
+        return json({ runId }, 202);
+      }
+      const runMatch = url.pathname.match(/^\/control\/runs\/([0-9a-f-]{36})$/);
+      if (request.method === "GET" && runMatch) {
+        const run = await input.store.getRun(runMatch[1]!);
+        return run ? json(run) : json({ error: "not_found" }, 404);
+      }
+    } catch (error) {
+      const authorizationBlocked =
+        error instanceof Error &&
+        (error.message === "authorization_blocked" ||
+          ("code" in error && (error as { code?: string }).code === "authorization_blocked"));
+      const status = error instanceof PayloadTooLargeError ? 413 : authorizationBlocked ? 409 : 400;
+      const code =
+        error instanceof PayloadTooLargeError
+          ? "payload_too_large"
+          : authorizationBlocked
+            ? "authorization_blocked"
+            : "invalid_input";
+      return json({ error: code }, status);
+    }
+    return json({ error: "not_found" }, 404);
   };
 }
 

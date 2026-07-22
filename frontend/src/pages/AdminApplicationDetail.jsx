@@ -30,10 +30,15 @@ const fmtDate = (value) => {
   if (!value) return "";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return String(value);
-  return date.toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  return date.toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 };
 
-const asList = (value) => Array.isArray(value) ? value : [];
+const asList = (value) => (Array.isArray(value) ? value : []);
 
 const summarizeQuestion = (item) => {
   if (typeof item === "string") return item;
@@ -209,9 +214,12 @@ export default function AdminApplicationDetail() {
       const url = URL.createObjectURL(response.data);
       const link = document.createElement("a");
       link.href = url;
-      link.download = kind === "original-cv"
-        ? (docs.original_cv_filename || "original_cv")
-        : kind === "tailored-cv" ? "tailored_cv.docx" : "cover_letter.txt";
+      link.download =
+        kind === "original-cv"
+          ? docs.original_cv_filename || "original_cv"
+          : kind === "tailored-cv"
+            ? "tailored_cv.docx"
+            : "cover_letter.txt";
       link.click();
       URL.revokeObjectURL(url);
     } catch (err) {
@@ -224,7 +232,10 @@ export default function AdminApplicationDetail() {
     try {
       const response = await api.post(`/admin/applications/${id}/send-email`, {});
       toast.success(`Application email sent via ${response.data?.transport || "email"}`);
-      trackEvent("admin_application_email_sent", { application_id: id, transport: response.data?.transport });
+      trackEvent("admin_application_email_sent", {
+        application_id: id,
+        transport: response.data?.transport,
+      });
       await load();
     } catch (err) {
       toast.error(err?.response?.data?.detail || "Could not send application email");
@@ -260,35 +271,42 @@ export default function AdminApplicationDetail() {
   if (error) {
     return (
       <AdminShell title="Application Detail">
-        <Link className="inline-flex items-center gap-2 text-sm font-semibold text-linkedin" to="/admin/applications">
+        <Link
+          className="inline-flex items-center gap-2 text-sm font-semibold text-linkedin"
+          to="/admin/applications"
+        >
           <ArrowLeft className="h-4 w-4" /> Back to queue
         </Link>
         {accessDenied ? (
-          <div className="mt-6"><AdminAccessDenied /></div>
+          <div className="mt-6">
+            <AdminAccessDenied />
+          </div>
         ) : (
-          <div className="mt-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">{error}</div>
+          <div className="mt-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+            {error}
+          </div>
         )}
       </AdminShell>
     );
   }
 
   return (
-    <AdminShell
-      title={job.title || "Application"}
-      subtitle={job.company || "Unknown company"}
-    >
-          <Link className="inline-flex items-center gap-2 text-sm font-semibold text-linkedin" to="/admin/applications">
-            <ArrowLeft className="h-4 w-4" /> Back to queue
-          </Link>
-          <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <p className="text-sm text-zinc-500">{job.company || "Unknown company"}</p>
-              <h1 className="font-display text-2xl font-bold">{job.title || "Application"}</h1>
-            </div>
-            <div className="text-sm text-zinc-500">
-              {app.submission_status || "unknown"} / {app.package_status || "unknown"}
-            </div>
-          </div>
+    <AdminShell title={job.title || "Application"} subtitle={job.company || "Unknown company"}>
+      <Link
+        className="inline-flex items-center gap-2 text-sm font-semibold text-linkedin"
+        to="/admin/applications"
+      >
+        <ArrowLeft className="h-4 w-4" /> Back to queue
+      </Link>
+      <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="text-sm text-zinc-500">{job.company || "Unknown company"}</p>
+          <h1 className="font-display text-2xl font-bold">{job.title || "Application"}</h1>
+        </div>
+        <div className="text-sm text-zinc-500">
+          {app.submission_status || "unknown"} / {app.package_status || "unknown"}
+        </div>
+      </div>
 
       <div className="mt-6 grid gap-5 lg:grid-cols-[1fr_360px]">
         <div className="space-y-5">
@@ -312,24 +330,48 @@ export default function AdminApplicationDetail() {
               <Button
                 variant="outline"
                 disabled={!data?.job_application_url}
-                onClick={() => window.open(data.job_application_url, "_blank", "noopener,noreferrer")}
+                onClick={() =>
+                  window.open(data.job_application_url, "_blank", "noopener,noreferrer")
+                }
               >
                 Open job application URL
               </Button>
-              <Button variant="outline" onClick={() => copyText("user info", contact)}>Copy user info</Button>
-              <Button variant="outline" onClick={() => downloadAdminFile("original-cv")} disabled={!docs.original_cv_available}>
+              <Button variant="outline" onClick={() => copyText("user info", contact)}>
+                Copy user info
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => downloadAdminFile("original-cv")}
+                disabled={!docs.original_cv_available}
+              >
                 Download original CV
               </Button>
-              <Button variant="outline" onClick={() => downloadAdminFile("tailored-cv")} disabled={!docs.tailored_cv_available}>
+              <Button
+                variant="outline"
+                onClick={() => downloadAdminFile("tailored-cv")}
+                disabled={!docs.tailored_cv_available}
+              >
                 Download tailored CV
               </Button>
-              <Button variant="outline" onClick={() => downloadAdminFile("cover-letter")} disabled={!docs.cover_letter_available}>
+              <Button
+                variant="outline"
+                onClick={() => downloadAdminFile("cover-letter")}
+                disabled={!docs.cover_letter_available}
+              >
                 Download cover letter
               </Button>
-              <Button variant="outline" onClick={() => copyText("cover letter", coverLetterText)} disabled={!coverLetterText}>
+              <Button
+                variant="outline"
+                onClick={() => copyText("cover letter", coverLetterText)}
+                disabled={!coverLetterText}
+              >
                 Copy cover letter text
               </Button>
-              <Button variant="outline" onClick={() => copyText("tailored resume", tailoredResumeText)} disabled={!tailoredResumeText}>
+              <Button
+                variant="outline"
+                onClick={() => copyText("tailored resume", tailoredResumeText)}
+                disabled={!tailoredResumeText}
+              >
                 Copy tailored CV text
               </Button>
               <Button onClick={sendApplicationEmail} disabled={!job.contact_email || sendingEmail}>
@@ -339,24 +381,43 @@ export default function AdminApplicationDetail() {
             </div>
             <div className="mt-4 grid gap-4 lg:grid-cols-2">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Job URL</p>
-                <p className="mt-1 break-all text-sm text-zinc-700">{data?.job_application_url || "Not available"}</p>
+                <p className="text-xs font-semibold uppercase tracking-wide text-zinc-400">
+                  Job URL
+                </p>
+                <p className="mt-1 break-all text-sm text-zinc-700">
+                  {data?.job_application_url || "Not available"}
+                </p>
               </div>
               <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Manual status</p>
-                <p className="mt-1 text-sm capitalize text-zinc-700">{app.manual_status || app.admin_status || "Not set"}</p>
+                <p className="text-xs font-semibold uppercase tracking-wide text-zinc-400">
+                  Manual status
+                </p>
+                <p className="mt-1 text-sm capitalize text-zinc-700">
+                  {app.manual_status || app.admin_status || "Not set"}
+                </p>
               </div>
             </div>
             {data?.failure_classification ? (
-              <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-4" data-testid="admin-failure-classification">
-                <p className="text-xs font-semibold uppercase tracking-wide text-red-500">Detected issue</p>
-                <p className="mt-1 text-sm font-bold text-red-900">{data.failure_classification.admin_title}</p>
+              <div
+                className="mt-4 rounded-lg border border-red-200 bg-red-50 p-4"
+                data-testid="admin-failure-classification"
+              >
+                <p className="text-xs font-semibold uppercase tracking-wide text-red-500">
+                  Detected issue
+                </p>
+                <p className="mt-1 text-sm font-bold text-red-900">
+                  {data.failure_classification.admin_title}
+                </p>
                 <p className="mt-1 text-sm text-red-800">
                   Code: <span className="font-mono">{data.failure_classification.code}</span>
-                  {data.failure_classification.source ? ` · Source: ${data.failure_classification.source}` : ""}
+                  {data.failure_classification.source
+                    ? ` · Source: ${data.failure_classification.source}`
+                    : ""}
                 </p>
                 {data.failure_classification.admin_detail ? (
-                  <p className="mt-2 text-sm text-red-800">{data.failure_classification.admin_detail}</p>
+                  <p className="mt-2 text-sm text-red-800">
+                    {data.failure_classification.admin_detail}
+                  </p>
                 ) : null}
               </div>
             ) : null}
@@ -367,7 +428,8 @@ export default function AdminApplicationDetail() {
             </div>
             {app.application_email_sent_at ? (
               <p className="mt-3 text-xs text-zinc-500">
-                Application email sent to {app.application_email_sent_to} on {fmtDate(app.application_email_sent_at)}.
+                Application email sent to {app.application_email_sent_to} on{" "}
+                {fmtDate(app.application_email_sent_at)}.
               </p>
             ) : null}
             <div className="mt-4 grid gap-4 lg:grid-cols-2">
@@ -387,7 +449,9 @@ export default function AdminApplicationDetail() {
             <div className="mt-4">
               <h3 className="text-sm font-bold">Automation failure/log summary</h3>
               <pre className="mt-2 max-h-44 overflow-auto whitespace-pre-wrap rounded-lg bg-zinc-50 p-3 text-xs text-zinc-700">
-                {stringifyForCopy(data?.latest_browser_logs || runs.slice(0, 5)) || app.submission_error || "No automation failure recorded."}
+                {stringifyForCopy(data?.latest_browser_logs || runs.slice(0, 5)) ||
+                  app.submission_error ||
+                  "No automation failure recorded."}
               </pre>
             </div>
           </Section>
@@ -407,9 +471,18 @@ export default function AdminApplicationDetail() {
 
           <Section title="B. Documents">
             <div className="grid gap-4 sm:grid-cols-3">
-              <Field label="CV text" value={profile.cv_text ? `${profile.cv_text.length} characters` : "Missing"} />
-              <Field label="Tailored CV" value={docs.tailored_cv_available ? "Available" : "Missing"} />
-              <Field label="Cover letter" value={docs.cover_letter_available ? "Available" : "Missing"} />
+              <Field
+                label="CV text"
+                value={profile.cv_text ? `${profile.cv_text.length} characters` : "Missing"}
+              />
+              <Field
+                label="Tailored CV"
+                value={docs.tailored_cv_available ? "Available" : "Missing"}
+              />
+              <Field
+                label="Cover letter"
+                value={docs.cover_letter_available ? "Available" : "Missing"}
+              />
             </div>
             <pre className="mt-4 max-h-56 overflow-auto whitespace-pre-wrap rounded-lg bg-zinc-50 p-3 text-xs text-zinc-700">
               {(profile.cv_text || "").slice(0, 3000) || "No CV text available."}
@@ -421,35 +494,58 @@ export default function AdminApplicationDetail() {
               <div>
                 <h3 className="text-sm font-bold">Missing questions</h3>
                 <ul className="mt-2 space-y-2 text-sm text-zinc-700">
-                  {missing.length ? missing.map((item, index) => (
-                    <li key={index} className="rounded-md bg-zinc-50 p-2">{summarizeQuestion(item)}</li>
-                  )) : <li className="text-zinc-500">None recorded.</li>}
+                  {missing.length ? (
+                    missing.map((item, index) => (
+                      <li key={index} className="rounded-md bg-zinc-50 p-2">
+                        {summarizeQuestion(item)}
+                      </li>
+                    ))
+                  ) : (
+                    <li className="text-zinc-500">None recorded.</li>
+                  )}
                 </ul>
               </div>
               <div>
                 <h3 className="text-sm font-bold">Required questions</h3>
                 <ul className="mt-2 space-y-2 text-sm text-zinc-700">
-                  {questions.length ? questions.map((item, index) => (
-                    <li key={index} className="rounded-md bg-zinc-50 p-2">{summarizeQuestion(item)}</li>
-                  )) : <li className="text-zinc-500">None recorded.</li>}
+                  {questions.length ? (
+                    questions.map((item, index) => (
+                      <li key={index} className="rounded-md bg-zinc-50 p-2">
+                        {summarizeQuestion(item)}
+                      </li>
+                    ))
+                  ) : (
+                    <li className="text-zinc-500">None recorded.</li>
+                  )}
                 </ul>
               </div>
             </div>
             <div className="mt-5">
               <h3 className="text-sm font-bold">Browser logs summary</h3>
               <div className="mt-2 space-y-2">
-                {runs.length ? runs.map((run) => (
-                  <div key={run.run_id} className="rounded-md border border-zinc-100 bg-zinc-50 p-3 text-sm">
-                    <div className="flex flex-wrap justify-between gap-2">
-                      <span className="font-semibold">{run.provider || "browser"}</span>
-                      <span className="text-zinc-500">{fmtDate(run.created_at)}</span>
+                {runs.length ? (
+                  runs.map((run) => (
+                    <div
+                      key={run.run_id}
+                      className="rounded-md border border-zinc-100 bg-zinc-50 p-3 text-sm"
+                    >
+                      <div className="flex flex-wrap justify-between gap-2">
+                        <span className="font-semibold">{run.provider || "browser"}</span>
+                        <span className="text-zinc-500">{fmtDate(run.created_at)}</span>
+                      </div>
+                      <p className="mt-1 text-zinc-600">
+                        Status: {run.status || "unknown"} · CAPTCHA:{" "}
+                        {run.captcha_required ? "yes" : "no"} · Action required:{" "}
+                        {run.action_required ? "yes" : "no"}
+                      </p>
+                      {run.failure_reason ? (
+                        <p className="mt-1 text-red-600">{run.failure_reason}</p>
+                      ) : null}
                     </div>
-                    <p className="mt-1 text-zinc-600">
-                      Status: {run.status || "unknown"} · CAPTCHA: {run.captcha_required ? "yes" : "no"} · Action required: {run.action_required ? "yes" : "no"}
-                    </p>
-                    {run.failure_reason ? <p className="mt-1 text-red-600">{run.failure_reason}</p> : null}
-                  </div>
-                )) : <p className="text-sm text-zinc-500">No browser runs recorded.</p>}
+                  ))
+                ) : (
+                  <p className="text-sm text-zinc-500">No browser runs recorded.</p>
+                )}
               </div>
             </div>
           </Section>
@@ -468,32 +564,55 @@ export default function AdminApplicationDetail() {
               Add note
             </Button>
             <div className="mt-4 space-y-3">
-              {notes.length ? [...notes].reverse().map((item) => (
-                <div key={item.note_id || item.created_at} className="rounded-md bg-zinc-50 p-3 text-sm">
-                  <p className="whitespace-pre-wrap text-zinc-800">{item.note}</p>
-                  <p className="mt-2 text-xs text-zinc-400">{item.author_email || "operator"} · {fmtDate(item.created_at)}</p>
-                </div>
-              )) : <p className="text-sm text-zinc-500">No notes yet.</p>}
+              {notes.length ? (
+                [...notes].reverse().map((item) => (
+                  <div
+                    key={item.note_id || item.created_at}
+                    className="rounded-md bg-zinc-50 p-3 text-sm"
+                  >
+                    <p className="whitespace-pre-wrap text-zinc-800">{item.note}</p>
+                    <p className="mt-2 text-xs text-zinc-400">
+                      {item.author_email || "operator"} · {fmtDate(item.created_at)}
+                    </p>
+                  </div>
+                ))
+              ) : (
+                <p className="text-sm text-zinc-500">No notes yet.</p>
+              )}
             </div>
           </Section>
 
           <Section title="E. Admin Actions">
             <div className="mb-4 rounded-md bg-zinc-50 p-3 text-sm text-zinc-700">
               <p className="font-semibold">Assignment</p>
-              <p className="mt-1">{app.assigned_to ? `${app.assigned_to} at ${fmtDate(app.assigned_at)}` : "Unassigned"}</p>
+              <p className="mt-1">
+                {app.assigned_to
+                  ? `${app.assigned_to} at ${fmtDate(app.assigned_at)}`
+                  : "Unassigned"}
+              </p>
               <div className="mt-3 grid grid-cols-2 gap-2">
-                <Button variant="outline" onClick={() => updateAssignment("assign")} disabled={Boolean(assigning)}>
+                <Button
+                  variant="outline"
+                  onClick={() => updateAssignment("assign")}
+                  disabled={Boolean(assigning)}
+                >
                   {assigning === "assign" ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                   Assign to me
                 </Button>
-                <Button variant="outline" onClick={() => updateAssignment("unassign")} disabled={Boolean(assigning)}>
+                <Button
+                  variant="outline"
+                  onClick={() => updateAssignment("unassign")}
+                  disabled={Boolean(assigning)}
+                >
                   {assigning === "unassign" ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                   Unassign
                 </Button>
               </div>
             </div>
             <div className="mb-4 space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Manual completion</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-zinc-400">
+                Manual completion
+              </p>
               {MANUAL_ACTIONS.map((action) => (
                 <Button
                   key={action.status}
@@ -502,13 +621,17 @@ export default function AdminApplicationDetail() {
                   onClick={() => updateManualStatus(action.status)}
                   disabled={Boolean(updatingManualStatus)}
                 >
-                  {updatingManualStatus === action.status ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                  {updatingManualStatus === action.status ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : null}
                   {action.label}
                 </Button>
               ))}
             </div>
             <div className="space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Legacy status</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-zinc-400">
+                Legacy status
+              </p>
               {ACTIONS.map((action) => (
                 <Button
                   key={action.status}
@@ -517,7 +640,9 @@ export default function AdminApplicationDetail() {
                   onClick={() => updateStatus(action.status)}
                   disabled={Boolean(updatingStatus)}
                 >
-                  {updatingStatus === action.status ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                  {updatingStatus === action.status ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : null}
                   {action.label}
                 </Button>
               ))}

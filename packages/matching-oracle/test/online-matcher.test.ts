@@ -127,8 +127,13 @@ describe("G006 deterministic ONLINE_FIRST matcher", () => {
       jobVersion: "3",
       fulfillmentRoute: "manual",
       explanationCodes: [
-        "role_match", "skill_match", "remote_match", "contract_match",
-        "fresh_inventory", "quality_inventory", "manual_route",
+        "role_match",
+        "skill_match",
+        "remote_match",
+        "contract_match",
+        "fresh_inventory",
+        "quality_inventory",
+        "manual_route",
       ],
     });
     expect(forward.matcherVersion).toBe(request.matcherVersion);
@@ -138,25 +143,41 @@ describe("G006 deterministic ONLINE_FIRST matcher", () => {
   });
 
   test("excludes action aliases before top-K and collapses duplicate group versions", () => {
-    const result = matchOnline(request, snapshot({
-      actions: [action],
-      aliases: [{ aliasGroupId: aliasId, canonicalGroupId: bestId }],
-      jobs: [job(bestId, { jobVersion: "2" }), job(bestId, { jobVersion: "4" }), job(secondId)],
-    }));
+    const result = matchOnline(
+      request,
+      snapshot({
+        actions: [action],
+        aliases: [{ aliasGroupId: aliasId, canonicalGroupId: bestId }],
+        jobs: [job(bestId, { jobVersion: "2" }), job(bestId, { jobVersion: "4" }), job(secondId)],
+      }),
+    );
 
     expect(result.results.map((entry) => entry.canonicalGroupId)).toEqual([secondId]);
     expect(result.coarseCandidateCount).toBe(1);
   });
 
   test("fails closed for disabled serving and projection/version fences", () => {
-    expect(() => matchOnline(request, snapshot({ servingEnabled: false }))).toThrow("ONLINE_MATCH_DISABLED");
+    expect(() => matchOnline(request, snapshot({ servingEnabled: false }))).toThrow(
+      "ONLINE_MATCH_DISABLED",
+    );
     expect(matchOnline(request, snapshot({ profile: null })).emptyReason).toBe("PROJECTION_LAG");
-    expect(matchOnline(request, snapshot({ profileTombstoned: true })).emptyReason).toBe("DELETION_PENDING");
-    expect(matchOnline(request, snapshot({ actionWatermark: "8" })).emptyReason).toBe("PROJECTION_LAG");
-    expect(matchOnline(request, snapshot({ reconciliationRequired: true })).emptyReason).toBe("PROJECTION_LAG");
-    expect(matchOnline(request, snapshot({
-      profile: { ...profile, status: "paused" } as CandidateSearchProfile,
-    })).emptyReason).toBe("PROFILE_INACTIVE");
+    expect(matchOnline(request, snapshot({ profileTombstoned: true })).emptyReason).toBe(
+      "DELETION_PENDING",
+    );
+    expect(matchOnline(request, snapshot({ actionWatermark: "8" })).emptyReason).toBe(
+      "PROJECTION_LAG",
+    );
+    expect(matchOnline(request, snapshot({ reconciliationRequired: true })).emptyReason).toBe(
+      "PROJECTION_LAG",
+    );
+    expect(
+      matchOnline(
+        request,
+        snapshot({
+          profile: { ...profile, status: "paused" } as CandidateSearchProfile,
+        }),
+      ).emptyReason,
+    ).toBe("PROFILE_INACTIVE");
   });
 
   test("hard-filters policy, lifecycle, validation, freshness, route and candidate constraints", () => {
@@ -166,10 +187,28 @@ describe("G006 deterministic ONLINE_FIRST matcher", () => {
       job(aliasId, { fulfillmentRoute: "blocked" }),
     ];
     expect(matchOnline(request, snapshot({ jobs: hidden })).emptyReason).toBe("ALL_POLICY_HIDDEN");
-    expect(matchOnline(request, snapshot({ jobs: [job(bestId, { lifecycleStatus: "expired" })] })).emptyReason).toBe("NO_ELIGIBLE_INVENTORY");
-    expect(matchOnline(request, snapshot({ jobs: [job(bestId, { validationStatus: "invalid" })] })).emptyReason).toBe("NO_ELIGIBLE_INVENTORY");
-    expect(matchOnline(request, snapshot({ jobs: [job(bestId, { countryCode: "US" })] })).emptyReason).toBe("NO_MATCHING_INVENTORY");
-    expect(matchOnline(request, snapshot({ jobs: [job(bestId, { publishedAt: "2026-01-01T00:00:00Z" })] })).emptyReason).toBe("NO_FRESH_INVENTORY");
-    expect(matchOnline(request, snapshot({ actions: [{ ...action, canonicalGroupId: bestId }], jobs: [job(bestId)] })).emptyReason).toBe("ALL_ACTIONED");
+    expect(
+      matchOnline(request, snapshot({ jobs: [job(bestId, { lifecycleStatus: "expired" })] }))
+        .emptyReason,
+    ).toBe("NO_ELIGIBLE_INVENTORY");
+    expect(
+      matchOnline(request, snapshot({ jobs: [job(bestId, { validationStatus: "invalid" })] }))
+        .emptyReason,
+    ).toBe("NO_ELIGIBLE_INVENTORY");
+    expect(
+      matchOnline(request, snapshot({ jobs: [job(bestId, { countryCode: "US" })] })).emptyReason,
+    ).toBe("NO_MATCHING_INVENTORY");
+    expect(
+      matchOnline(
+        request,
+        snapshot({ jobs: [job(bestId, { publishedAt: "2026-01-01T00:00:00Z" })] }),
+      ).emptyReason,
+    ).toBe("NO_FRESH_INVENTORY");
+    expect(
+      matchOnline(
+        request,
+        snapshot({ actions: [{ ...action, canonicalGroupId: bestId }], jobs: [job(bestId)] }),
+      ).emptyReason,
+    ).toBe("ALL_ACTIONED");
   });
 });

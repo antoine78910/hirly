@@ -7,10 +7,10 @@ const runIntegration = databaseUrl ? test : test.skip;
 
 async function psql(args: string[]): Promise<string> {
   if (!databaseUrl) throw new Error("G011_TEST_DATABASE_URL is required");
-  const process = Bun.spawn(
-    ["psql", databaseUrl, "-X", "-v", "ON_ERROR_STOP=1", ...args],
-    { stdout: "pipe", stderr: "pipe" },
-  );
+  const process = Bun.spawn(["psql", databaseUrl, "-X", "-v", "ON_ERROR_STOP=1", ...args], {
+    stdout: "pipe",
+    stderr: "pipe",
+  });
   const [exitCode, stdout, stderr] = await Promise.all([
     process.exited,
     new Response(process.stdout).text(),
@@ -44,7 +44,10 @@ describe("G011 real-Postgres disabled ATS tenant registration", () => {
       }
 
       try {
-        await psql(["-q", "-c", `
+        await psql([
+          "-q",
+          "-c",
+          `
           INSERT INTO public.provider_registry (
             provider, access_method, authorization_status, enabled,
             writer_runtime, rate_limit_config
@@ -123,9 +126,15 @@ describe("G011 real-Postgres disabled ATS tenant registration", () => {
             7200,
             '{"version":"ats-discovery.v1","cursor":"must-not-overwrite"}'::jsonb
           );
-        `]);
+        `,
+        ]);
 
-        const row = await psql(["-A", "-t", "-q", "-c", `
+        const row = await psql([
+          "-A",
+          "-t",
+          "-q",
+          "-c",
+          `
           SELECT jsonb_build_object(
             'count', (
               SELECT count(*) FROM public.career_sources
@@ -145,7 +154,8 @@ describe("G011 real-Postgres disabled ATS tenant registration", () => {
           )
           FROM public.career_sources
           WHERE provider = 'greenhouse' AND tenant_key = 'hirly'
-        `]);
+        `,
+        ]);
         expect(JSON.parse(row)).toEqual({
           count: 1,
           company_name: "Hirly SAS",
@@ -159,20 +169,29 @@ describe("G011 real-Postgres disabled ATS tenant registration", () => {
           runnable: false,
         });
 
-        const policyState = await psql(["-A", "-t", "-q", "-c", `
+        const policyState = await psql([
+          "-A",
+          "-t",
+          "-q",
+          "-c",
+          `
           SELECT jsonb_build_object(
             'policy_id', policy_id,
             'discovery_state', discovery_state
           )
           FROM public.career_sources
           WHERE provider = 'greenhouse' AND tenant_key = 'hirly'
-        `]);
+        `,
+        ]);
         expect(JSON.parse(policyState)).toEqual({
           policy_id: null,
           discovery_state: "candidate",
         });
 
-        await psql(["-q", "-c", `
+        await psql([
+          "-q",
+          "-c",
+          `
           SELECT worker_private.approve_career_source_candidate(
             (
               SELECT id FROM public.career_sources
@@ -185,16 +204,28 @@ describe("G011 real-Postgres disabled ATS tenant registration", () => {
                 AND policy_key = 'greenhouse-tenant-review'
             )
           );
-        `]);
+        `,
+        ]);
         expect(
-          await psql(["-A", "-t", "-q", "-c", `
+          await psql([
+            "-A",
+            "-t",
+            "-q",
+            "-c",
+            `
             SELECT discovery_state || ':' || enabled::text
             FROM public.career_sources
             WHERE provider = 'greenhouse' AND tenant_key = 'hirly'
-          `]),
+          `,
+          ]),
         ).toBe("approved:false");
 
-        const privileges = await psql(["-A", "-t", "-q", "-c", `
+        const privileges = await psql([
+          "-A",
+          "-t",
+          "-q",
+          "-c",
+          `
           SELECT jsonb_build_object(
             'direct_insert', has_table_privilege(
               'hirly_inventory_worker', 'public.career_sources', 'INSERT'
@@ -215,7 +246,8 @@ describe("G011 real-Postgres disabled ATS tenant registration", () => {
               'EXECUTE'
             )
           )
-        `]);
+        `,
+        ]);
         expect(JSON.parse(privileges)).toEqual({
           direct_insert: false,
           register: true,
@@ -227,37 +259,53 @@ describe("G011 real-Postgres disabled ATS tenant registration", () => {
           "backend/db/migrations/20260720000900_ats_registration_activation_hardening.down.sql",
         );
         expect(
-          await psql(["-A", "-t", "-q", "-c", `
+          await psql([
+            "-A",
+            "-t",
+            "-q",
+            "-c",
+            `
             SELECT to_regprocedure(
               'worker_private.career_source_base_url_is_safe(text)'
             ) IS NULL
-          `]),
+          `,
+          ]),
         ).toBe("t");
         await apply(
           "backend/db/migrations/20260720000900_ats_registration_activation_hardening.sql",
         );
         expect(
-          await psql(["-A", "-t", "-q", "-c", `
+          await psql([
+            "-A",
+            "-t",
+            "-q",
+            "-c",
+            `
             SELECT worker_private.career_source_base_url_is_safe(
               'https://boards.greenhouse.io/hirly'
             )
-          `]),
+          `,
+          ]),
         ).toBe("t");
       } finally {
         await apply(
           "backend/db/migrations/20260720000900_ats_registration_activation_hardening.down.sql",
         );
-        await apply(
-          "backend/db/migrations/20260720000800_ats_tenant_source_registration.down.sql",
-        );
+        await apply("backend/db/migrations/20260720000800_ats_tenant_source_registration.down.sql");
       }
 
       expect(
-        await psql(["-A", "-t", "-q", "-c", `
+        await psql([
+          "-A",
+          "-t",
+          "-q",
+          "-c",
+          `
           SELECT to_regprocedure(
             'worker_private.register_career_source_candidate(text,text,text,text,text,text[],text,text,integer,jsonb)'
           ) IS NULL
-        `]),
+        `,
+        ]),
       ).toBe("t");
     },
     60_000,

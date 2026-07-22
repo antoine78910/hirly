@@ -1,9 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-const sourceRoot = process.cwd().endsWith("/frontend")
-  ? resolve("src")
-  : resolve("frontend/src");
+const sourceRoot = process.cwd().endsWith("/frontend") ? resolve("src") : resolve("frontend/src");
 const swipeSource = readFileSync(resolve(sourceRoot, "pages/Swipe.jsx"), "utf8");
 const desktopSource = readFileSync(
   resolve(sourceRoot, "components/swipe/DesktopSwipeFeed.jsx"),
@@ -16,9 +14,7 @@ const targetSearchSheetSource = readFileSync(
 
 describe("Swipe Feed v2 adoption boundary", () => {
   it("gates initial navigation and fences stale responses", () => {
-    expect(swipeSource).toContain(
-      "initialFeedRequestGateRef.current.claim(navigationIdentity)",
-    );
+    expect(swipeSource).toContain("initialFeedRequestGateRef.current.claim(navigationIdentity)");
     expect(swipeSource).toContain("feedRequestFenceRef.current.next()");
     expect(swipeSource).toContain("requestFence.isCurrent()");
     expect(
@@ -86,6 +82,6 @@ describe("Swipe Feed v2 adoption boundary", () => {
   it("uses the rollout flag only as a frontend observation", () => {
     expect(swipeSource).toContain("useFeedV2RolloutObservation(user?.analytics_user_id)");
     expect(swipeSource).toContain('data-feed-v2-rollout={feedV2RolloutObserved ? "on" : "off"}');
-    expect(swipeSource).toContain('let requestUrl = `/jobs/feed?${params.toString()}`');
+    expect(swipeSource).toContain("let requestUrl = `/jobs/feed?${params.toString()}`");
   });
 });

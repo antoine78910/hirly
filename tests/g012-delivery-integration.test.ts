@@ -2,11 +2,7 @@ import { readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { describe, expect, test } from "bun:test";
 import type { SourceRegistryEntry } from "../packages/contracts/src";
-import {
-  stableJobId,
-  toCanonicalJob,
-  type SourceContext,
-} from "../packages/ingestion/src";
+import { stableJobId, toCanonicalJob, type SourceContext } from "../packages/ingestion/src";
 import {
   dataGouvProductionBlockReason,
   qualifyDataGouvDataset,
@@ -25,10 +21,7 @@ import {
 const policyId = "00000000-0000-4000-8000-000000000031";
 const now = new Date("2026-07-20T00:00:00.000Z");
 
-function source(
-  datasetId: string,
-  resourceId: string,
-): SourceRegistryEntry {
+function source(datasetId: string, resourceId: string): SourceRegistryEntry {
   return {
     id: "00000000-0000-4000-8000-000000000032",
     provider: "data_gouv",
@@ -52,31 +45,16 @@ function context(entry: SourceRegistryEntry): SourceContext {
 describe("G012 composed delivery", () => {
   test("composes CSP and BPCE through one disabled provider without identity collisions or writes", async () => {
     const cspFixture = JSON.parse(
-      await readFile(
-        new URL("./fixtures/g012/csp.json", import.meta.url),
-        "utf8",
-      ),
+      await readFile(new URL("./fixtures/g012/csp.json", import.meta.url), "utf8"),
     ) as { initialSnapshot: CspRawJob[] };
     const bpceFixture = bpceOpenFeedFixtureSchema.parse(
       JSON.parse(
-        await readFile(
-          new URL("./fixtures/g012/bpce-open-feed.json", import.meta.url),
-          "utf8",
-        ),
+        await readFile(new URL("./fixtures/g012/bpce-open-feed.json", import.meta.url), "utf8"),
       ),
     );
-    const cspSource = source(
-      CSP_DATASET_ID,
-      CSP_QUALIFICATION_RESOURCE_ID,
-    );
-    const bpceSource = source(
-      bpceFixture.datasetId,
-      bpceFixture.resourceId,
-    );
-    const csp = createCspFixtureSourceAdapter(
-      cspFixture.initialSnapshot,
-      policyId,
-    );
+    const cspSource = source(CSP_DATASET_ID, CSP_QUALIFICATION_RESOURCE_ID);
+    const bpceSource = source(bpceFixture.datasetId, bpceFixture.resourceId);
+    const csp = createCspFixtureSourceAdapter(cspFixture.initialSnapshot, policyId);
     const bpce = createBpceFixtureSourceAdapter(bpceFixture, policyId);
 
     expect(csp).toMatchObject({
@@ -94,10 +72,7 @@ describe("G012 composed delivery", () => {
       sourcePolicyEligible: false,
     });
 
-    const cspOccurrence = csp.normalize(
-      cspFixture.initialSnapshot[0]!,
-      context(cspSource),
-    );
+    const cspOccurrence = csp.normalize(cspFixture.initialSnapshot[0]!, context(cspSource));
     const bpcePages = [];
     for await (const page of bpce.discover({
       source: bpceSource,
@@ -107,10 +82,7 @@ describe("G012 composed delivery", () => {
     })) {
       bpcePages.push(...page.items);
     }
-    const bpceOccurrence = bpce.normalize(
-      bpcePages[0]!,
-      context(bpceSource),
-    );
+    const bpceOccurrence = bpce.normalize(bpcePages[0]!, context(bpceSource));
     const occurrences = [
       cspOccurrence,
       csp.normalize(cspFixture.initialSnapshot[0]!, context(cspSource)),
@@ -134,12 +106,9 @@ describe("G012 composed delivery", () => {
       expect(job.jobId).toBe(stableJobId(job.provider, job.externalId));
       expect(job.countryCode).toBe("FR");
     }
-    expect(() =>
-      csp.normalize(
-        cspFixture.initialSnapshot[0]!,
-        context(bpceSource),
-      ),
-    ).toThrow("match the bound resource and policy");
+    expect(() => csp.normalize(cspFixture.initialSnapshot[0]!, context(bpceSource))).toThrow(
+      "match the bound resource and policy",
+    );
   });
 
   test("keeps repository evidence and qualification separate from production enablement", () => {
@@ -150,10 +119,7 @@ describe("G012 composed delivery", () => {
     ].map((fileName) =>
       JSON.parse(
         readFileSync(
-          new URL(
-            `../artifacts/job-ingestion/source-policy/${fileName}`,
-            import.meta.url,
-          ),
+          new URL(`../artifacts/job-ingestion/source-policy/${fileName}`, import.meta.url),
           "utf8",
         ),
       ),
@@ -163,19 +129,15 @@ describe("G012 composed delivery", () => {
       productionEligible: boolean;
     }>;
     expect(evidence.every((item) => !item.productionEligible)).toBeTrue();
-    expect(
-      evidence.every((item) => item.qualificationStatus !== "approved"),
-    ).toBeTrue();
+    expect(evidence.every((item) => item.qualificationStatus !== "approved")).toBeTrue();
 
     const actualEvidence = evidence[0]!;
     const qualification = qualifyDataGouvDataset({
       datasetId: actualEvidence.sourceKey,
       resourceId: "resource",
       discovery: {
-        keywordOnly:
-          actualEvidence.qualificationStatus !== "approved",
-        evidenceRef:
-          "artifacts/job-ingestion/source-policy/choisir-le-service-public.json",
+        keywordOnly: actualEvidence.qualificationStatus !== "approved",
+        evidenceRef: "artifacts/job-ingestion/source-policy/choisir-le-service-public.json",
       },
       freshness: {
         resourceUpdatedAt: now.toISOString(),
@@ -185,8 +147,7 @@ describe("G012 composed delivery", () => {
       },
       licence: {
         name: "",
-        evidenceRef:
-          "artifacts/job-ingestion/source-policy/choisir-le-service-public.json",
+        evidenceRef: "artifacts/job-ingestion/source-policy/choisir-le-service-public.json",
         commercialUseAllowed: actualEvidence.productionEligible,
         redisplayAllowed: actualEvidence.productionEligible,
         fullTextRetentionAllowed: actualEvidence.productionEligible,

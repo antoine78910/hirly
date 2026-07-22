@@ -148,7 +148,13 @@ export const ROLE_GROUPS = [
 ];
 
 const ROLE_ALIASES = {
-  "HR Assistant": ["rh", "assistant rh", "assistant ressources humaines", "human resources assistant", "ressources humaines"],
+  "HR Assistant": [
+    "rh",
+    "assistant rh",
+    "assistant ressources humaines",
+    "human resources assistant",
+    "ressources humaines",
+  ],
   "HR Coordinator": ["coordinateur rh", "charge rh", "charge ressources humaines"],
   "HR Manager": ["responsable rh", "manager rh", "responsable ressources humaines"],
   Recruiter: ["recruteur", "charge de recrutement", "talent acquisition"],
@@ -156,7 +162,11 @@ const ROLE_ALIASES = {
   "Marketing Assistant": ["assistant marketing", "assistante marketing"],
   "Marketing Coordinator": ["coordinateur marketing", "charge marketing", "charge de marketing"],
   "Marketing Manager": ["responsable marketing", "manager marketing"],
-  "Digital Marketing Specialist": ["marketing digital", "specialiste marketing digital", "charge marketing digital"],
+  "Digital Marketing Specialist": [
+    "marketing digital",
+    "specialiste marketing digital",
+    "charge marketing digital",
+  ],
   "Social Media Manager": ["community manager", "social media", "reseaux sociaux"],
   "SEO Specialist": ["seo", "referencement", "specialiste seo"],
   "Communications Officer": ["communication", "charge de communication", "assistant communication"],
@@ -165,7 +175,11 @@ const ROLE_ALIASES = {
   "Sales Representative": ["commercial", "vendeur", "conseiller commercial"],
   "Customer Support": ["support client", "service client", "charge de clientele"],
   "Customer Success Manager": ["customer success", "success client", "charge de clientele"],
-  "Administrative Assistant": ["assistant administratif", "assistante administrative", "admin assistant"],
+  "Administrative Assistant": [
+    "assistant administratif",
+    "assistante administrative",
+    "admin assistant",
+  ],
   "Executive Assistant": ["assistant de direction", "assistante de direction"],
   "Operations Assistant": ["assistant operations", "assistant exploitation"],
   "Operations Manager": ["responsable operations", "responsable exploitation"],
@@ -224,7 +238,9 @@ function roleSearchText(role, group, lang) {
     group,
     translateRoleGroupLabel(group, lang),
     ...(ROLE_ALIASES[role] || []),
-  ].map(normalize).filter(Boolean);
+  ]
+    .map(normalize)
+    .filter(Boolean);
 }
 
 function scoreRole(role, query, relatedRole, lang = "en", group = "") {
@@ -243,7 +259,10 @@ function scoreRole(role, query, relatedRole, lang = "en", group = "") {
   const haystacks = roleSearchText(role, group, lang);
   if (haystacks.some((text) => text === normalizedQuery)) score += 140;
   else if (haystacks.some((text) => text.startsWith(normalizedQuery))) score += 100;
-  else if (haystacks.some((text) => text.split(/\s+/).some((word) => word.startsWith(normalizedQuery)))) score += 75;
+  else if (
+    haystacks.some((text) => text.split(/\s+/).some((word) => word.startsWith(normalizedQuery)))
+  )
+    score += 75;
   else if (haystacks.some((text) => text.includes(normalizedQuery))) score += 45;
 
   if (relatedRole) {
@@ -258,12 +277,11 @@ function scoreRole(role, query, relatedRole, lang = "en", group = "") {
 export function searchRoleSuggestions(query, { limit = 8, relatedRole, lang = "en" } = {}) {
   const normalizedQuery = normalize(query);
 
-  const ranked = ROLE_INDEX
-    .map(({ role, group }) => ({
-      role,
-      group,
-      score: scoreRole(role, normalizedQuery, relatedRole, lang, group),
-    }))
+  const ranked = ROLE_INDEX.map(({ role, group }) => ({
+    role,
+    group,
+    score: scoreRole(role, normalizedQuery, relatedRole, lang, group),
+  }))
     .filter((entry) => (normalizedQuery ? entry.score > 0 : entry.score >= 0))
     .sort((a, b) => b.score - a.score || a.role.localeCompare(b.role));
 

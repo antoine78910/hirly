@@ -29,7 +29,9 @@ describe("PR0 matching oracle production and supply boundaries", () => {
       read("src/shadow-canary.ts"),
     ].join("\n");
 
-    expect(implementation).not.toMatch(/candidate_match_generations|candidate_job_matches|generation[_ -]fanout|CAS activation/i);
+    expect(implementation).not.toMatch(
+      /candidate_match_generations|candidate_job_matches|generation[_ -]fanout|CAS activation/i,
+    );
     expect(implementation).not.toMatch(/\b(?:INSERT|UPDATE|DELETE|TRUNCATE)\b/i);
   });
 
