@@ -24,5 +24,6 @@ export interface Clock { now(): Date; }
 export interface IdGenerator { next(prefix: string): string; }
 export interface Hasher { digest(value: unknown): string; }
 export interface Redactor { redact(value: unknown): unknown; }
-export interface SafeLogger { info(event: string, fields: Record<string, unknown>): void; error(event: string, fields: Record<string, unknown>): void; }
+export type SafeLogFields = { subjectRef?: string; entityRef?: string; planDigest?: string; reasonCodes?: readonly string[]; occurredAt?: string; };
+export interface SafeLogger { info(event: 'application_agent_operation', fields: SafeLogFields): void; error(event: 'application_agent_failure', fields: SafeLogFields): void; }
 export interface AuditOutboxPublisher { publish(event: { key: string; version: string; payload: unknown }): Promise<void>; }
