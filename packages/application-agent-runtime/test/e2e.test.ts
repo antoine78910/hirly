@@ -14,7 +14,8 @@ const clock = { now: () => now };
 test('fails closed before submit handler, then submits once with exact approval and rejects replay', async () => {
   const job = { ...fixtureJobSnapshot, questions: [] };
   const simulator = controlledAtsSimulator();
-  const registry = createApplicationAgentOperationRegistry({ evidence: memoryEvidenceStore(fixtureEvidenceSnapshot, fixtureEvidenceItems), jobs: memoryStore(), drafts: memoryStore(), plans: memoryStore(), receipts: memoryReceiptStore(), reader: fixtureJobReader(job), model: fixtureModel, verifier: { async verify() { return { supports: [], blockedReasonCodes: [] }; } }, adapters: fixtureAdapterRegistry(simulator), idempotency: memoryIdempotencyStore(), clock, ids: incrementalIds(), hasher: sha256Hasher, logger: memorySafeLogger(), outbox: memoryOutbox() });
+  let approvalPort: ReturnType<typeof createApprovalPort> | undefined;
+  const registry = createApplicationAgentOperationRegistry({ evidence: memoryEvidenceStore(fixtureEvidenceSnapshot, fixtureEvidenceItems), jobs: memoryStore(), drafts: memoryStore(), plans: memoryStore(), receipts: memoryReceiptStore(), reader: fixtureJobReader(job), model: fixtureModel, verifier: { async verify() { return { supports: [], blockedReasonCodes: [] }; } }, adapters: fixtureAdapterRegistry(simulator), idempotency: memoryIdempotencyStore(), clock, ids: incrementalIds(), hasher: sha256Hasher, logger: memorySafeLogger(), outbox: memoryOutbox(), approvalPort: () => approvalPort });
   const ctx = { userId: 'candidate-a', tenantId: 'tenant-a', eventSpecResolver: createApplicationAgentEventRegistry() };
   const analyzed: any = await registry.execute('hirlyJob.analyze', '1.0.0', { fixtureId: 'fixture_job-a' }, ctx);
   const prepared: any = await registry.execute('hirlyApplication.prepare', '1.0.0', { candidateEvidenceSnapshotId: fixtureEvidenceSnapshot.id, jobSnapshotId: analyzed.data.id }, ctx);
@@ -25,7 +26,7 @@ test('fails closed before submit handler, then submits once with exact approval 
   expect(simulator.mutations).toBe(0);
   const reviewRef = 'review:fixture-approval';
   const receipt = { id: 'approval_fixture-a', subject: { userId: 'candidate-a', tenantId: 'tenant-a' }, operation: { key: 'hirlyApplication.submit', version: '1.0.0' }, inputDigest: sha256Hasher.digest(input), effects: ['write', 'external-side-effect'] as const, issuedAt: '2025-12-31T23:00:00.000Z', expiresAt: '2026-01-01T01:00:00.000Z', nonce: 'nonce_fixture-a', issuer: 'fixture-review', evidenceRef: reviewRef };
-  const approvalPort = createApprovalPort({ reviews: memoryReviewStore([{ ref: reviewRef, status: 'approved', subject: { userId: 'candidate-a', tenantId: 'tenant-a' }, planDigest: input.planDigest, targetOrigin: input.targetOrigin, adapterVersion: input.adapterVersion, issuedAt: '2025-12-31T23:00:00.000Z', expiresAt: '2026-01-01T01:00:00.000Z' }]), nonces: memoryNonceStore(), clock, hasher: sha256Hasher });
+  approvalPort = createApprovalPort({ reviews: memoryReviewStore([{ ref: reviewRef, status: 'approved', subject: { userId: 'candidate-a', tenantId: 'tenant-a' }, planDigest: input.planDigest, targetOrigin: input.targetOrigin, adapterVersion: input.adapterVersion, issuedAt: '2025-12-31T23:00:00.000Z', expiresAt: '2026-01-01T01:00:00.000Z' }]), nonces: memoryNonceStore(), clock, hasher: sha256Hasher });
   const submitted: any = await registry.execute('hirlyApplication.submit', '1.0.0', input, { ...ctx, approvalReceipt: receipt, approvalPort });
   expect(submitted.data.status).toBe('submitted'); expect(simulator.mutations).toBe(1); expect(submitted.data.safeEvidenceRefs).toEqual(['receipt:fixture-confirmation']);
   const replay: any = await registry.executeResult('hirlyApplication.submit', '1.0.0', input, { ...ctx, approvalReceipt: receipt, approvalPort });
@@ -99,7 +100,8 @@ test('runtime event publisher rejects undeclared and malformed events before pub
 test('submit reloads persisted plan sources and blocks changed job snapshots before mutation', async () => {
   const job = { ...fixtureJobSnapshot, questions: [] };
   const jobs = memoryStore([job]); const drafts = memoryStore<ApplicationDraft>(); const plans = memoryStore<ApplicationSubmissionPlan>(); const simulator = controlledAtsSimulator();
-  const registry = createApplicationAgentOperationRegistry({ evidence: memoryEvidenceStore(fixtureEvidenceSnapshot, fixtureEvidenceItems), jobs, drafts, plans, receipts: memoryReceiptStore(), reader: fixtureJobReader(job), model: fixtureModel, verifier: { async verify() { return { supports: [], blockedReasonCodes: [] }; } }, adapters: fixtureAdapterRegistry(simulator), idempotency: memoryIdempotencyStore(), clock, ids: incrementalIds(), hasher: sha256Hasher, logger: memorySafeLogger(), outbox: memoryOutbox() });
+  let approvalPort: ReturnType<typeof createApprovalPort> | undefined;
+  const registry = createApplicationAgentOperationRegistry({ evidence: memoryEvidenceStore(fixtureEvidenceSnapshot, fixtureEvidenceItems), jobs, drafts, plans, receipts: memoryReceiptStore(), reader: fixtureJobReader(job), model: fixtureModel, verifier: { async verify() { return { supports: [], blockedReasonCodes: [] }; } }, adapters: fixtureAdapterRegistry(simulator), idempotency: memoryIdempotencyStore(), clock, ids: incrementalIds(), hasher: sha256Hasher, logger: memorySafeLogger(), outbox: memoryOutbox(), approvalPort: () => approvalPort });
   const ctx = { userId: 'candidate-a' };
   const prepared: any = await registry.execute('hirlyApplication.prepare', '1.0.0', { candidateEvidenceSnapshotId: fixtureEvidenceSnapshot.id, jobSnapshotId: job.id }, ctx);
   const frozen: any = await registry.execute('hirlyApplication.freeze', '1.0.0', { draftId: prepared.data.id, targetOrigin: job.origin, adapterKey: 'fixture-ats', adapterVersion: '1.0.0' }, ctx);
@@ -107,7 +109,7 @@ test('submit reloads persisted plan sources and blocks changed job snapshots bef
   await jobs.put({ ...job, sourceFingerprint: sha256Hasher.digest({ changed: true }) });
   const reviewRef = 'review:stale-plan';
   const receipt = { id: 'approval_stale-a', subject: { userId: 'candidate-a' }, operation: { key: 'hirlyApplication.submit', version: '1.0.0' }, inputDigest: sha256Hasher.digest(input), effects: ['write', 'external-side-effect'] as const, issuedAt: '2025-12-31T23:00:00.000Z', expiresAt: '2026-01-01T01:00:00.000Z', nonce: 'nonce_stale-a', issuer: 'fixture', evidenceRef: reviewRef };
-  const approvalPort = createApprovalPort({ reviews: memoryReviewStore([{ ref: reviewRef, status: 'approved', subject: receipt.subject, planDigest: input.planDigest, targetOrigin: input.targetOrigin, adapterVersion: input.adapterVersion, issuedAt: receipt.issuedAt, expiresAt: receipt.expiresAt }]), nonces: memoryNonceStore(), clock, hasher: sha256Hasher });
+  approvalPort = createApprovalPort({ reviews: memoryReviewStore([{ ref: reviewRef, status: 'approved', subject: receipt.subject, planDigest: input.planDigest, targetOrigin: input.targetOrigin, adapterVersion: input.adapterVersion, issuedAt: receipt.issuedAt, expiresAt: receipt.expiresAt }]), nonces: memoryNonceStore(), clock, hasher: sha256Hasher });
   const result: any = await registry.executeResult('hirlyApplication.submit', '1.0.0', input, { ...ctx, approvalReceipt: receipt, approvalPort });
   expect(JSON.stringify(result)).toContain('STALE_SUBMISSION_PLAN');
   expect(simulator.mutations).toBe(0);
@@ -132,9 +134,9 @@ test('candidate MCP allowlist excludes server-only outcome observation', () => {
 test('MCP candidate tools use host identity and host-only approval receipts', async () => {
   const job = { ...fixtureJobSnapshot, questions: [] };
   const simulator = controlledAtsSimulator();
-  const deps: RuntimeDependencies = { evidence: memoryEvidenceStore(fixtureEvidenceSnapshot, fixtureEvidenceItems), jobs: memoryStore<JobSnapshot>(), drafts: memoryStore<ApplicationDraft>(), plans: memoryStore<ApplicationSubmissionPlan>(), receipts: memoryReceiptStore(), reader: fixtureJobReader(job), model: fixtureModel, verifier: { async verify() { return { supports: [], blockedReasonCodes: [] }; } }, adapters: fixtureAdapterRegistry(simulator), idempotency: memoryIdempotencyStore(), clock, ids: incrementalIds(), hasher: sha256Hasher, logger: memorySafeLogger(), outbox: memoryOutbox() };
   let receipt: any;
   let approvalPort = createApprovalPort({ reviews: memoryReviewStore([]), nonces: memoryNonceStore(), clock, hasher: sha256Hasher });
+  const deps: RuntimeDependencies = { evidence: memoryEvidenceStore(fixtureEvidenceSnapshot, fixtureEvidenceItems), jobs: memoryStore<JobSnapshot>(), drafts: memoryStore<ApplicationDraft>(), plans: memoryStore<ApplicationSubmissionPlan>(), receipts: memoryReceiptStore(), reader: fixtureJobReader(job), model: fixtureModel, verifier: { async verify() { return { supports: [], blockedReasonCodes: [] }; } }, adapters: fixtureAdapterRegistry(simulator), idempotency: memoryIdempotencyStore(), clock, ids: incrementalIds(), hasher: sha256Hasher, logger: memorySafeLogger(), outbox: memoryOutbox(), approvalPort: () => approvalPort };
   const server = createApplicationAgentMcpServer(deps, {
     context: () => ({ userId: 'candidate-a', tenantId: 'tenant-a', eventSpecResolver: createApplicationAgentEventRegistry(), approvalPort }),
     approvalReceipt: async () => receipt,

@@ -1,5 +1,7 @@
 import { OperationSpecRegistry } from '@lssm-tech/lib.contracts-spec/operations';
 import { contractFail, contractOk } from '@lssm-tech/lib.contracts-spec/results';
+import type { OperationApprovalPort } from '@lssm-tech/lib.contracts-spec/operations';
+import type { HandlerCtx } from '@lssm-tech/lib.contracts-spec/types';
 import {
   analyzeJobOperation, applicationAgentOperations, freezeApplicationOperation,
   observeOutcomeOperation, prepareApplicationOperation, submitApplicationOperation,
@@ -20,6 +22,8 @@ export interface RuntimeDependencies {
   plans: SubmissionPlanStore; receipts: SubmissionReceiptStore; reader: JobSourceReader;
   model: ApplicationModelGateway; verifier: ClaimSupportVerifier; adapters: AtsCapabilityRegistry;
   idempotency: IdempotencyStore; clock: Clock; ids: IdGenerator; hasher: Hasher; logger: SafeLogger; outbox: AuditOutboxPublisher;
+  /** Composition-owned approval authority. Caller-supplied ports are ignored. */
+  approvalPort?: () => OperationApprovalPort | undefined;
 }
 
 const failure = (code: string) => contractFail(code, { code }, { status: 409, detail: code });
@@ -37,6 +41,13 @@ const safeEvent = (deps: RuntimeDependencies, values: Record<string, unknown>) =
 export const createApplicationAgentOperationRegistry = (deps: RuntimeDependencies, compositionMode: 'fixture' | 'production' = 'fixture') => {
   assertFixtureOnlyMode(compositionMode);
   const registry = new OperationSpecRegistry([...applicationAgentOperations]);
+  const runtimeContext = (ctx: HandlerCtx): HandlerCtx => ({ ...ctx, approvalPort: deps.approvalPort?.() });
+  // Approval is enforced by ContractSpec before the submit handler. Wrap both
+  // public execution entry points so a transport cannot supply its own port.
+  const execute = registry.execute.bind(registry);
+  const executeResult = registry.executeResult.bind(registry);
+  registry.execute = (key, version, input, ctx) => execute(key, version, input, runtimeContext(ctx));
+  registry.executeResult = (key, version, input, ctx) => executeResult(key, version, input, runtimeContext(ctx));
   const events = createGuardedEventPublisher(deps.outbox);
   const bind = (spec: any, handler: any) => registry.bind(spec, handler);
 
