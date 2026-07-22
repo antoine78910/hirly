@@ -94,7 +94,7 @@ def _default_filters():
 def _enable(monkeypatch):
     monkeypatch.setenv("FEED_V2_INTERNAL_URL", "http://feed-v2.internal/internal/feed/v2")
     monkeypatch.setenv("FEED_V2_ASSERTION_SECRET", "feed-v2-test-secret-that-is-at-least-32-bytes")
-    monkeypatch.setenv("FEED_V2_TIMEOUT_MS", "125")
+    monkeypatch.setenv("FEED_V2_TIMEOUT_MS", "750")
     monkeypatch.setattr(server, "_feed_v2_rollout_enabled_for", _enabled_feed_v2_rollout)
 
 
@@ -303,7 +303,7 @@ def test_feed_v2_delegation_signs_candidate_identity_with_runtime_convention(mon
     assert set(assertion) == {"subject", "candidateId", "scopes", "issuedAt", "expiresAt"}
     assert observed["params"] == {"limit": 5}
     assert observed["client"]["follow_redirects"] is False
-    assert observed["client"]["timeout"].read == 0.125
+    assert observed["client"]["timeout"].read == 0.75
     assert result == _v2_response()
 
 

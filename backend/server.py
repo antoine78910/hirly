@@ -7753,7 +7753,12 @@ async def _try_feed_v2(
     signature = hmac.new(
         secret.encode("utf-8"), encoded_assertion.encode("ascii"), hashlib.sha256,
     ).hexdigest()
-    timeout_ms = max(50, min(_env_int("FEED_V2_TIMEOUT_MS", 250), 750))
+    # A 250ms cross-service deadline makes normal Postgres scheduling jitter
+    # look like a V2 outage, silently sending users back to the legacy feed.
+    # Keep this bounded below the V2 service's 1.5s own deadline so a slow
+    # dependency cannot hold the request indefinitely, while allowing a
+    # successful V2 result to win over the much slower legacy fallback.
+    timeout_ms = max(250, min(_env_int("FEED_V2_TIMEOUT_MS", 1_200), 1_500))
     timeout = httpx.Timeout(timeout_ms / 1000.0)
     headers = {
         "X-Hirly-Feed-Assertion": encoded_assertion,
