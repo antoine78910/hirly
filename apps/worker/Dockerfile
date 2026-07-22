@@ -12,6 +12,8 @@ COPY apps/g009-retirement-gate/package.json apps/g009-retirement-gate/package.js
 COPY apps/job-projection-backfill/package.json apps/job-projection-backfill/package.json
 COPY apps/matching-shadow-canary/package.json apps/matching-shadow-canary/package.json
 COPY apps/matching-supply-readiness/package.json apps/matching-supply-readiness/package.json
+COPY packages/application-agent-contracts/package.json packages/application-agent-contracts/package.json
+COPY packages/application-agent-runtime/package.json packages/application-agent-runtime/package.json
 COPY packages/config/package.json packages/config/package.json
 COPY packages/contracts/package.json packages/contracts/package.json
 COPY packages/db/package.json packages/db/package.json

@@ -19,10 +19,23 @@ const workerPackage = JSON.parse(
 ) as { scripts?: Record<string, string> };
 
 describe("main production release workflow", () => {
-  test("copies every app manifest required by the frozen worker install", () => {
-    expect(workerDockerfile).toContain(
-      "COPY apps/analytics-backfill/package.json apps/analytics-backfill/package.json",
+  test("copies every workspace manifest before the frozen worker install", () => {
+    const repoRoot = resolve(import.meta.dir, "..");
+    const workspaceManifests = ["apps/*/package.json", "packages/*/package.json"].flatMap(
+      (pattern) =>
+        Array.from(
+          new Bun.Glob(pattern).scanSync({
+            cwd: repoRoot,
+            onlyFiles: true,
+          }),
+        ),
     );
+    const copiedManifests = Array.from(
+      workerDockerfile.matchAll(/^COPY ((?:apps|packages)\/[^ ]+\/package\.json) \1$/gm),
+      ([, manifest]) => manifest,
+    );
+
+    expect(copiedManifests.sort()).toEqual(workspaceManifests.sort());
   });
 
   test("serializes migration, backend readiness, and frontend promotion", () => {
