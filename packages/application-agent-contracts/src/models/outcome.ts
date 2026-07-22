@@ -1,0 +1,2 @@
+import { z } from 'zod'; import { isoTimestamp, opaqueId, safeRef } from './common';
+export const ApplicationOutcomeObservationSchema=z.object({ receiptId: opaqueId('attempt'), status:z.enum(['viewed','rejected','callback','interview','offer','withdrawn','unknown']), safeEvidenceRefs:z.array(safeRef), observedAt:isoTimestamp }).strict(); export type ApplicationOutcomeObservation=z.infer<typeof ApplicationOutcomeObservationSchema>;

@@ -1,0 +1,26 @@
+{
+  "name": "@hirly/application-agent-runtime",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/index.ts", "./mcp": "./src/mcp.ts" },
+  "scripts": {
+    "lint": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "build": "tsc --noEmit",
+    "demo": "bun src/cli.ts"
+  },
+  "dependencies": {
+    "@hirly/application-agent-contracts": "0.1.0",
+    "@lssm-tech/lib.contracts-runtime-server-mcp": "3.11.0",
+    "@lssm-tech/lib.contracts-spec": "14.0.0",
+    "@lssm-tech/lib.schema": "4.0.4",
+    "@modelcontextprotocol/sdk": "1.29.0",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@types/bun": "1.3.14",
+    "typescript": "5.9.3"
+  }
+}

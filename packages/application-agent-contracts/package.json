@@ -1,0 +1,14 @@
+{
+  "name": "@hirly/application-agent-contracts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": { "lint": "tsc --noEmit", "typecheck": "tsc --noEmit", "test": "bun test", "build": "tsc --noEmit" },
+  "dependencies": {
+    "@lssm-tech/lib.contracts-spec": "14.0.0",
+    "@lssm-tech/lib.schema": "4.0.4",
+    "zod": "4.4.3"
+  },
+  "devDependencies": { "typescript": "5.9.3" }
+}
