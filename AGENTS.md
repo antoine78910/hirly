@@ -1,53 +1,75 @@
 <!-- contractspec:init:agents:start -->
 <!-- This section is managed by `contractspec init` and `contractspec onboard`. Content outside these markers is user-owned and preserved. -->
-# ContractSpec AI Guide
+# ContractSpec Onboarding Guide
 
-Scope: `monorepo-hirly`
+Primary track: `contracts`
 
-This project uses ContractSpec for spec-first development. Treat contracts as the source of truth for implementation changes.
+Use the repo-local onboarding tracks before inventing new abstractions.
 
-## Core Rules
+## Workflow
 
-- Update contracts before implementation code.
-- Validate contracts after changes with `contractspec validate`.
-- Regenerate derived artifacts before considering the work complete.
-- Prefer existing package-local guides and READMEs when working in a nested package.
+- Run `contractspec connect adoption resolve --family <family> --stdin` before adding new surfaces.
+- Prefer the starter example and the listed ContractSpec packages for the active track.
+- Treat `USAGE.md` as the human-facing implementation path and this file as AI operating guidance.
+- When Builder is not configured, recommend `contractspec init --preset builder-managed|builder-local|builder-hybrid` instead of inventing a runtime target model.
 
-## Monorepo Scope
+## Recommended Tracks
 
-This guide is scoped to the workspace root.
-- Shared contracts may live in multiple packages under `packages/*/src/contracts/`
-- Prefer the nearest package guide when working inside a specific package.
+### Contracts
 
-## Recommended Workflow
+Reason: Multiple similarly strong adoption candidates were found.
+Reuse family: `contracts`
+Primary docs: `/docs/getting-started/start-here`
+Starter example: `minimal` (@lssm-tech/example.minimal)
+Commands:
+- `contractspec create --type operation`
+- `contractspec generate`
+- `contractspec validate`
+- `contractspec ci`
 
-1. Check whether a contract already exists for the change.
-2. Update or create the contract first.
-3. Run validation and generation commands.
-4. Review downstream code and tests affected by the contract update.
+### Learning Journey
 
-## Key Commands
+Reason: Selected contractspec candidate @lssm-tech/module.learning-journey.
+Reuse family: `solutions`
+Primary docs: `/docs/guides/first-module-bundle`
+Starter example: `learning-journey-ui-onboarding` (@lssm-tech/example.learning-journey-ui-onboarding)
+Commands:
+- `contractspec examples list --query learning-journey`
+- `contractspec validate`
+- `contractspec doctor`
 
-- `contractspec create` - scaffold a new contract
-- `contractspec validate` - validate contract integrity
-- `contractspec build` - generate implementation artifacts
-- `contractspec doctor` - verify workspace configuration
+### UI Design
 
-## Working Agreement
+Reason: Selected contractspec candidate @lssm-tech/lib.design-system.
+Reuse family: `ui`
+Primary docs: `/docs/tech/contracts/themes`
+Starter example: `data-grid-showcase` (@lssm-tech/example.data-grid-showcase)
+Commands:
+- `contractspec create --type theme`
+- `contractspec generate`
+- `contractspec validate`
 
-- Keep changes spec-first, deterministic, and reviewable.
-- Do not change generated outputs without updating their source contract.
-- When touching nested packages, prefer the nearest `AGENTS.md` and `README.md` as the local source of truth.
-- Reuse existing workspace code before creating new files, packages, or dependencies.
-- Prefer ContractSpec OSS packages by family:
-  - UI: local reusable UI -> `@lssm-tech/lib.design-system` -> platform ui-kit -> shadcn/web fallback
-  - Contracts: existing local spec -> `@lssm-tech/lib.contracts-spec` / `@lssm-tech/lib.schema`
-  - Integrations/runtime/shared libs: existing workspace surface -> ContractSpec OSS catalog -> reviewed fallback
-- Use `contractspec connect adoption sync` and `contractspec connect adoption resolve --family <family>` when the right reusable surface is unclear.
+### Knowledge
 
-## Initialization Preset
+Reason: Selected contractspec candidate @lssm-tech/lib.knowledge.
+Reuse family: `sharedLibs`
+Primary docs: `/docs/knowledge`
+Starter example: `knowledge-canon` (@lssm-tech/example.knowledge-canon)
+Commands:
+- `contractspec create --type knowledge`
+- `contractspec validate`
+- `contractspec connect adoption resolve --family sharedLibs --stdin`
 
-- This workspace was initialized with the `core` setup preset.
+### AI Agents
+
+Reason: Selected contractspec candidate @lssm-tech/lib.ai-agent.
+Reuse family: `sharedLibs`
+Primary docs: `/docs/libraries/ai-agent`
+Starter example: `agent-console` (@lssm-tech/example.agent-console)
+Commands:
+- `contractspec create --type agent`
+- `contractspec agent export --spec <path> --format opencode`
+- `contractspec validate`
 <!-- contractspec:init:agents:end -->
 # Hirly Agent Instructions
 
