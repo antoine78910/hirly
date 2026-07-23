@@ -6,9 +6,9 @@ const workflow = readFileSync(
   resolve(import.meta.dir, "../.github/workflows/typescript-foundation.yml"),
   "utf8",
 );
-const biomeConfig = JSON.parse(
-  readFileSync(resolve(import.meta.dir, "../biome.json"), "utf8"),
-) as { css?: { parser?: { tailwindDirectives?: boolean } } };
+const biomeConfig = JSON.parse(readFileSync(resolve(import.meta.dir, "../biome.json"), "utf8")) as {
+  css?: { parser?: { tailwindDirectives?: boolean } };
+};
 const workerDockerfile = readFileSync(
   resolve(import.meta.dir, "../apps/worker/Dockerfile"),
   "utf8",
