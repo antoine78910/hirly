@@ -99,6 +99,16 @@ describe("main production release workflow", () => {
     expect(legacyFrontend).toContain(secretMapping);
   });
 
+  test("uses non-mutating changed-file validation for Bun workspaces", () => {
+    const bunWorkspaces = workflow.slice(
+      workflow.indexOf("  bun-workspaces:"),
+      workflow.indexOf("  legacy-frontend:"),
+    );
+
+    expect(bunWorkspaces).toContain("bun run check:changed");
+    expect(bunWorkspaces).not.toContain("bun run format\n");
+  });
+
   test("uses a BuildKit secret for the worker dependency install", () => {
     expect(workerDockerfile.startsWith("# syntax=docker/dockerfile:1.7\n")).toBe(
       true,

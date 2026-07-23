@@ -55,7 +55,8 @@ jobs:
           .venv/bin/python -m pip install --disable-pip-version-check -r backend/requirements.txt
           .venv/bin/python -m pip install --disable-pip-version-check pytest==9.1.1
       - run: bun install --frozen-lockfile
-      - run: bun run format
+      - name: Validate formatting, lint rules, and import organization
+        run: bun run check:changed
       - name: Run G003 worker adversarial matrix
         run: bun run test:g003
       - name: Verify repository and isolated PostgreSQL release matrix
