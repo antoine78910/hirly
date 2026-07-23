@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import mimetypes
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form
 from fastapi.responses import FileResponse
@@ -174,6 +174,7 @@ def register_training_routes(
         module_id: str,
         section_part: str,
         lang: str,
+        user=Depends(require_training_user),
     ):
         media_path = resolve_media_file(course_id, module_id, section_part, lang)
         if not media_path:

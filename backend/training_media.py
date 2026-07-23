@@ -1,15 +1,27 @@
-"""Training course video uploads (filesystem storage + streaming)."""
+"""Training course video uploads backed by private Supabase Storage.
+
+The persistent media object path is stored with the localized training content.
+Learners receive a short-lived signed URL only after the normal training-access
+check has succeeded. Local files remain readable solely as a legacy fallback for
+records uploaded before Supabase Storage was introduced.
+"""
 
 from __future__ import annotations
 
 from copy import deepcopy
+import logging
 import mimetypes
+import os
 import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+from urllib.parse import quote, urljoin
 
+import httpx
 from fastapi import HTTPException, UploadFile
+
+logger = logging.getLogger(__name__)
 
 MAX_VIDEO_BYTES = 500 * 1024 * 1024  # 500 MB
 ALLOWED_VIDEO_EXTENSIONS = {".mp4", ".webm", ".mov", ".m4v"}
@@ -20,8 +32,12 @@ ALLOWED_VIDEO_MIMES = {
     "video/x-m4v",
 }
 
+# This directory is not used for new uploads. It continues to support legacy
+# content until it has been migrated to the private bucket.
 MEDIA_ROOT = Path(__file__).resolve().parent / "data" / "training_videos"
 DEFAULT_COURSE_ID = "course_job_search_mastery"
+TRAINING_VIDEO_BUCKET = "training-videos"
+TRAINING_VIDEO_SIGNED_URL_TTL_SECONDS = 60 * 60
 TRAINING_VIDEO_LOCALES = ("en", "fr", "de", "es", "it")
 
 # Canonical upload targets (module + optional section).
@@ -83,6 +99,22 @@ def slot_section_part(section_id: Optional[str]) -> str:
     return _safe_segment(section_id) if section_id else "_module"
 
 
+def training_video_storage_path(
+    course_id: str,
+    module_id: str,
+    section_id: Optional[str],
+    lang: str,
+) -> str:
+    """Return the stable, extension-free private Storage object path."""
+    return "/".join((
+        _safe_segment(course_id),
+        _safe_segment(module_id),
+        slot_section_part(section_id),
+        normalize_training_video_locale(lang),
+    ))
+
+
+# Legacy local-file helpers. New uploads must use training_video_storage_path.
 def slot_storage_dir(course_id: str, module_id: str, section_id: Optional[str]) -> Path:
     return (
         MEDIA_ROOT
@@ -93,7 +125,7 @@ def slot_storage_dir(course_id: str, module_id: str, section_id: Optional[str]) 
 
 
 def ensure_training_video_dirs(course_id: str = DEFAULT_COURSE_ID) -> List[Path]:
-    """Create on-disk folders for every canonical upload slot (plus .gitkeep)."""
+    """Create local legacy folders for migration/development support only."""
     created: List[Path] = []
     MEDIA_ROOT.mkdir(parents=True, exist_ok=True)
     for slot in VIDEO_SLOTS:
@@ -106,19 +138,8 @@ def ensure_training_video_dirs(course_id: str = DEFAULT_COURSE_ID) -> List[Path]
     return created
 
 
-def media_storage_path(course_id: str, module_id: str, section_id: Optional[str], lang: str, ext: str) -> Path:
-    return slot_storage_dir(course_id, module_id, section_id) / f"{normalize_training_video_locale(lang)}{ext.lower()}"
-
-
-def media_public_path(course_id: str, module_id: str, section_id: Optional[str], lang: str) -> str:
-    section_part = slot_section_part(section_id)
-    return (
-        f"/api/training/media/{_safe_segment(course_id)}/{_safe_segment(module_id)}/"
-        f"{section_part}/{normalize_training_video_locale(lang)}"
-    )
-
-
 def resolve_media_file(course_id: str, module_id: str, section_part: str, lang: str) -> Optional[Path]:
+    """Find a legacy local video without crossing locale boundaries."""
     base = MEDIA_ROOT / _safe_segment(course_id) / _safe_segment(module_id) / _safe_segment(section_part)
     normalized_lang = normalize_training_video_locale(lang)
     if not base.is_dir():
@@ -128,10 +149,6 @@ def resolve_media_file(course_id: str, module_id: str, section_part: str, lang: 
         if candidate.is_file():
             return candidate
 
-    # Support legacy manual drop-ins (for example, "swiping features.mp4") without
-    # ever serving a video uploaded for a different locale.  A named en.mp4 must
-    # not silently become the French or German lesson just because it is the only
-    # file in the slot.
     candidates = [
         path
         for ext in ALLOWED_VIDEO_EXTENSIONS
@@ -147,9 +164,6 @@ def resolve_media_file(course_id: str, module_id: str, section_part: str, lang: 
     for path in sorted(candidates, key=lambda item: item.name.lower()):
         if lang_hint in path.stem.lower():
             return path
-
-    # A single unlabelled legacy file has no claimed locale and remains available
-    # during migration.  Multiple unlabelled files are ambiguous, so do not guess.
     return candidates[0] if len(candidates) == 1 else None
 
 
@@ -173,9 +187,74 @@ def validate_video_upload(file: UploadFile, content: bytes) -> str:
 
     ext = _guess_ext(file.filename or "", file.content_type)
     mime = (file.content_type or mimetypes.guess_type(file.filename or "")[0] or "").split(";")[0].strip().lower()
-    if mime and mime not in ALLOWED_VIDEO_MIMES and not mime.startswith("video/"):
-        raise HTTPException(status_code=400, detail="Only video files are allowed (MP4, WebM, MOV)")
+    if mime and mime not in ALLOWED_VIDEO_MIMES:
+        raise HTTPException(status_code=400, detail="Only video files are allowed (MP4, WebM, MOV, M4V)")
     return ext
+
+
+def _supabase_storage_config() -> Tuple[str, str]:
+    url = (os.environ.get("SUPABASE_URL") or "").strip().rstrip("/")
+    secret = (os.environ.get("SUPABASE_SECRET_KEY") or "").strip()
+    if not url or not secret:
+        raise HTTPException(status_code=503, detail="Training video storage is not configured")
+    return url, secret
+
+
+async def _storage_api_request(
+    method: str,
+    endpoint: str,
+    *,
+    content: Optional[bytes] = None,
+    json: Optional[Dict[str, Any]] = None,
+    headers: Optional[Dict[str, str]] = None,
+) -> httpx.Response:
+    """Issue a private Storage API call using the server-only Supabase secret."""
+    base_url, secret = _supabase_storage_config()
+    request_headers = {"apikey": secret, "Authorization": f"Bearer {secret}"}
+    if headers:
+        request_headers.update(headers)
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(connect=10, read=90, write=180, pool=10)) as client:
+            return await client.request(
+                method,
+                f"{base_url}{endpoint}",
+                content=content,
+                json=json,
+                headers=request_headers,
+            )
+    except httpx.HTTPError as exc:
+        logger.warning("Supabase training video Storage request failed: %s", exc)
+        raise HTTPException(status_code=502, detail="Training video storage is unavailable") from exc
+
+
+def _require_storage_success(response: httpx.Response, action: str) -> None:
+    if response.is_success:
+        return
+    logger.warning("Supabase training video Storage %s failed with status %s", action, response.status_code)
+    raise HTTPException(status_code=502, detail=f"Training video storage could not {action}")
+
+
+async def create_training_video_signed_url(storage_path: str) -> str:
+    """Return a short-lived URL for one private training-video object."""
+    if not storage_path:
+        return ""
+    encoded_path = quote(storage_path, safe="/")
+    response = await _storage_api_request(
+        "POST",
+        f"/storage/v1/object/sign/{TRAINING_VIDEO_BUCKET}/{encoded_path}",
+        json={"expiresIn": TRAINING_VIDEO_SIGNED_URL_TTL_SECONDS},
+    )
+    _require_storage_success(response, "sign the video")
+    try:
+        signed_path = response.json().get("signedURL") or response.json().get("signedUrl")
+    except ValueError as exc:
+        raise HTTPException(status_code=502, detail="Training video storage returned an invalid signed URL") from exc
+    if not isinstance(signed_path, str) or not signed_path:
+        raise HTTPException(status_code=502, detail="Training video storage returned an invalid signed URL")
+    if signed_path.startswith(("https://", "http://")):
+        return signed_path
+    base_url, _ = _supabase_storage_config()
+    return urljoin(f"{base_url}/", signed_path.lstrip("/"))
 
 
 async def save_training_video(
@@ -184,19 +263,24 @@ async def save_training_video(
     module_id: str,
     section_id: Optional[str],
     lang: str,
-) -> Tuple[Path, str]:
+) -> Tuple[str, str]:
+    """Upload a locale-specific video and return its storage path and signed URL."""
     content = await file.read()
-    ext = validate_video_upload(file, content)
-    locale = normalize_training_video_locale(lang)
-    dest = media_storage_path(course_id, module_id, section_id, locale, ext)
-    dest.parent.mkdir(parents=True, exist_ok=True)
-
-    for existing in dest.parent.glob(f"{locale}.*"):
-        if existing.is_file():
-            existing.unlink()
-
-    dest.write_bytes(content)
-    return dest, media_public_path(course_id, module_id, section_id, lang)
+    validate_video_upload(file, content)
+    storage_path = training_video_storage_path(course_id, module_id, section_id, lang)
+    content_type = (file.content_type or mimetypes.guess_type(file.filename or "")[0] or "video/mp4").split(";", 1)[0]
+    response = await _storage_api_request(
+        "POST",
+        f"/storage/v1/object/{TRAINING_VIDEO_BUCKET}/{quote(storage_path, safe='/')}",
+        content=content,
+        headers={
+            "Content-Type": content_type,
+            "x-upsert": "true",
+            "cache-control": "3600",
+        },
+    )
+    _require_storage_success(response, "upload the video")
+    return storage_path, await create_training_video_signed_url(storage_path)
 
 
 def _find_section(sections: List[Dict[str, Any]], section_id: str) -> Optional[Dict[str, Any]]:
@@ -206,13 +290,13 @@ def _find_section(sections: List[Dict[str, Any]], section_id: str) -> Optional[D
     return None
 
 
-def apply_video_url_to_module_doc(
+def apply_video_storage_path_to_module_doc(
     module_doc: Dict[str, Any],
     section_id: Optional[str],
     lang: str,
-    video_url: str,
+    video_storage_path: str,
 ) -> Dict[str, Any]:
-    """Return updated i18n pack for the given language."""
+    """Return the localized pack updated with a stable private Storage path."""
     locale = normalize_training_video_locale(lang)
     i18n = dict(module_doc.get("i18n") or {})
     pack = dict(i18n.get(locale) or {})
@@ -224,14 +308,17 @@ def apply_video_url_to_module_doc(
             sections.append({
                 "section_id": section_id,
                 "title": section_id,
-                "video_url": video_url,
+                "video_storage_path": video_storage_path,
+                "video_url": "",
                 "content": [],
             })
         else:
-            target["video_url"] = video_url
+            target["video_storage_path"] = video_storage_path
+            target["video_url"] = ""
         pack["sections"] = sections
     else:
-        pack["video_url"] = video_url
+        pack["video_storage_path"] = video_storage_path
+        pack["video_url"] = ""
 
     i18n[locale] = pack
     return i18n
@@ -242,9 +329,9 @@ def slot_has_video(module_doc: Dict[str, Any], slot: Dict[str, Any], lang: str) 
     pack = (module_doc.get("i18n") or {}).get(locale) or {}
     section_id = slot.get("section_id")
     if section_id:
-        section = _find_section(pack.get("sections") or [], section_id)
-        return bool((section or {}).get("video_url"))
-    return bool(pack.get("video_url"))
+        section = _find_section(pack.get("sections") or [], section_id) or {}
+        return bool(section.get("video_storage_path") or section.get("video_url"))
+    return bool(pack.get("video_storage_path") or pack.get("video_url"))
 
 
 def slot_video_meta(module_doc: Dict[str, Any], slot: Dict[str, Any], lang: str) -> Dict[str, Any]:
@@ -252,20 +339,17 @@ def slot_video_meta(module_doc: Dict[str, Any], slot: Dict[str, Any], lang: str)
     pack = (module_doc.get("i18n") or {}).get(locale) or {}
     section_id = slot.get("section_id")
     if section_id:
-        section = _find_section(pack.get("sections") or [], section_id) or {}
-        url = section.get("video_url") or ""
-        filename = section.get("video_filename") or ""
-        uploaded_at = section.get("video_uploaded_at") or ""
+        video = _find_section(pack.get("sections") or [], section_id) or {}
     else:
-        url = pack.get("video_url") or ""
-        filename = pack.get("video_filename") or ""
-        uploaded_at = pack.get("video_uploaded_at") or ""
-
+        video = pack
+    storage_path = video.get("video_storage_path") or ""
+    url = video.get("video_url") or ""
     return {
+        "video_storage_path": storage_path,
         "video_url": url,
-        "video_filename": filename,
-        "video_uploaded_at": uploaded_at,
-        "has_video": bool(url),
+        "video_filename": video.get("video_filename") or "",
+        "video_uploaded_at": video.get("video_uploaded_at") or "",
+        "has_video": bool(storage_path or url),
     }
 
 
@@ -273,10 +357,10 @@ def apply_upload_metadata(
     i18n: Dict[str, Any],
     section_id: Optional[str],
     lang: str,
-    video_url: str,
+    video_storage_path: str,
     filename: str,
 ) -> Dict[str, Any]:
-    i18n = apply_video_url_to_module_doc({"i18n": i18n}, section_id, lang, video_url)
+    i18n = apply_video_storage_path_to_module_doc({"i18n": i18n}, section_id, lang, video_storage_path)
     locale = normalize_training_video_locale(lang)
     pack = i18n[locale]
     stamp = _now()
@@ -293,8 +377,24 @@ def apply_upload_metadata(
     return i18n
 
 
+def _preserve_video_metadata(target: Dict[str, Any], previous: Dict[str, Any]) -> bool:
+    """Copy a new private path or a legacy URL, including admin upload metadata."""
+    storage_path = previous.get("video_storage_path")
+    legacy_url = previous.get("video_url")
+    if not storage_path and not legacy_url:
+        return False
+    if storage_path:
+        target["video_storage_path"] = storage_path
+        target["video_url"] = ""
+    else:
+        target["video_url"] = legacy_url
+    target["video_filename"] = previous.get("video_filename", "")
+    target["video_uploaded_at"] = previous.get("video_uploaded_at", "")
+    return True
+
+
 def merge_preserved_videos(seed_i18n: Dict[str, Any], existing: Optional[Dict[str, Any]]) -> Dict[str, Any]:
-    """Keep uploaded video URLs and locale packs when re-seeding module catalog."""
+    """Keep uploaded private paths, legacy URLs, and locale packs when re-seeding."""
     if not existing:
         return deepcopy(seed_i18n)
 
@@ -305,17 +405,11 @@ def merge_preserved_videos(seed_i18n: Dict[str, Any], existing: Optional[Dict[st
         if not isinstance(prev, dict):
             continue
         if lang not in merged:
-            # A translated locale may be managed outside the seed fixture. It must
-            # survive a catalog refresh, including its uploaded video metadata.
             merged[lang] = deepcopy(prev)
             continue
 
-        prev = existing_i18n.get(lang) or {}
         pack = deepcopy(merged.get(lang) or {})
-        if prev.get("video_url"):
-            pack["video_url"] = prev["video_url"]
-            pack["video_filename"] = prev.get("video_filename", "")
-            pack["video_uploaded_at"] = prev.get("video_uploaded_at", "")
+        _preserve_video_metadata(pack, prev)
 
         prev_sections = {s.get("section_id"): s for s in (prev.get("sections") or []) if s.get("section_id")}
         if prev_sections:
@@ -326,16 +420,14 @@ def merge_preserved_videos(seed_i18n: Dict[str, Any], existing: Optional[Dict[st
                 section_id = section.get("section_id")
                 seen_section_ids.add(section_id)
                 prev_section = prev_sections.get(section_id)
-                if prev_section and prev_section.get("video_url"):
-                    section["video_url"] = prev_section["video_url"]
-                    section["video_filename"] = prev_section.get("video_filename", "")
-                    section["video_uploaded_at"] = prev_section.get("video_uploaded_at", "")
+                if prev_section:
+                    _preserve_video_metadata(section, prev_section)
                 next_sections.append(section)
 
-            # Some canonical upload slots are intentionally video-only and do
-            # not have a seed section. Preserve those entries as well.
             for section_id, prev_section in prev_sections.items():
-                if section_id not in seen_section_ids and prev_section.get("video_url"):
+                if section_id not in seen_section_ids and (
+                    prev_section.get("video_storage_path") or prev_section.get("video_url")
+                ):
                     next_sections.append(deepcopy(prev_section))
             pack["sections"] = next_sections
 
@@ -346,6 +438,6 @@ def merge_preserved_videos(seed_i18n: Dict[str, Any], existing: Optional[Dict[st
 
 if __name__ == "__main__":
     dirs = ensure_training_video_dirs()
-    print(f"Ensured {len(dirs)} training video slot folder(s) under {MEDIA_ROOT}")
+    print(f"Ensured {len(dirs)} legacy training video slot folder(s) under {MEDIA_ROOT}")
     for path in dirs:
         print(f"  {path.relative_to(MEDIA_ROOT)}")

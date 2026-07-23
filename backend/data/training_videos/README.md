@@ -1,64 +1,45 @@
-# Training video uploads
+# Training video storage
 
-Uploaded course videos are stored here. Video files are gitignored; only this README and `.gitkeep` files are tracked.
+**New training-video uploads are stored in the private Supabase Storage bucket
+`training-videos`, not in this repository or on the application filesystem.**
 
-## Layout
-
-```
-training_videos/
-  course_job_search_mastery/
-    {module_id}/
-      _module/          ← module-level video (no section)
-        fr.mp4          ← French upload
-        en.mp4          ← English upload
-        de.mp4          ← German upload
-        es.mp4          ← Spanish upload
-        it.mp4          ← Italian upload
-      {section_id}/     ← section-level video
-        fr.mp4
-        en.mp4
-        de.mp4
-        es.mp4
-        it.mp4
-```
-
-## Public URL (no file extension)
+The application stores a stable object path per course/module/section/language,
+for example:
 
 ```
-/api/training/media/course_job_search_mastery/{module_id}/{section_or__module}/{en|fr|de|es|it}
+course_job_search_mastery/mod_warm_up/sec_wu_sop/fr
 ```
+
+When an authorized learner opens a course, the backend creates a short-lived
+signed URL for that private object. The Supabase secret key stays on the backend;
+the bucket has no anonymous or authenticated-object policies.
 
 ## Admin upload
 
-App: `/admin/training` → **Course videos** → pick the lesson slot and language → choose the video → **Upload video**.
+App: `/admin/training` → **Course videos** → pick the lesson slot and language
+→ choose the video → **Upload video**.
 
-The uploader accepts MP4, WebM, MOV, or M4V files up to 500 MB and replaces the
-previous file for the selected slot and language. It sends large uploads directly
-to the API, rather than through the web-app proxy.
+The uploader accepts MP4, WebM, MOV, or M4V files up to 500 MB. It replaces only
+the selected slot and language, preserving other language versions.
 
-API: `POST /admin/training/videos` with `course_id`, `module_id`, optional `section_id`, `lang`, and `file`.
+API: `POST /admin/training/videos` with `course_id`, `module_id`, optional
+`section_id`, `lang`, and `file`.
 
-## Recreate all slot folders
-
-From `backend/`:
+Required backend environment variables:
 
 ```bash
-python -m training_media
+SUPABASE_URL=https://<project-ref>.supabase.co
+SUPABASE_SECRET_KEY=<server-only-secret-key>
 ```
 
-## Content Bank example videos (`mod_content_bank`)
+Apply `supabase/migrations/20260723214754_training_video_storage_bucket.sql`
+to create the private bucket before uploading videos.
 
-| Slot | Folder | URL |
-|------|--------|-----|
-| Swiping | `sec_cb_swiping` | `/api/training/media/.../mod_content_bank/sec_cb_swiping/fr` |
-| History (short) | `sec_cb_history_short` | … |
-| History (long) | `sec_cb_history_long` | … |
-| CV (short) | `sec_cb_cv_short` | … |
-| CV (long) | `sec_cb_cv_long` | … |
-| Cover letter AI | `sec_cb_cover_letter_ai` | … |
-| Green screen example | `sec_cb_green_screen` | … |
-| Tablet example | `sec_cb_tablet_example` | … |
-| Laptop example | `sec_cb_laptop_example` | … |
-| Laptop without talking | `sec_cb_laptop_without_talking` | … |
+## Legacy local files
 
-Slots are defined in `training_media.py` → `VIDEO_SLOTS`.
+This directory and the legacy `/api/training/media/...` route remain only to
+serve records uploaded before the Storage migration. They are not used for new
+uploads and must not be relied on for durable production media.
+
+Canonical upload slots are defined in `backend/training_media.py` →
+`VIDEO_SLOTS`.

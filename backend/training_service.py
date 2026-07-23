@@ -18,6 +18,7 @@ from training_media import (
     TRAINING_VIDEO_LOCALES,
     VIDEO_SLOTS,
     apply_upload_metadata,
+    create_training_video_signed_url,
     merge_preserved_videos,
     normalize_training_video_locale,
     save_training_video,
@@ -206,6 +207,31 @@ def _localize_fields(doc: Dict[str, Any], lang: str, fields: List[str]) -> Dict[
     return out
 
 
+async def _resolve_localized_video_urls(module: Dict[str, Any], lang: str) -> Dict[str, Any]:
+    """Localize a module, resolving private Storage paths only for authorized users."""
+    localized = _localize_fields(
+        module,
+        lang,
+        ["title", "description", "category", "content", "video_url", "video_storage_path", "sections"],
+    )
+
+    storage_path = localized.get("video_storage_path") or ""
+    if storage_path:
+        localized["video_url"] = await create_training_video_signed_url(storage_path)
+    localized.pop("video_storage_path", None)
+
+    sections = []
+    for section in localized.get("sections") or []:
+        localized_section = dict(section)
+        storage_path = localized_section.get("video_storage_path") or ""
+        if storage_path:
+            localized_section["video_url"] = await create_training_video_signed_url(storage_path)
+        localized_section.pop("video_storage_path", None)
+        sections.append(localized_section)
+    localized["sections"] = sections
+    return localized
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -300,7 +326,7 @@ async def get_course_detail(db, course_id: str, user_id: Optional[str] = None, l
     completed = set(tracking["completed_module_ids"])
     module_rows = []
     for mod in modules:
-        localized = _localize_fields(mod, lang, ["title", "description", "category", "content", "video_url", "sections"])
+        localized = await _resolve_localized_video_urls(mod, lang)
         module_rows.append({
             "module_id": mod["module_id"],
             "title": localized.get("title"),
@@ -663,12 +689,12 @@ async def upload_training_video(
     if not module:
         raise ValueError("Module not found")
 
-    _, video_url = await save_training_video(file, course_id, module_id, section_id, lang)
+    video_storage_path, video_url = await save_training_video(file, course_id, module_id, section_id, lang)
     i18n = apply_upload_metadata(
         module.get("i18n") or {},
         section_id,
         lang,
-        video_url,
+        video_storage_path,
         file.filename or "video",
     )
     locale = normalize_training_video_locale(lang)
@@ -679,12 +705,14 @@ async def upload_training_video(
     }
     if locale == "en":
         updates["video_url"] = pack.get("video_url", "")
+        updates["video_storage_path"] = pack.get("video_storage_path", "")
         updates["sections"] = pack.get("sections") or []
 
     await db.training_modules.update_one({"module_id": module_id}, {"$set": updates})
     return {
         "ok": True,
         "video_url": video_url,
+        "video_storage_path": video_storage_path,
         "module_id": module_id,
         "section_id": section_id,
         "lang": locale,
