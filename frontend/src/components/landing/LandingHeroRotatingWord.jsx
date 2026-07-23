@@ -29,7 +29,6 @@ function getSlotMargins(width, widths, stacked = false) {
  */
 export default function LandingHeroRotatingWord({
   lang = "fr",
-  contractType = null,
   stacked = false,
   stackOnMobile = false,
 }) {
@@ -56,11 +55,6 @@ export default function LandingHeroRotatingWord({
     if (!base.length) return [getLandingHeroJobLabel(lang, null)];
     return [...base, base[0]];
   }, [lang]);
-
-  const initialLabel = useMemo(() => {
-    if (contractType) return getLandingHeroJobLabel(lang, contractType);
-    return labels[0] ?? getLandingHeroJobLabel(lang, null);
-  }, [contractType, lang, labels]);
 
   useEffect(() => {
     const track = wordTrackRef.current;
@@ -229,7 +223,7 @@ export default function LandingHeroRotatingWord({
       if (rafId2) cancelAnimationFrame(rafId2);
       if (tlRef.current) tlRef.current.kill();
     };
-  }, [labels, isStackedLayout, stackOnMobile]);
+  }, [labels]);
 
   return (
     <span
@@ -239,11 +233,10 @@ export default function LandingHeroRotatingWord({
           ? "mx-auto block w-fit shrink-0 text-center"
           : "inline-block shrink-0 align-baseline"
       }`}
-      aria-label={initialLabel}
     >
       <div ref={wordTrackRef} className="leading-[1]">
-        {labels.map((label, index) => (
-          <span key={`${label}-${index}`} className="block">
+        {labels.map((label, _index) => (
+          <span key={JSON.stringify(label)} className="block">
             {label}
           </span>
         ))}

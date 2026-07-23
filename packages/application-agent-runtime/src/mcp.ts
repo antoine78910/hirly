@@ -14,6 +14,9 @@ import type { OperationApprovalReceipt } from "@lssm-tech/lib.contracts-spec/ope
 import type { RuntimeDependencies } from "./registry";
 import { createApplicationAgentOperationRegistry } from "./registry";
 
+// biome-ignore lint/suspicious/noExplicitAny: Dynamic external contract boundaries are deliberately isolated behind this local alias.
+type UnsafeValue = any;
+
 /** The candidate MCP projection is an explicit five-operation allowlist. */
 export const createCandidateMcpOperationRegistry = (deps: RuntimeDependencies) => {
   const bound = createApplicationAgentOperationRegistry(deps);
@@ -27,7 +30,7 @@ export const createCandidateMcpOperationRegistry = (deps: RuntimeDependencies) =
   for (const spec of allowlist.list()) {
     const handler = bound.getHandler(spec.meta.key, spec.meta.version);
     if (!handler) throw new Error(`missing bound handler for ${spec.meta.key}`);
-    allowlist.bind(spec, handler as any);
+    allowlist.bind(spec, handler as UnsafeValue);
   }
   return allowlist;
 };

@@ -309,7 +309,7 @@ export class SproutHttpTransport implements SproutRuntimeTransport<SproutRawJob>
       } catch {
         throw new IngestionError("provider_permanent", "sprout_malformed_json");
       }
-      let parsed;
+      let parsed: ReturnType<typeof parseSproutResponse>;
       try {
         parsed = parseSproutResponse(decoded);
       } catch (error) {

@@ -31,7 +31,7 @@ describe("root Bun workspace isolation", () => {
       [
         "registry=https://registry.npmjs.org/",
         "@lssm-tech:registry=https://npm.pkg.github.com/",
-        "//npm.pkg.github.com/:_authToken=${CONTRACTSPEC_NPM_TOKEN}",
+        `//npm.pkg.github.com/:_authToken=\${CONTRACTSPEC_NPM_TOKEN}`,
       ].join("\n"),
     );
   });
@@ -113,7 +113,7 @@ describe("legacy frontend install and deployment contract", () => {
         "legacy-peer-deps=true",
         "registry=https://registry.npmjs.org/",
         "@lssm-tech:registry=https://npm.pkg.github.com/",
-        "//npm.pkg.github.com/:_authToken=${CONTRACTSPEC_NPM_TOKEN}",
+        `//npm.pkg.github.com/:_authToken=\${CONTRACTSPEC_NPM_TOKEN}`,
       ].join("\n"),
     );
   });

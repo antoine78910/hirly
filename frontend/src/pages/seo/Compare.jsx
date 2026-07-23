@@ -1,5 +1,5 @@
 import { useParams, Navigate, Link } from "react-router-dom";
-import { Check, X, ArrowRight } from "lucide-react";
+import { X, ArrowRight } from "lucide-react";
 import MarketingLayout from "../../components/marketing/MarketingLayout";
 import SEOHead from "../../components/seo/SEOHead";
 import MarketingFaq from "../../components/marketing/MarketingFaq";
@@ -95,10 +95,10 @@ export default function Compare() {
               </p>
             </div>
             {page.features.map((row, i) => {
-              const isHirlyWin = hirlyWins.some((w) => row.feature.includes(w.split(" ")[0]));
+              const _isHirlyWin = hirlyWins.some((w) => row.feature.includes(w.split(" ")[0]));
               return (
                 <div
-                  key={i}
+                  key={JSON.stringify(row)}
                   className={`grid grid-cols-3 px-5 py-3.5 border-b border-zinc-100 last:border-0 items-center ${i % 2 === 0 ? "bg-white" : "bg-zinc-50/50"}`}
                 >
                   <p className="text-sm font-medium text-zinc-700">{row.feature}</p>
@@ -129,8 +129,8 @@ export default function Compare() {
         </div>
 
         {/* Sections */}
-        {page.sections.map((s, i) => (
-          <div key={i} className="mb-8">
+        {page.sections.map((s, _i) => (
+          <div key={JSON.stringify(s)} className="mb-8">
             <h2 className="font-display font-bold text-xl sm:text-2xl tracking-tight mb-3">
               {s.h2}
             </h2>

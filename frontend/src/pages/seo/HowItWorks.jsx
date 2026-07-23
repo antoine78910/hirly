@@ -170,7 +170,7 @@ export default function HowItWorks() {
             const isEven = i % 2 === 0;
             return (
               <motion.div
-                key={i}
+                key={JSON.stringify(step)}
                 initial={{ opacity: 0, y: 24 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true, margin: "-80px" }}
@@ -191,8 +191,11 @@ export default function HowItWorks() {
                   </h2>
                   <p className="text-zinc-500 leading-relaxed mb-5">{step.body}</p>
                   <ul className="space-y-2">
-                    {step.details.map((d, j) => (
-                      <li key={j} className="flex items-start gap-2.5 text-sm text-zinc-600">
+                    {step.details.map((d, _j) => (
+                      <li
+                        key={JSON.stringify(d)}
+                        className="flex items-start gap-2.5 text-sm text-zinc-600"
+                      >
                         <CheckCircle className="w-4 h-4 text-linkedin flex-shrink-0 mt-0.5" />
                         {d}
                       </li>
@@ -222,8 +225,11 @@ export default function HowItWorks() {
             Intégrations et stack technique
           </h2>
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {integrations.map((intg, i) => (
-              <div key={i} className="rounded-2xl border border-zinc-200 bg-white p-5 text-center">
+            {integrations.map((intg, _i) => (
+              <div
+                key={JSON.stringify(intg)}
+                className="rounded-2xl border border-zinc-200 bg-white p-5 text-center"
+              >
                 <p className="font-display font-bold text-base mb-1">{intg.name}</p>
                 <p className="text-xs text-zinc-500">{intg.desc}</p>
               </div>

@@ -78,7 +78,7 @@ function PhoneCountryCodePicker({ lang, value, countryIso2, onCountryChange }) {
             />
           </div>
         </div>
-        <ul className="max-h-56 overflow-y-auto py-1" role="listbox">
+        <ul className="max-h-56 overflow-y-auto py-1">
           {countries.map((country) => {
             const selectedRow = selected?.iso2 === country.iso2 && selected?.dial === country.dial;
             return (

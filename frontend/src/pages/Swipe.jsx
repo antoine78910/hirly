@@ -57,7 +57,6 @@ import ResumeSheet from "../components/ResumeSheet";
 import PhoneSheet from "../components/PhoneSheet";
 import { saveTargetPreferences, normalizeLocationData } from "../lib/targetPreferences";
 import { resolveProfileSearchPreferences } from "../lib/profileSearchPreferences";
-import { enrichLocationData } from "../lib/locationSearch";
 import { hasActiveFilters, mergeFilters, clearMenuFilters } from "../lib/jobFilters";
 import { reconcileFiltersForUser } from "../lib/contractTypeMapping";
 import { useAppLocale } from "../context/AppLocaleContext";
@@ -378,9 +377,9 @@ function MobileDetailSection({ title, bullets, body, t }) {
       ) : null}
       {bullets?.length ? (
         <ul className="space-y-2">
-          {bullets.map((bullet, index) => (
+          {bullets.map((bullet, _index) => (
             <li
-              key={`${title}-${index}`}
+              key={JSON.stringify(bullet)}
               className="flex items-start gap-2 text-sm leading-relaxed text-sprout-muted"
             >
               <span className="mt-1.5 text-[8px] text-sprout-mint">●</span>
@@ -512,10 +511,7 @@ function CardBack({ job, t, lang, onFlipBack }) {
 
   return (
     <div className="backface-hidden rotate-y-180 absolute inset-0 flex flex-col overflow-hidden rounded-[28px] border border-sprout-border bg-sprout-surface">
-      <div
-        className="flex min-h-[5.5rem] max-h-[30%] shrink-0 items-center border-b border-sprout-border px-4 py-3 text-left sm:px-6"
-        aria-label={t("swipe.tapToFlipBack")}
-      >
+      <div className="flex min-h-[5.5rem] max-h-[30%] shrink-0 items-center border-b border-sprout-border px-4 py-3 text-left sm:px-6">
         <CompanyLogo job={job} size="md" rounded="xl" className="mr-3 shrink-0" />
         <div className="min-w-0 flex-1">
           <h2
@@ -643,7 +639,7 @@ function Card({
     setIsAnimatingOut(false);
     interactionRef.current.dragDistance = 0;
     interactionRef.current.suppressTap = false;
-  }, [job.job_id, isTop]);
+  }, []);
 
   const resetInteractionState = useCallback(() => {
     window.setTimeout(() => {
@@ -697,7 +693,7 @@ function Card({
       cancelled = true;
       controls.stop();
     };
-  }, [pendingSwipe, isTop, job.job_id, onSwipe, onSwipeRequestComplete, x, y]);
+  }, [pendingSwipe, isTop, onSwipe, onSwipeRequestComplete, x, y]);
 
   return (
     <motion.div
@@ -882,7 +878,7 @@ export default function Swipe() {
   const [loading, setLoading] = useState(() => !getSwipeFeedCacheSnapshot().jobs.length);
   const [nextPageLoading, setNextPageLoading] = useState(false);
   const [nextCursor, setNextCursor] = useState(null);
-  const [appLoading, setAppLoading] = useState(false);
+  const [appLoading, _setAppLoading] = useState(false);
   const [appliedToday, setAppliedToday] = useState(0);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [unreadNotifications, setUnreadNotifications] = useState(0);
@@ -951,7 +947,7 @@ export default function Swipe() {
       }),
       userId: user?.user_id,
     });
-  }, [authLoading, jobs, feedMeta, user?.user_id]);
+  }, [authLoading, jobs, feedMeta, user?.user_id, isDemoAccount]);
 
   useEffect(() => {
     targetRef.current = target;
@@ -968,7 +964,7 @@ export default function Swipe() {
     if (shouldOpenDemoWelcome(user.user_id)) {
       setDemoWelcomeOpen(true);
     }
-  }, [authLoading, user?.user_id]);
+  }, [authLoading, user?.user_id, isDemoAccount]);
 
   const handleDismissDemoWelcome = () => {
     dismissDemoWelcome(user?.user_id);
@@ -1061,23 +1057,26 @@ export default function Swipe() {
     }
   }, [applyFinanceDemoTarget, applyDemoAccountTarget, isDemoAccount, isFinanceDemo]);
 
-  const syncSwipedJobsFromServer = useCallback(async (userId) => {
-    if (!userId || isDemoAccount) return;
-    try {
-      const [leftRes, rightRes] = await Promise.all([
-        api.get("/swipes/history?direction=left&limit=500"),
-        api.get("/swipes/history?direction=right&limit=500"),
-      ]);
-      const ids = [...(leftRes.data?.swipes || []), ...(rightRes.data?.swipes || [])]
-        .map((row) => row?.job_id)
-        .filter(Boolean);
-      seedSwipedJobIds(ids, userId);
-    } catch (_) {
-      /* offline / demo */
-    }
-  }, []);
+  const syncSwipedJobsFromServer = useCallback(
+    async (userId) => {
+      if (!userId || isDemoAccount) return;
+      try {
+        const [leftRes, rightRes] = await Promise.all([
+          api.get("/swipes/history?direction=left&limit=500"),
+          api.get("/swipes/history?direction=right&limit=500"),
+        ]);
+        const ids = [...(leftRes.data?.swipes || []), ...(rightRes.data?.swipes || [])]
+          .map((row) => row?.job_id)
+          .filter(Boolean);
+        seedSwipedJobIds(ids, userId);
+      } catch (_) {
+        /* offline / demo */
+      }
+    },
+    [isDemoAccount],
+  );
 
-  const buildFeedParams = (f) => {
+  const buildFeedParams = useCallback((f) => {
     const params = new URLSearchParams({
       limit: String(FEED_BATCH_SIZE),
       search_radius: DEFAULT_SEARCH_RADIUS,
@@ -1092,9 +1091,15 @@ export default function Swipe() {
     if (merged.minSalary) params.set("min_salary", String(merged.minSalary));
     if (merged.postedDate && merged.postedDate !== "any")
       params.set("posted_within", merged.postedDate);
-    merged.workLocations?.forEach((v) => params.append("work_location", v));
-    merged.jobTypes?.forEach((v) => params.append("job_type", v));
-    merged.experience?.forEach((v) => params.append("experience", v));
+    merged.workLocations?.forEach((v) => {
+      params.append("work_location", v);
+    });
+    merged.jobTypes?.forEach((v) => {
+      params.append("job_type", v);
+    });
+    merged.experience?.forEach((v) => {
+      params.append("experience", v);
+    });
     const filterLocationsData = merged.locationsData?.length
       ? merged.locationsData
       : merged.locationData
@@ -1105,22 +1110,32 @@ export default function Swipe() {
     } else if (targetLocationDataRef.current) {
       params.set("locations_json", JSON.stringify([targetLocationDataRef.current]));
     } else {
-      merged.locations?.forEach((v) => params.append("location", v));
+      merged.locations?.forEach((v) => {
+        params.append("location", v);
+      });
       const targetLocation = activeTarget?.location?.trim();
       if (!merged.locations?.length && targetLocation && targetLocation !== "Anywhere") {
         params.append("location", targetLocation);
       }
     }
-    merged.onlyCompanies?.forEach((v) => params.append("only_company", v));
-    merged.hideCompanies?.forEach((v) => params.append("hide_company", v));
-    merged.onlyIndustries?.forEach((v) => params.append("only_industry", v));
-    merged.hideIndustries?.forEach((v) => params.append("hide_industry", v));
+    merged.onlyCompanies?.forEach((v) => {
+      params.append("only_company", v);
+    });
+    merged.hideCompanies?.forEach((v) => {
+      params.append("hide_company", v);
+    });
+    merged.onlyIndustries?.forEach((v) => {
+      params.append("only_industry", v);
+    });
+    merged.hideIndustries?.forEach((v) => {
+      params.append("hide_industry", v);
+    });
     if (merged.includeUnknownLocation === false) params.set("include_unknown_location", "false");
     if (merged.includeUnknownSalary === false) params.set("include_unknown_salary", "false");
     if (merged.searchRadius) params.set("search_radius", merged.searchRadius);
     if (merged.onlyMyCountry) params.set("only_my_country", "true");
     return params;
-  };
+  }, []);
 
   const loadFeed = useCallback(
     async (replace = false, f = filtersRef.current, reason = "unspecified") => {
@@ -1175,7 +1190,7 @@ export default function Swipe() {
       setFeedError("");
       const params = sanitizeSwipeFeedParams(buildFeedParams(f));
       if (requestedCursor) params.set("cursor", requestedCursor);
-      let requestUrl = `/jobs/feed?${params.toString()}`;
+      const requestUrl = `/jobs/feed?${params.toString()}`;
       setLastFeedDebug({
         reason,
         forceRefresh: replace,
@@ -1221,16 +1236,16 @@ export default function Swipe() {
         if (!requestFence.isCurrent()) return;
         const financeFeed = isFinanceDemoFeedResponse(data);
         const receivedNextCursor = data?.nextCursor ?? data?.next_cursor ?? null;
-        let localFeedGuard = financeFeed ? null : buildLocalFeedGuard({ params, response: data });
-        let responseJobs = Array.isArray(data?.jobs) ? data.jobs : [];
+        const localFeedGuard = financeFeed ? null : buildLocalFeedGuard({ params, response: data });
+        const responseJobs = Array.isArray(data?.jobs) ? data.jobs : [];
         const jobsAfterLocalGuard = localFeedGuard
           ? responseJobs.filter(localFeedGuard)
           : responseJobs;
         const jobsAfterActionFilter = financeFeed
           ? jobsAfterLocalGuard
           : filterOutSwipedJobs(jobsAfterLocalGuard);
-        let safeJobs = filterPersonalSwipeFeedJobs(user?.email, jobsAfterActionFilter);
-        let outsideLocationHiddenCount = responseJobs.length - safeJobs.length;
+        const safeJobs = filterPersonalSwipeFeedJobs(user?.email, jobsAfterActionFilter);
+        const outsideLocationHiddenCount = responseJobs.length - safeJobs.length;
         if (outsideLocationHiddenCount > 0) {
           data = {
             ...(data || {}),
@@ -1290,7 +1305,9 @@ export default function Swipe() {
         setTotalCount(typeof data.total === "number" ? data.total : null);
         setFeedMeta(data || null);
         if (TUTORIAL_BYPASS_AUTH) {
-          safeJobs.forEach((job) => cacheJobForDemo(job));
+          safeJobs.forEach((job) => {
+            cacheJobForDemo(job);
+          });
           seedTutorialShowcaseIfEmpty(safeJobs);
         }
         // Single-flight append means jobsRef is the authoritative current stack
@@ -1372,7 +1389,7 @@ export default function Swipe() {
         }
       }
     },
-    [t, user?.user_id, user?.email],
+    [t, user?.user_id, user?.email, buildFeedParams],
   );
 
   // Start the next cursor page as soon as the current visible stack reaches
@@ -1790,7 +1807,7 @@ export default function Swipe() {
           ? "desktop"
           : "mobile",
     });
-  }, [feedView, user?.user_id]);
+  }, [feedView]);
 
   useEffect(() => {
     if (!topJob?.job_id) return;
@@ -1803,7 +1820,7 @@ export default function Swipe() {
       ats_provider: topJob.ats_provider,
       location: topJob.location,
     });
-  }, [topJob?.job_id, topJob?.company, topJob?.ats_provider, topJob?.location]);
+  }, [topJob?.job_id, topJob?.company, topJob?.ats_provider, topJob?.location, jobs.slice]);
 
   // intent: "apply" | "skip"
   const handleSwipe = async (intent) => {
@@ -1908,7 +1925,7 @@ export default function Swipe() {
         toast(t("toasts.undone"));
         loadFeed(true, filtersRef.current, "undo_refresh");
       }
-    } catch (e) {
+    } catch (_e) {
       toast.error(t("toasts.nothingToUndo"));
     }
   };
@@ -1934,7 +1951,7 @@ export default function Swipe() {
         api.post("/swipe", { job_id: jobId, direction: "left" }).catch(() => {});
       }
     },
-    [jobs.length, loadFeed, user?.user_id],
+    [user?.user_id, jobs.filter],
   );
 
   const handleReportSubmit = async (reason) => {
@@ -1985,6 +2002,7 @@ export default function Swipe() {
     topJob,
     shouldBlockApply,
     handleApplyBlocked,
+    upgradeOpen,
   ]);
 
   const feedDebugEnabled =
@@ -2065,6 +2083,7 @@ export default function Swipe() {
           <div className="flex shrink-0 items-center">
             <DesktopCreditsPill compact forceOpenUpgrade />
             <button
+              type="button"
               onClick={handleUndo}
               className="grid h-8 w-8 place-items-center rounded-full hover:bg-sprout-surface sm:h-9 sm:w-9"
               data-testid="undo-btn"
@@ -2097,6 +2116,7 @@ export default function Swipe() {
 
           <div className="flex shrink-0 items-center">
             <button
+              type="button"
               onClick={() => navigate("/history")}
               className="grid h-8 w-8 place-items-center rounded-full hover:bg-sprout-surface sm:h-9 sm:w-9"
               data-testid="history-btn"
@@ -2105,6 +2125,7 @@ export default function Swipe() {
               <History className="h-4 w-4 text-sprout-mint sm:h-5 sm:w-5" />
             </button>
             <button
+              type="button"
               onClick={() => setFiltersOpen(true)}
               className="relative grid h-8 w-8 place-items-center rounded-full hover:bg-sprout-surface sm:h-9 sm:w-9"
               data-testid="filters-open-btn"
@@ -2116,6 +2137,7 @@ export default function Swipe() {
               )}
             </button>
             <button
+              type="button"
               onClick={() => setNotificationsOpen(true)}
               className="relative grid h-8 w-8 place-items-center rounded-full hover:bg-sprout-surface sm:h-9 sm:w-9"
               data-testid="mobile-notifications-bell"
@@ -2166,6 +2188,7 @@ export default function Swipe() {
                 </p>
                 {feedSetupGate?.action && (
                   <button
+                    type="button"
                     onClick={feedSetupGate.action}
                     className="mt-6 h-11 rounded-full bg-sprout-mint px-6 font-semibold text-white transition-opacity hover:opacity-90"
                   >

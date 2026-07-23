@@ -318,7 +318,7 @@ export function buildReadinessScorecard(
     ) &&
     Date.parse(iso(exception.expiresAt, "exception.expiresAt")) > evaluatedAtMs;
   const appliedMinimum = exceptionActive
-    ? exception!.minimumFreshVisibleCanonicalGroups
+    ? exception?.minimumFreshVisibleCanonicalGroups
     : manifest.thresholds.minimumFreshVisibleCanonicalGroups;
   const rates = {
     blocked: rate(blockedIds.size, canonicalGroups),
@@ -362,7 +362,7 @@ export function buildReadinessScorecard(
     thresholds: manifest.thresholds,
     appliedMinimumFreshVisibleCanonicalGroups: appliedMinimum,
     counts: {
-      scopedCandidates: rows.length === 0 ? 0 : Number(rows[0]!.scoped_candidate_count),
+      scopedCandidates: rows.length === 0 ? 0 : Number(rows[0]?.scoped_candidate_count),
       canonicalGroups,
       freshVisibleCanonicalGroups: visibleIds.size,
       blocked: blockedIds.size,

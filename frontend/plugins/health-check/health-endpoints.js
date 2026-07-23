@@ -1,7 +1,7 @@
 // health-endpoints.js
 // API endpoints for health checks and monitoring
 
-const os = require("os");
+const os = require("node:os");
 
 const SERVER_START_TIME = Date.now();
 
@@ -11,7 +11,7 @@ const SERVER_START_TIME = Date.now();
  * @param {Object} healthPlugin - Instance of WebpackHealthPlugin
  */
 function setupHealthEndpoints(devServer, healthPlugin) {
-  if (!devServer || !devServer.app) {
+  if (!devServer?.app) {
     console.warn("[Health Check] Dev server not available, skipping health endpoints");
     return;
   }
@@ -26,7 +26,7 @@ function setupHealthEndpoints(devServer, healthPlugin) {
   // ====================================================================
   // GET /health - Detailed health status (JSON)
   // ====================================================================
-  devServer.app.get("/health", (req, res) => {
+  devServer.app.get("/health", (_req, res) => {
     const webpackStatus = healthPlugin.getStatus();
     const uptime = Date.now() - SERVER_START_TIME;
     const memUsage = process.memoryUsage();
@@ -82,7 +82,7 @@ function setupHealthEndpoints(devServer, healthPlugin) {
   // ====================================================================
   // GET /health/simple - Simple text response (OK/COMPILING/ERROR)
   // ====================================================================
-  devServer.app.get("/health/simple", (req, res) => {
+  devServer.app.get("/health/simple", (_req, res) => {
     const webpackStatus = healthPlugin.getSimpleStatus();
 
     if (webpackStatus.state === "success") {
@@ -99,7 +99,7 @@ function setupHealthEndpoints(devServer, healthPlugin) {
   // ====================================================================
   // GET /health/ready - Readiness check (Kubernetes/load balancer)
   // ====================================================================
-  devServer.app.get("/health/ready", (req, res) => {
+  devServer.app.get("/health/ready", (_req, res) => {
     const webpackStatus = healthPlugin.getSimpleStatus();
 
     if (webpackStatus.state === "success") {
@@ -120,7 +120,7 @@ function setupHealthEndpoints(devServer, healthPlugin) {
   // ====================================================================
   // GET /health/live - Liveness check (Kubernetes)
   // ====================================================================
-  devServer.app.get("/health/live", (req, res) => {
+  devServer.app.get("/health/live", (_req, res) => {
     res.status(200).json({
       alive: true,
       timestamp: new Date().toISOString(),
@@ -130,7 +130,7 @@ function setupHealthEndpoints(devServer, healthPlugin) {
   // ====================================================================
   // GET /health/errors - Get current errors and warnings
   // ====================================================================
-  devServer.app.get("/health/errors", (req, res) => {
+  devServer.app.get("/health/errors", (_req, res) => {
     const webpackStatus = healthPlugin.getStatus();
 
     res.json({
@@ -145,7 +145,7 @@ function setupHealthEndpoints(devServer, healthPlugin) {
   // ====================================================================
   // GET /health/stats - Compilation statistics
   // ====================================================================
-  devServer.app.get("/health/stats", (req, res) => {
+  devServer.app.get("/health/stats", (_req, res) => {
     const webpackStatus = healthPlugin.getStatus();
     const uptime = Date.now() - SERVER_START_TIME;
 
@@ -188,7 +188,7 @@ function formatBytes(bytes) {
   const k = 1024;
   const sizes = ["B", "KB", "MB", "GB"];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + " " + sizes[i];
+  return `${Math.round((bytes / k ** i) * 100) / 100} ${sizes[i]}`;
 }
 
 /**

@@ -1,5 +1,5 @@
-import fs from "fs";
-import path from "path";
+import fs from "node:fs";
+import path from "node:path";
 
 const readFrontendFile = (relativePath) =>
   fs.readFileSync(path.join(process.cwd(), relativePath), "utf8");

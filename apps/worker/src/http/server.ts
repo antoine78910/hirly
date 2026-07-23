@@ -194,7 +194,7 @@ export function createHttpHandler(input: {
       }
       const runMatch = url.pathname.match(/^\/control\/runs\/([0-9a-f-]{36})$/);
       if (request.method === "GET" && runMatch) {
-        const run = await input.store.getRun(runMatch[1]!);
+        const run = await input.store.getRun(runMatch[1]);
         return run ? json(run) : json({ error: "not_found" }, 404);
       }
     } catch (error) {

@@ -14,7 +14,7 @@ for (let index = 0; index < Bun.argv.slice(2).length; index += 2) {
       "usage: source-diversification --input <aggregate.json> --output <report.json>",
     );
   }
-  values.set(name!, value);
+  values.set(name, value);
 }
 
 const inputPath = values.get("--input");

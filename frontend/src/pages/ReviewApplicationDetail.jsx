@@ -373,7 +373,7 @@ export default function ReviewApplicationDetail() {
                             <div className="space-y-4">
                               {cvExperienceDraft.map((entry, index) => (
                                 <div
-                                  key={index}
+                                  key={JSON.stringify(entry)}
                                   className="shell-surface space-y-2 rounded-2xl border shell-border p-3"
                                 >
                                   <div className="grid grid-cols-2 gap-2">
@@ -433,7 +433,7 @@ export default function ReviewApplicationDetail() {
                             <div className="space-y-3">
                               {cvEducationDraft.map((entry, index) => (
                                 <div
-                                  key={index}
+                                  key={JSON.stringify(entry)}
                                   className="shell-surface grid grid-cols-3 gap-2 rounded-2xl border shell-border p-3"
                                 >
                                   <input

@@ -28,9 +28,7 @@ export interface AtsTrialTransportBudgets {
   readonly timeoutMs: number;
 }
 
-export interface AtsTrialFetch {
-  (input: string, init: RequestInit): Promise<Response>;
-}
+export type AtsTrialFetch = (input: string, init: RequestInit) => Promise<Response>;
 
 export interface AtsTrialTransportOptions {
   readonly approvedTenantId: string;

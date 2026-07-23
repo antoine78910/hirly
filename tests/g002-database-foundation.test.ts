@@ -23,7 +23,7 @@ function foundationMigration(): { path: string; sql: string } {
     );
 
   expect(matches).toHaveLength(1);
-  return matches[0]!;
+  return matches[0];
 }
 
 function compact(sql: string): string {
@@ -35,7 +35,7 @@ function securityDefinerFunctions(sql: string): Array<{ name: string; body: stri
     compact(sql).matchAll(
       /create(?: or replace)? function\s+([a-z0-9_."]+)\s*\([\s\S]*?\)\s*returns[\s\S]*?security definer[\s\S]*?as \$\$([\s\S]*?)\$\$;/g,
     ),
-    (match) => ({ name: match[1]!, body: match[2]! }),
+    (match) => ({ name: match[1], body: match[2] }),
   );
 }
 

@@ -28,7 +28,7 @@ export function startFeedV2(env: Record<string, string | undefined> = Bun.env) {
       }),
     });
   }
-  const sql = postgres(config.databaseUrl!, {
+  const sql = postgres(config.databaseUrl, {
     max: 5,
     connect_timeout: Math.max(1, Math.ceil(config.requestTimeoutMs / 1_000)),
     idle_timeout: 20,
@@ -38,7 +38,7 @@ export function startFeedV2(env: Record<string, string | undefined> = Bun.env) {
     port: config.port,
     fetch: createFeedV2Handler({
       config,
-      auth: new HmacFeedAssertionVerifier(config.assertionSecret!),
+      auth: new HmacFeedAssertionVerifier(config.assertionSecret),
       service: new FeedV2ReadService(repository),
     }),
   });

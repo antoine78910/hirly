@@ -62,7 +62,10 @@ export default function SEOHead({ title, description, keywords, canonical, alter
       document.head.appendChild(link);
       return link;
     });
-    return () => links.forEach((link) => link.remove());
+    return () =>
+      links.forEach((link) => {
+        link.remove();
+      });
   }, [alternates]);
 
   useEffect(() => {
@@ -92,7 +95,10 @@ export default function SEOHead({ title, description, keywords, canonical, alter
       document.head.appendChild(script);
       return script;
     });
-    return () => scripts.forEach((script) => script.remove());
+    return () =>
+      scripts.forEach((script) => {
+        script.remove();
+      });
   }, [jsonLd]);
 
   return null;

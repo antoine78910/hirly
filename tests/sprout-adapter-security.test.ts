@@ -200,7 +200,7 @@ describe("Sprout adapter security and inventory contract", () => {
   });
 
   test("accepts only the bounded observed Sprout drift and preserves it", () => {
-    const location = rawJob().locations[0]!;
+    const location = rawJob().locations[0];
     const parsed = parseSproutResponse({
       jobs: [
         {
@@ -225,7 +225,7 @@ describe("Sprout adapter security and inventory contract", () => {
       next: null,
       previous: null,
     });
-    const raw = parsed.jobs[0]!;
+    const raw = parsed.jobs[0];
     const entry = buildSproutCommitEntry({
       raw,
       policyId: "22222222-2222-4222-8222-222222222222",
@@ -251,7 +251,7 @@ describe("Sprout adapter security and inventory contract", () => {
     for (const incompatible of [
       { ...raw, sourceId: { unsafe: true } },
       { ...raw, socMajorGroup: ["15-0000"] },
-      { ...raw, locations: [{ ...raw.locations[0]!, stateCode: 75 }] },
+      { ...raw, locations: [{ ...raw.locations[0], stateCode: 75 }] },
     ]) {
       const rejected = parseSproutResponse({
         jobs: [incompatible],

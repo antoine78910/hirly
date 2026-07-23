@@ -8,10 +8,7 @@ const LAYOUT_SPRING = { type: "spring", stiffness: 260, damping: 32, mass: 0.85 
 
 function ShimmerStatus({ children }) {
   return (
-    <span
-      aria-label={children}
-      className="inline-block bg-[length:200%_100%] bg-gradient-to-r from-zinc-400 via-zinc-900 to-zinc-400 bg-clip-text text-xs font-semibold tracking-tight text-transparent animate-[landing-shimmer_1.5s_linear_infinite]"
-    >
+    <span className="inline-block bg-[length:200%_100%] bg-gradient-to-r from-zinc-400 via-zinc-900 to-zinc-400 bg-clip-text text-xs font-semibold tracking-tight text-transparent animate-[landing-shimmer_1.5s_linear_infinite]">
       {children}
     </span>
   );

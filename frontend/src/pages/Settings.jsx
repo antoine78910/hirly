@@ -40,6 +40,7 @@ const Section = ({ label, children, testId }) => (
 
 const Row = ({ icon: Icon, label, value, onClick, danger, testId }) => (
   <button
+    type="button"
     onClick={onClick}
     data-testid={testId}
     className="w-full h-14 px-4 flex items-center gap-3 hover:bg-sprout-surface-2 transition-colors text-left"
@@ -57,7 +58,7 @@ const Row = ({ icon: Icon, label, value, onClick, danger, testId }) => (
 
 const TikTok = (props) => (
   // Lucide doesn't ship a TikTok glyph — minimal inline SVG to keep us emoji-free.
-  <svg viewBox="0 0 24 24" fill="currentColor" {...props}>
+  <svg aria-hidden="true" viewBox="0 0 24 24" fill="currentColor" {...props}>
     <path d="M19.32 6.69a5.43 5.43 0 0 1-3.18-1.04A5.5 5.5 0 0 1 14.13 2H10.7v12.96a2.6 2.6 0 1 1-2.6-2.6c.16 0 .31.02.46.05V9.04a6.04 6.04 0 1 0 5.57 6.02V8.55a8.92 8.92 0 0 0 5.19 1.66V6.69z" />
   </svg>
 );
@@ -111,6 +112,7 @@ export default function Settings() {
           data-testid="settings-header"
         >
           <button
+            type="button"
             onClick={() => navigate(-1)}
             className="w-10 h-10 grid place-items-center rounded-full hover:bg-sprout-surface"
             data-testid="settings-back-btn"

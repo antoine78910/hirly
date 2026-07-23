@@ -14,15 +14,10 @@ import type {
   CandidateEvidenceStore,
   ClaimSupportVerifier,
   JobSourceReader,
-  JobSnapshotStore,
-  ApplicationDraftStore,
-  SubmissionPlanStore,
-  SubmissionReceiptStore,
   ApprovalReviewStore,
   ApprovalReviewRecord,
   AuditOutboxPublisher,
 } from "./ports";
-import { sha256 } from "./core";
 
 export const memoryStore = <T extends { id: string }>(values: T[] = []) => {
   const valuesById = new Map(values.map((v) => [v.id, v]));
@@ -128,7 +123,7 @@ export const fixtureCapabilities: AtsAdapterCapabilities = {
 };
 export const controlledAtsSimulator = (): AtsAdapter & { mutations: number } => {
   let mutations = 0;
-  let confirmed = new Set<string>();
+  const confirmed = new Set<string>();
   return {
     key: "fixture-ats",
     version: "1.0.0",

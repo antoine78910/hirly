@@ -228,10 +228,14 @@ export default function AdminAtsLab() {
             ) : null}
           </div>
           <div className="flex flex-col gap-3">
-            <label className="flex items-center gap-2 text-sm text-zinc-700">
-              <Switch checked={persist} onCheckedChange={setPersist} />
+            <div className="flex items-center gap-2 text-sm text-zinc-700">
+              <Switch
+                aria-label="Save result to application"
+                checked={persist}
+                onCheckedChange={setPersist}
+              />
               Save result to application
-            </label>
+            </div>
             <Button type="button" onClick={runGeneration} disabled={!selectedId || generating}>
               {generating ? (
                 <Loader2 className="h-4 w-4 animate-spin" />

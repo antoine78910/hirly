@@ -33,7 +33,7 @@ function sourceBoundaryMigration(): {
     });
 
   expect(matches).toHaveLength(1);
-  const filename = matches[0]!;
+  const filename = matches[0];
   return {
     migration: read(`backend/db/migrations/${filename}`),
     rollback: read(`backend/db/migrations/${filename.replace(/\.sql$/, ".down.sql")}`),

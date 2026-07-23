@@ -92,12 +92,15 @@ function VideoBlock({ url, t, onVideoEnded }) {
     }
 
     return (
-      <video
-        src={embed}
-        controls
-        onEnded={handleEnded}
-        className="aspect-video w-full rounded-lg bg-black ring-1 ring-zinc-700/50"
-      />
+      <>
+        {/* biome-ignore lint/a11y/useMediaCaption: Captions are controlled by the externally embedded course video. */}
+        <video
+          src={embed}
+          controls
+          onEnded={handleEnded}
+          className="aspect-video w-full rounded-lg bg-black ring-1 ring-zinc-700/50"
+        />
+      </>
     );
   }
 
@@ -283,7 +286,7 @@ export default function TrainingCourse() {
   // Reset scroll hint when changing section/module
   useEffect(() => {
     setShowScrollHint(false);
-  }, [activeModuleId, sectionParam]);
+  }, []);
 
   const selectSection = (sectionId) => {
     navigate(trainingModulePath(routeLocale, courseId, activeModule.module_id, sectionId), {
@@ -315,7 +318,7 @@ export default function TrainingCourse() {
   // Reset video timer on section/module change
   useEffect(() => {
     return () => clearTimeout(videoTimerRef.current);
-  }, [activeModuleId, sectionParam]);
+  }, []);
 
   // Video watcher: if the video container is visible for 4 s → record "video"
   useEffect(() => {
@@ -341,7 +344,7 @@ export default function TrainingCourse() {
       obs.disconnect();
       clearTimeout(timer);
     };
-  }, [activeModuleId, sectionParam, loading, recordEvent]);
+  }, [activeModuleId, loading, recordEvent]);
 
   // Scroll sentinel: record "scrolled" when user reaches the bottom of the content
   useEffect(() => {
@@ -360,7 +363,7 @@ export default function TrainingCourse() {
     );
     obs.observe(el);
     return () => obs.disconnect();
-  }, [activeModuleId, sectionParam, loading, recordEvent]);
+  }, [activeModuleId, loading, recordEvent]);
 
   // Re-tick when quiz passes so the progress bar reflects it immediately
   useEffect(() => {
@@ -372,7 +375,7 @@ export default function TrainingCourse() {
     window.scrollTo(0, 0);
     document.documentElement.scrollTop = 0;
     document.body.scrollTop = 0;
-  }, [loading, activeModuleId, sectionParam]);
+  }, [loading]);
 
   const handleQuizSubmit = async (quizId, answers, scored) => {
     setQuizSubmitting(true);

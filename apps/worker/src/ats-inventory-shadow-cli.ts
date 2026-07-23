@@ -76,7 +76,7 @@ export function parseAtsInventoryShadowArgs(args: string[]): AtsInventoryShadowC
     if (
       !provider.success ||
       !tenantId ||
-      /[?*\[\]{}]/.test(tenantId) ||
+      /[?*[\]{}]/.test(tenantId) ||
       one("--country") !== "FR" ||
       !one("--policy") ||
       !one("--output") ||
@@ -93,9 +93,9 @@ export function parseAtsInventoryShadowArgs(args: string[]): AtsInventoryShadowC
       provider: provider.data,
       tenantId,
       countryCode: "FR",
-      policyPath: one("--policy")!,
-      outputPath: one("--output")!,
-      evidenceRootPath: one("--evidence-root")!,
+      policyPath: one("--policy"),
+      outputPath: one("--output"),
+      evidenceRootPath: one("--evidence-root"),
     };
   }
   const runs = values.get("--run") ?? [];
@@ -104,9 +104,9 @@ export function parseAtsInventoryShadowArgs(args: string[]): AtsInventoryShadowC
   }
   return {
     type,
-    runPaths: [runs[0]!, runs[1]!],
-    outputPath: one("--output")!,
-    evidenceRootPath: one("--evidence-root")!,
+    runPaths: [runs[0], runs[1]],
+    outputPath: one("--output"),
+    evidenceRootPath: one("--evidence-root"),
   };
 }
 

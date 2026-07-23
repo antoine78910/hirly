@@ -70,7 +70,7 @@ export function TrainingTopBar({ actions, backTo, progressPct = null, moduleStep
 
   const routeLocale = parseTrainingLocale(location.pathname);
 
-  const { lang, t } = useTrainingLocale();
+  const { t } = useTrainingLocale();
   const { user } = useAuth();
 
   const homePath = trainingHubPath(routeLocale);

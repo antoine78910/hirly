@@ -26,14 +26,18 @@ function FaqBlock({ block }) {
   if (block.type === "li") {
     return (
       <li className="text-sm leading-relaxed text-zinc-600">
-        {block.parts ? block.parts.map((part, i) => <FaqPart key={i} part={part} />) : block.text}
+        {block.parts
+          ? block.parts.map((part, _i) => <FaqPart key={JSON.stringify(part)} part={part} />)
+          : block.text}
       </li>
     );
   }
 
   return (
     <p className="text-sm leading-relaxed text-zinc-600">
-      {block.parts ? block.parts.map((part, i) => <FaqPart key={i} part={part} />) : block.text}
+      {block.parts
+        ? block.parts.map((part, _i) => <FaqPart key={JSON.stringify(part)} part={part} />)
+        : block.text}
     </p>
   );
 }
@@ -70,14 +74,14 @@ function FaqItem({ item, open, onToggle }) {
           <div className="border-t border-zinc-100 px-4 pb-4 pt-3 sm:px-5 sm:pb-5">
             {hasList ? (
               <ul className="space-y-2.5 pl-4 marker:text-zinc-300">
-                {item.answer.map((block, i) => (
-                  <FaqBlock key={i} block={block} />
+                {item.answer.map((block, _i) => (
+                  <FaqBlock key={JSON.stringify(block)} block={block} />
                 ))}
               </ul>
             ) : (
               <div className="space-y-2.5">
-                {item.answer.map((block, i) => (
-                  <FaqBlock key={i} block={block} />
+                {item.answer.map((block, _i) => (
+                  <FaqBlock key={JSON.stringify(block)} block={block} />
                 ))}
               </div>
             )}

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { expect, test } from "bun:test";
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -39,6 +39,9 @@ import {
 } from "../src";
 import type { RuntimeDependencies } from "../src/registry";
 
+// biome-ignore lint/suspicious/noExplicitAny: Dynamic external contract boundaries are deliberately isolated behind this local alias.
+type UnsafeValue = any;
+
 const now = new Date("2026-01-01T00:00:00.000Z");
 const clock = { now: () => now };
 test("fails closed before submit handler, then submits once with exact approval and rejects replay", async () => {
@@ -73,19 +76,19 @@ test("fails closed before submit handler, then submits once with exact approval 
     tenantId: "tenant-a",
     eventSpecResolver: createApplicationAgentEventRegistry(),
   };
-  const analyzed: any = await registry.execute(
+  const analyzed: UnsafeValue = await registry.execute(
     "hirlyJob.analyze",
     "1.0.0",
     { fixtureId: "fixture_job-a" },
     ctx,
   );
-  const prepared: any = await registry.execute(
+  const prepared: UnsafeValue = await registry.execute(
     "hirlyApplication.prepare",
     "1.0.0",
     { candidateEvidenceSnapshotId: fixtureEvidenceSnapshot.id, jobSnapshotId: analyzed.data.id },
     ctx,
   );
-  const frozen: any = await registry.execute(
+  const frozen: UnsafeValue = await registry.execute(
     "hirlyApplication.freeze",
     "1.0.0",
     {
@@ -104,7 +107,12 @@ test("fails closed before submit handler, then submits once with exact approval 
     adapterVersion: frozen.data.adapterVersion,
     idempotencyKey: frozen.data.idempotencyKey,
   };
-  const denied: any = await registry.executeResult("hirlyApplication.submit", "1.0.0", input, ctx);
+  const denied: UnsafeValue = await registry.executeResult(
+    "hirlyApplication.submit",
+    "1.0.0",
+    input,
+    ctx,
+  );
   expect(JSON.stringify(denied)).toContain("APPROVAL_REQUIRED");
   expect(simulator.mutations).toBe(0);
   const reviewRef = "review:fixture-approval";
@@ -137,7 +145,7 @@ test("fails closed before submit handler, then submits once with exact approval 
     clock,
     hasher: sha256Hasher,
   });
-  const submitted: any = await registry.execute("hirlyApplication.submit", "1.0.0", input, {
+  const submitted: UnsafeValue = await registry.execute("hirlyApplication.submit", "1.0.0", input, {
     ...ctx,
     approvalReceipt: receipt,
     approvalPort,
@@ -145,11 +153,16 @@ test("fails closed before submit handler, then submits once with exact approval 
   expect(submitted.data.status).toBe("submitted");
   expect(simulator.mutations).toBe(1);
   expect(submitted.data.safeEvidenceRefs).toEqual(["receipt:fixture-confirmation"]);
-  const replay: any = await registry.executeResult("hirlyApplication.submit", "1.0.0", input, {
-    ...ctx,
-    approvalReceipt: receipt,
-    approvalPort,
-  });
+  const replay: UnsafeValue = await registry.executeResult(
+    "hirlyApplication.submit",
+    "1.0.0",
+    input,
+    {
+      ...ctx,
+      approvalReceipt: receipt,
+      approvalPort,
+    },
+  );
   expect(JSON.stringify(replay)).toContain("APPROVAL_REQUIRED");
   expect(simulator.mutations).toBe(1);
 });
@@ -192,7 +205,7 @@ test("draft preparation uses the model port and freeze uses the verifier port", 
       await import("@hirly/application-agent-contracts")
     ).createApplicationAgentEventRegistry(),
   };
-  const draft: any = await registry.execute(
+  const draft: UnsafeValue = await registry.execute(
     "hirlyApplication.prepare",
     "1.0.0",
     { candidateEvidenceSnapshotId: fixtureEvidenceSnapshot.id, jobSnapshotId: job.id },
@@ -216,7 +229,7 @@ test("draft preparation uses the model port and freeze uses the verifier port", 
 test("verification resolves persisted candidate evidence after runtime reconstruction", async () => {
   const job = { ...fixtureJobSnapshot, questions: [] };
   const drafts = memoryStore<ApplicationDraft>();
-  const dependencies = (verifier: any) => ({
+  const dependencies = (verifier: UnsafeValue) => ({
     evidence: memoryEvidenceStore(fixtureEvidenceSnapshot, fixtureEvidenceItems),
     jobs: memoryStore([job]),
     drafts,
@@ -235,7 +248,7 @@ test("verification resolves persisted candidate evidence after runtime reconstru
     compositionMode: "fixture" as const,
   });
   const ctx = { userId: "candidate-a", eventSpecResolver: createApplicationAgentEventRegistry() };
-  const prepared: any = await createApplicationAgentOperationRegistry(
+  const prepared: UnsafeValue = await createApplicationAgentOperationRegistry(
     dependencies({
       async verify() {
         return { supports: [], blockedReasonCodes: [] };
@@ -250,7 +263,7 @@ test("verification resolves persisted candidate evidence after runtime reconstru
   let verifiedEvidenceIds: string[] = [];
   const reconstructed = createApplicationAgentOperationRegistry(
     dependencies({
-      async verify(_draft: any, evidence: any[]) {
+      async verify(_draft: UnsafeValue, evidence: UnsafeValue[]) {
         verifiedEvidenceIds = evidence.map((item) => item.id);
         return { supports: [], blockedReasonCodes: [] };
       },
@@ -337,7 +350,7 @@ test("approval port rejects wrong subject, canonical input, and review evidence 
     issuer: "fixture",
     evidenceRef: review.ref,
   };
-  const request: any = {
+  const request: UnsafeValue = {
     receipt,
     operation: receipt.operation,
     subject: receipt.subject,
@@ -366,7 +379,7 @@ test("approval port rejects wrong subject, canonical input, and review evidence 
   expect(
     (
       await createApprovalPort({
-        reviews: memoryReviewStore([{ ...review, status: "rejected" as any }]),
+        reviews: memoryReviewStore([{ ...review, status: "rejected" as UnsafeValue }]),
         nonces: memoryNonceStore(),
         clock,
         hasher: sha256Hasher,
@@ -390,12 +403,12 @@ test("approval digest is characterized against the installed runtime-core serial
     entry.startsWith("@lssm-tech+lib.contracts-runtime-core@"),
   );
   expect(install).toBeDefined();
-  const runtimeCore: any = await import(
+  const runtimeCore: UnsafeValue = await import(
     pathToFileURL(
       join(
         process.cwd(),
         "../../node_modules/.bun",
-        install!,
+        install,
         "node_modules/@lssm-tech/lib.contracts-runtime-core/dist/approval.js",
       ),
     ).href
@@ -456,13 +469,13 @@ test("submit reloads persisted plan sources and blocks changed job snapshots bef
     approvalPort: () => approvalPort,
   });
   const ctx = { userId: "candidate-a" };
-  const prepared: any = await registry.execute(
+  const prepared: UnsafeValue = await registry.execute(
     "hirlyApplication.prepare",
     "1.0.0",
     { candidateEvidenceSnapshotId: fixtureEvidenceSnapshot.id, jobSnapshotId: job.id },
     ctx,
   );
-  const frozen: any = await registry.execute(
+  const frozen: UnsafeValue = await registry.execute(
     "hirlyApplication.freeze",
     "1.0.0",
     {
@@ -512,11 +525,16 @@ test("submit reloads persisted plan sources and blocks changed job snapshots bef
     clock,
     hasher: sha256Hasher,
   });
-  const result: any = await registry.executeResult("hirlyApplication.submit", "1.0.0", input, {
-    ...ctx,
-    approvalReceipt: receipt,
-    approvalPort,
-  });
+  const result: UnsafeValue = await registry.executeResult(
+    "hirlyApplication.submit",
+    "1.0.0",
+    input,
+    {
+      ...ctx,
+      approvalReceipt: receipt,
+      approvalPort,
+    },
+  );
   expect(JSON.stringify(result)).toContain("STALE_SUBMISSION_PLAN");
   expect(simulator.mutations).toBe(0);
 });
@@ -524,7 +542,7 @@ test("submit reloads persisted plan sources and blocks changed job snapshots bef
 test("safe logger rejects arbitrary candidate prose and persists only constrained fields", () => {
   const logger = memorySafeLogger();
   expect(() =>
-    (logger.info as any)("application_agent_operation", {
+    (logger.info as UnsafeValue)("application_agent_operation", {
       candidateName: "Ada Example",
       rawCv: "private CV",
     }),
@@ -583,7 +601,7 @@ test("candidate MCP allowlist excludes server-only outcome observation", () => {
 test("MCP candidate tools use host identity and host-only approval receipts", async () => {
   const job = { ...fixtureJobSnapshot, questions: [] };
   const simulator = controlledAtsSimulator();
-  let receipt: any;
+  let receipt: UnsafeValue;
   let approvalPort = createApprovalPort({
     reviews: memoryReviewStore([]),
     nonces: memoryNonceStore(),
@@ -629,7 +647,7 @@ test("MCP candidate tools use host identity and host-only approval receipts", as
 
   const tools = await client.listTools();
   const operationNames = new Map(
-    tools.tools.map((tool) => [(tool._meta as any)?.contractspec?.operationKey, tool.name]),
+    tools.tools.map((tool) => [(tool._meta as UnsafeValue)?.contractspec?.operationKey, tool.name]),
   );
   expect([...operationNames.keys()]).toEqual([
     "hirlyJob.analyze",
@@ -640,9 +658,9 @@ test("MCP candidate tools use host identity and host-only approval receipts", as
   ]);
   expect(operationNames.has("hirlyApplication.observeOutcome")).toBe(false);
   const submitTool = tools.tools.find(
-    (tool) => (tool._meta as any)?.contractspec?.operationKey === "hirlyApplication.submit",
+    (tool) => (tool._meta as UnsafeValue)?.contractspec?.operationKey === "hirlyApplication.submit",
   );
-  expect((submitTool?._meta as any)?.contractspec).toMatchObject({
+  expect((submitTool?._meta as UnsafeValue)?.contractspec).toMatchObject({
     approvalRequired: true,
     effects: ["write", "external-side-effect"],
   });
@@ -650,10 +668,10 @@ test("MCP candidate tools use host identity and host-only approval receipts", as
 
   const call = async (operation: string, arguments_: Record<string, unknown>) =>
     client.callTool({
-      name: operationNames.get(operation)!,
+      name: operationNames.get(operation),
       arguments: arguments_,
-    }) as Promise<any>;
-  const contractData = (result: any) => result.structuredContent.data.data;
+    }) as Promise<UnsafeValue>;
+  const contractData = (result: UnsafeValue) => result.structuredContent.data.data;
   const analyzed = await call("hirlyJob.analyze", { fixtureId: "fixture_job-a" });
   const prepared = await call("hirlyApplication.prepare", {
     candidateEvidenceSnapshotId: fixtureEvidenceSnapshot.id,

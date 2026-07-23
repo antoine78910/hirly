@@ -13,9 +13,8 @@ export default function LanguageSwitcher({ className = "", variant = "light", on
   };
 
   return (
-    <div
+    <fieldset
       className={`inline-flex rounded-xl border p-1 ${isDark ? "border-zinc-700 bg-zinc-900" : "border-zinc-200 bg-zinc-100"} ${className}`}
-      role="group"
       aria-label={t("common.language")}
       data-testid="language-switcher"
     >
@@ -48,6 +47,6 @@ export default function LanguageSwitcher({ className = "", variant = "light", on
           </button>
         );
       })}
-    </div>
+    </fieldset>
   );
 }

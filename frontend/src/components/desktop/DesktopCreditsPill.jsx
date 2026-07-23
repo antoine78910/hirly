@@ -67,7 +67,7 @@ export function useSwipeCredits() {
         setIsPremium(Boolean(data?.is_premium));
         setCredits(Number(data?.credits_remaining ?? 0));
         setPlanTier(data?.plan_tier || data?.plan || null);
-        if (Boolean(data?.is_premium) && Number(data?.credits_remaining ?? 0) <= 0) {
+        if (data?.is_premium && Number(data?.credits_remaining ?? 0) <= 0) {
           const synced = await syncBillingStatus().catch(() => null);
           if (cancelled || !synced) return;
           setIsPremium(Boolean(synced?.is_premium));

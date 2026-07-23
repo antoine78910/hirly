@@ -78,7 +78,7 @@ export async function startApplication(
     shutdownMs: config.WORKER_SHUTDOWN_MS,
   });
   const primarySql = candidateProjectionConfig.enabled
-    ? createDatabase(candidateProjectionConfig.primaryDatabaseUrl!, { max: 2 })
+    ? createDatabase(candidateProjectionConfig.primaryDatabaseUrl, { max: 2 })
     : null;
   const candidateProjectionRelay = primarySql
     ? new CandidateProjectionRelay(

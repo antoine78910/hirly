@@ -127,8 +127,8 @@ export function AdminPipelineSteps({ application, compact = false }) {
         >
           <p className="font-semibold">Information requested from the candidate</p>
           <ul className="mt-1.5 list-disc space-y-1 pl-4">
-            {infoStep.missing.map((item, index) => (
-              <li key={index}>
+            {infoStep.missing.map((item, _index) => (
+              <li key={JSON.stringify(item)}>
                 <span className="font-medium">{summarizeQuestion(item)}</span>
                 {item?.field_type || item?.type ? (
                   <span className="text-orange-800/80">

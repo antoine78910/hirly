@@ -532,7 +532,7 @@ export function selectApplyUrl(urls: string[]): string | null {
   const valid = urls.filter((url) => hostname(url) !== null);
   return (
     valid.find((url) => {
-      const host = hostname(url);
+      const _host = hostname(url);
       return classifyAtsUrl(url).provider !== null;
     }) ??
     valid.find((url) => {

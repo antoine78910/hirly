@@ -16,13 +16,13 @@ function parseArgs(argv: string[]): {
       !["--input", "--policy-evidence", "--sql-output", "--manifest-output"].includes(name ?? "") ||
       !value ||
       value.startsWith("--") ||
-      values.has(name!)
+      values.has(name)
     ) {
       throw new Error(
         "usage: source-trial:provision --input <json> --policy-evidence <reviewed-json> --sql-output <sql> --manifest-output <json>",
       );
     }
-    values.set(name!, value);
+    values.set(name, value);
   }
   const input = values.get("--input");
   const policyEvidence = values.get("--policy-evidence");

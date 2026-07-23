@@ -180,7 +180,7 @@ export default function PlacesAutocomplete({
         vv.removeEventListener("scroll", updateDropdownRect);
       }
     };
-  }, [showDropdown, trimmedValue, updateDropdownRect]);
+  }, [showDropdown, updateDropdownRect]);
 
   useEffect(() => {
     if (!trimmedValue || hasSelection || trimmedValue.length < 2) {

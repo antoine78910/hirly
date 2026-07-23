@@ -73,7 +73,7 @@ export default function RoleAutocomplete({
       window.removeEventListener("resize", updateDropdownRect);
       window.removeEventListener("scroll", updateDropdownRect, true);
     };
-  }, [showDropdown, trimmedValue, updateDropdownRect]);
+  }, [showDropdown, updateDropdownRect]);
 
   const handleFocus = () => {
     if (blurTimerRef.current) clearTimeout(blurTimerRef.current);

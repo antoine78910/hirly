@@ -178,7 +178,7 @@ export function tryNormalizeSproutJob(
   let applyUrl: string;
   try {
     applyUrl = requireApplyUrl(raw.postingUrl);
-  } catch (error) {
+  } catch (_error) {
     return {
       accepted: false,
       reason: raw.postingUrl ? "invalid_apply_url" : "missing_apply_url",

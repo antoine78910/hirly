@@ -89,7 +89,7 @@ async function drawPhotoHeader(doc, { name, contact, setFill, setText, setDraw, 
   return PRO_CV_LAYOUT_PHOTO.contentStartPt;
 }
 
-function drawPlainHeader(doc, { name, contact, setFill, setText, setDraw }) {
+function drawPlainHeader(doc, { name, contact, setText, setDraw }) {
   const colors = PRO_CV_COLORS_PLAIN;
   const marginX = PRO_CV_LAYOUT_PLAIN.marginX;
   const pageW = PRO_CV_PAGE.widthPt;

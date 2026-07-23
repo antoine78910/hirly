@@ -12,7 +12,7 @@ export default function ImpersonationBanner() {
 
   useEffect(() => {
     setVisible(Boolean(getAdminToken()));
-  }, [user]);
+  }, []);
 
   if (!visible) return null;
 

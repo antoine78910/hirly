@@ -216,7 +216,7 @@ describe("G012 disabled CSP fixture adapter", () => {
 
   test("rejects unsafe apply URL schemes and embedded credentials", async () => {
     const data = await fixture();
-    const row = data.initialSnapshot[0]!;
+    const row = data.initialSnapshot[0];
     for (const unsafeUrl of [
       "http://boards.greenhouse.io/administrationexemple/jobs/csp-fixture-001",
       "https://user:pass@boards.greenhouse.io/administrationexemple/jobs/csp-fixture-001",

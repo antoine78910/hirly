@@ -33,6 +33,12 @@ export interface PostHogIdentityProfile {
   name?: unknown;
 }
 
+const hasControlCharacter = (value: string) =>
+  [...value].some((character) => {
+    const codePoint = character.charCodeAt(0);
+    return codePoint <= 0x1f || codePoint === 0x7f;
+  });
+
 export const buildPostHogPersonProperties = (profile: PostHogIdentityProfile = {}): Properties => {
   const properties: Properties = {};
   if (typeof profile.email === "string") {
@@ -45,10 +51,10 @@ export const buildPostHogPersonProperties = (profile: PostHogIdentityProfile = {
     const parts = profile.name.trim().split(/\s+/).filter(Boolean);
     const firstName = parts.shift()?.slice(0, 100);
     const lastName = parts.join(" ").slice(0, 100);
-    if (firstName && !/[\u0000-\u001f\u007f]/.test(firstName)) {
+    if (firstName && !hasControlCharacter(firstName)) {
       properties.first_name = firstName;
     }
-    if (lastName && !/[\u0000-\u001f\u007f]/.test(lastName)) {
+    if (lastName && !hasControlCharacter(lastName)) {
       properties.last_name = lastName;
     }
   }

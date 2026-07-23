@@ -1,5 +1,4 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
-import { motion } from "framer-motion";
 import DOMPurify from "dompurify";
 import {
   Mail,
@@ -9,7 +8,6 @@ import {
   ChevronRight,
   ChevronLeft,
   ChevronDown,
-  X,
   Menu,
   Settings,
   Star,
@@ -69,7 +67,7 @@ const getInboxFilters = (t) => [
  * never insert the parsed result as markup) so old emails stored before HTML
  * capture was added still read correctly instead of showing raw entities. */
 function decodeHtmlEntities(text) {
-  if (!text || !text.includes("&")) return text || "";
+  if (!text?.includes("&")) return text || "";
   try {
     return new DOMParser().parseFromString(text, "text/html").documentElement.textContent || text;
   } catch (_) {
@@ -92,8 +90,6 @@ const MOCK_JOBS = [
   { id: 3, company: "Vercel", role: "DevRel Engineer", contact: "Julia Meyer" },
   { id: 4, company: "Notion", role: "Staff Engineer", contact: "Tom Richards" },
 ];
-
-const MOCK_SENT = [];
 
 const EMAIL_TYPES = [
   {
@@ -150,103 +146,6 @@ function saveDrafts(drafts) {
 }
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
-
-function StatusPill({ status }) {
-  const { t } = useAppLocale();
-  if (status === "replied") {
-    return (
-      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/15 text-emerald-300">
-        {t("emails.replied")}
-      </span>
-    );
-  }
-  return (
-    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-sprout-mint-soft text-sprout-mint">
-      {t("emails.sent")}
-    </span>
-  );
-}
-
-function SentEmailRow({ email, onClick }) {
-  return (
-    <button
-      onClick={() => onClick(email)}
-      className="w-full text-left rounded-2xl border border-sprout-border bg-sprout-surface p-4 flex items-start gap-3 hover:border-sprout-border-2 transition-colors"
-    >
-      <div className="w-10 h-10 rounded-full bg-sprout-mint-soft grid place-items-center shrink-0 mt-0.5">
-        <Mail className="w-4 h-4 text-sprout-mint" />
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <span className="text-white text-sm font-semibold">{email.to}</span>
-            <span className="text-sprout-muted text-sm"> · </span>
-            <span className="text-sprout-mint text-sm font-semibold">{email.company}</span>
-          </div>
-          <div className="flex items-center gap-1.5 shrink-0">
-            <span className="text-sprout-dim text-xs">{email.date}</span>
-            <ChevronRight className="w-3.5 h-3.5 text-sprout-dim" />
-          </div>
-        </div>
-        <p className="mt-0.5 text-white text-sm font-semibold truncate">{email.subject}</p>
-        <p className="mt-0.5 text-sprout-muted text-xs line-clamp-2 leading-relaxed">
-          {email.preview}
-        </p>
-        <div className="mt-2">
-          <StatusPill status={email.status} />
-        </div>
-      </div>
-    </button>
-  );
-}
-
-function DraftRow({ draft, onCopy, onDelete }) {
-  const { t } = useAppLocale();
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = () => {
-    onCopy(draft);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  return (
-    <div className="rounded-2xl border border-sprout-border bg-sprout-surface p-4">
-      <div className="flex items-start justify-between gap-2 mb-2">
-        <div className="min-w-0">
-          <p className="text-white text-sm font-semibold truncate">{draft.subject}</p>
-          <p className="text-sprout-muted text-xs mt-0.5">{draft.date}</p>
-        </div>
-        <button
-          onClick={() => onDelete(draft.id)}
-          className="w-7 h-7 grid place-items-center rounded-full hover:bg-sprout-surface-2 transition-colors shrink-0"
-          aria-label="Delete draft"
-        >
-          <X className="w-3.5 h-3.5 text-sprout-dim" />
-        </button>
-      </div>
-      <p className="text-sprout-muted text-xs line-clamp-3 leading-relaxed whitespace-pre-line">
-        {draft.body}
-      </p>
-      <button
-        onClick={handleCopy}
-        className="mt-3 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-sprout-surface-2 text-sprout-mint text-xs font-semibold hover:bg-sprout-mint-soft transition-colors"
-      >
-        {copied ? (
-          <>
-            <Check className="w-3 h-3" /> {t("emails.saved")}
-          </>
-        ) : (
-          <>
-            <Copy className="w-3 h-3" /> {t("emails.copy")}
-          </>
-        )}
-      </button>
-    </div>
-  );
-}
-
-// ─── Generate Sheet ───────────────────────────────────────────────────────────
 
 function GenerateSheet({ open, onClose, onSaveDraft }) {
   const { t } = useAppLocale();
@@ -312,6 +211,7 @@ function GenerateSheet({ open, onClose, onSaveDraft }) {
             <div className="grid grid-cols-2 gap-2.5">
               {EMAIL_TYPES.map((t) => (
                 <button
+                  type="button"
                   key={t.key}
                   onClick={() => {
                     setEmailType(t.key);
@@ -355,6 +255,7 @@ function GenerateSheet({ open, onClose, onSaveDraft }) {
 
           {/* Generate button */}
           <button
+            type="button"
             onClick={handleGenerate}
             className="w-full h-11 rounded-2xl gradient-linkedin text-white font-semibold text-sm flex items-center justify-center gap-2"
           >
@@ -375,6 +276,7 @@ function GenerateSheet({ open, onClose, onSaveDraft }) {
               />
               <div className="flex gap-2.5">
                 <button
+                  type="button"
                   onClick={handleCopyAndSave}
                   className="flex-1 h-11 rounded-2xl gradient-linkedin text-white font-semibold text-sm flex items-center justify-center gap-2"
                 >
@@ -389,6 +291,7 @@ function GenerateSheet({ open, onClose, onSaveDraft }) {
                   )}
                 </button>
                 <button
+                  type="button"
                   onClick={handleClose}
                   className="h-11 px-5 rounded-2xl bg-sprout-surface-2 text-sprout-muted font-semibold text-sm hover:text-white transition-colors border border-sprout-border"
                 >
@@ -597,7 +500,7 @@ function ReplySheet({ message, open, onClose, onSend }) {
 
   useEffect(() => {
     if (open) setBody("");
-  }, [open, message?.id]);
+  }, [open]);
 
   if (!message) return null;
 
@@ -860,9 +763,9 @@ function InboxMessageDetail({
               .split(/\n\s*\n/)
               .map((paragraph) => paragraph.trim())
               .filter(Boolean)
-              .map((paragraph, index) => (
+              .map((paragraph) => (
                 <p
-                  key={index}
+                  key={paragraph}
                   className="whitespace-pre-line text-[15px] leading-[1.55] text-zinc-800"
                 >
                   {paragraph}
@@ -908,132 +811,7 @@ function InboxMessageDetail({
 
 // ─── Sent Email Detail Sheet ──────────────────────────────────────────────────
 
-function EmailDetailSheet({ email, onClose }) {
-  const { t } = useAppLocale();
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = () => {
-    if (!email) return;
-    navigator.clipboard.writeText(email.preview).catch(() => {});
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  return (
-    <Sheet open={!!email} onOpenChange={(v) => !v && onClose()}>
-      <SheetContent
-        side="bottom"
-        className="sprout bg-sprout-surface border-sprout-border rounded-t-3xl p-0 max-h-[80dvh] overflow-y-auto"
-      >
-        {email && (
-          <>
-            <SheetHeader className="px-5 pt-6 pb-4 border-b border-sprout-border text-left">
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <SheetTitle className="font-display font-bold text-lg text-white leading-tight">
-                    {email.subject}
-                  </SheetTitle>
-                  <p className="text-sprout-muted text-sm mt-1">
-                    To <span className="text-sprout-mint font-semibold">{email.to}</span> ·{" "}
-                    {email.company} · {email.date}
-                  </p>
-                </div>
-                <StatusPill status={email.status} />
-              </div>
-            </SheetHeader>
-            <div className="px-5 py-5 space-y-4">
-              <p className="text-white text-sm leading-relaxed whitespace-pre-line">
-                {email.preview}
-              </p>
-              <button
-                onClick={handleCopy}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-sprout-surface-2 text-sprout-mint text-xs font-semibold hover:bg-sprout-mint-soft transition-colors"
-              >
-                {copied ? (
-                  <>
-                    <Check className="w-3 h-3" /> {t("emails.saved")}
-                  </>
-                ) : (
-                  <>
-                    <Copy className="w-3 h-3" /> {t("emails.copy")}
-                  </>
-                )}
-              </button>
-              <div className="h-4" />
-            </div>
-          </>
-        )}
-      </SheetContent>
-    </Sheet>
-  );
-}
-
-// ─── Tab content ──────────────────────────────────────────────────────────────
-
-function SentTab() {
-  const { t } = useAppLocale();
-  const [selectedEmail, setSelectedEmail] = useState(null);
-
-  if (MOCK_SENT.length === 0) {
-    return (
-      <div className="mt-16 text-center">
-        <Mail className="mx-auto mb-3 h-7 w-7 text-sprout-dim" />
-        <p className="text-sm text-sprout-muted">{t("emails.emptyFolder")}</p>
-      </div>
-    );
-  }
-
-  return (
-    <>
-      <div className="space-y-3">
-        {MOCK_SENT.map((email) => (
-          <SentEmailRow key={email.id} email={email} onClick={setSelectedEmail} />
-        ))}
-      </div>
-      <EmailDetailSheet email={selectedEmail} onClose={() => setSelectedEmail(null)} />
-    </>
-  );
-}
-
-function DraftsTab() {
-  const { t } = useAppLocale();
-  const [drafts, setDrafts] = useState([]);
-
-  useEffect(() => {
-    setDrafts(loadDrafts());
-  }, []);
-
-  const handleCopy = (draft) => {
-    navigator.clipboard.writeText(draft.body).catch(() => {});
-    toast.success(t("emails.copied"));
-  };
-
-  const handleDelete = (id) => {
-    const updated = drafts.filter((d) => d.id !== id);
-    setDrafts(updated);
-    saveDrafts(updated);
-    toast.success(t("emails.draftDeleted"));
-  };
-
-  if (drafts.length === 0) {
-    return (
-      <div className="mt-16 text-center">
-        <Mail className="w-7 h-7 mx-auto mb-3 text-sprout-dim" />
-        <p className="text-sprout-muted text-sm">{t("emails.noDrafts")}</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-3">
-      {drafts.map((draft) => (
-        <DraftRow key={draft.id} draft={draft} onCopy={handleCopy} onDelete={handleDelete} />
-      ))}
-    </div>
-  );
-}
-
-function RepliesTab() {
+function _RepliesTab() {
   return (
     <div className="mt-16 text-center">
       <div className="w-16 h-16 rounded-2xl bg-sprout-mint-soft grid place-items-center mx-auto">

@@ -96,7 +96,7 @@ describe("trial scorecard", () => {
     const baseline = clone(baselineFixture) as Record<string, unknown>;
     const snapshots = clone(snapshotsFixture) as Array<Record<string, unknown>>;
     Object.assign(baseline, mutation.baseline ?? {});
-    Object.assign(snapshots[0]!, mutation.snapshot ?? {});
+    Object.assign(snapshots[0], mutation.snapshot ?? {});
     expect(() => buildTrialScorecard(baseline, snapshots)).toThrow("TRIAL_SCORECARD_REFUSED");
   });
 
@@ -104,7 +104,7 @@ describe("trial scorecard", () => {
     expect(() => buildTrialScorecard(baselineFixture, [])).toThrow("at least one run");
     expect(() => buildTrialScorecard({}, snapshotsFixture)).toThrow("schemaVersion");
     const snapshots = clone(snapshotsFixture);
-    snapshots[0]!.jobs[0]!.matchedUserIds = ["outside-cohort"];
+    snapshots[0]?.jobs[0].matchedUserIds = ["outside-cohort"];
     expect(() => buildTrialScorecard(baselineFixture, snapshots)).toThrow("outside the cohort");
   });
 

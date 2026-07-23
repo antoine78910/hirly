@@ -174,7 +174,7 @@ export function buildAtsRepeatedShadowScorecard(runs: readonly unknown[]) {
   try {
     if (runs.length < 2) refuse("at least two complete shadow runs are required");
     const parsed = runs.map((run) => atsCompleteShadowRunSchema.parse(run));
-    const first = parsed[0]!;
+    const first = parsed[0];
     assertCompleteShadowSnapshotProven(first.provider);
     const scope = `${first.provider}\0${first.tenantId}\0${first.countryCode}\0${first.policyDigest}`;
     const runIds = new Set<string>();
@@ -197,7 +197,7 @@ export function buildAtsRepeatedShadowScorecard(runs: readonly unknown[]) {
         left.runId.localeCompare(right.runId),
     );
     const reconciliation = ordered.slice(1).map((current, index) => {
-      const previous = ordered[index]!;
+      const previous = ordered[index];
       const before = new Map(previous.jobs.map((job) => [job.externalId, job.fingerprint]));
       const after = new Map(current.jobs.map((job) => [job.externalId, job.fingerprint]));
       return {

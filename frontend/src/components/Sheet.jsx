@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Loader2 } from "lucide-react";
 import { Button } from "./ui/button";
@@ -35,6 +35,7 @@ export default function Sheet({ open, title, onClose, children, footer, testId }
         >
           <header className="px-5 pt-6 pb-3 flex items-center gap-3 border-b border-sprout-border">
             <button
+              type="button"
               onClick={onClose}
               className="w-10 h-10 grid place-items-center rounded-full hover:bg-sprout-surface"
               data-testid={`${testId}-close`}

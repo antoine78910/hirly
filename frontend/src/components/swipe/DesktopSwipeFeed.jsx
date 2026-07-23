@@ -1,21 +1,7 @@
 import { useCallback, useEffect, useRef, useState, useMemo } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
-import {
-  Bell,
-  Briefcase,
-  ExternalLink,
-  FileText,
-  Flag,
-  Layers,
-  Mail,
-  Share2,
-  Sparkles,
-  Sun,
-  User,
-  Loader2,
-  MapPin,
-} from "lucide-react";
+import { Bell, Briefcase, ExternalLink, Flag, Share2, Sun, Loader2, MapPin } from "lucide-react";
 import DesktopSidebarSupport from "../desktop/DesktopSidebarSupport";
 import DesktopCreditsPill from "../desktop/DesktopCreditsPill";
 import DesktopAccountMenu from "../desktop/DesktopAccountMenu";
@@ -269,7 +255,7 @@ export default function DesktopSwipeFeed({
 
     if (intent === "apply") onApply?.();
     else if (intent === "skip") onPass?.();
-  }, [exitIntent, onApply, onPass]);
+  }, [exitIntent, onApply, onPass, renderJob?.job_id]);
 
   useEffect(() => {
     const onKeyDown = (event) => {

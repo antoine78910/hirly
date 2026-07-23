@@ -145,7 +145,7 @@ describe("G012 generic data.gouv fixture boundary", () => {
     for await (const page of sourceAdapter.discover({
       source: source(),
       mode: "full",
-      cursor: first.value!.nextCursor,
+      cursor: first.value?.nextCursor,
       signal: new AbortController().signal,
     })) {
       remaining.push(page);
@@ -159,7 +159,7 @@ describe("G012 generic data.gouv fixture boundary", () => {
         source: source(),
         mode: "full",
         cursor: {
-          ...first.value!.nextCursor!,
+          ...first.value?.nextCursor,
           snapshotDigest: "0".repeat(64),
         },
         signal: new AbortController().signal,
@@ -169,13 +169,13 @@ describe("G012 generic data.gouv fixture boundary", () => {
     }).toThrow("invalid or stale data.gouv fixture checkpoint");
 
     const changedRows = structuredClone(data.raw);
-    changedRows[0]!.title = "Changed outside sourceDocument";
+    changedRows[0].title = "Changed outside sourceDocument";
     const changedAdapter = adapter(changedRows);
     await expect(async () => {
       for await (const _page of changedAdapter.discover({
         source: source(),
         mode: "full",
-        cursor: first.value!.nextCursor,
+        cursor: first.value?.nextCursor,
         signal: new AbortController().signal,
       })) {
         // A complete-row change must invalidate the old snapshot cursor.
@@ -246,7 +246,7 @@ describe("G012 generic data.gouv fixture boundary", () => {
     expect(() =>
       sourceAdapter.normalize(
         {
-          ...data.raw[0]!,
+          ...data.raw[0],
           resourceId: "other-resource",
         },
         context(source()),
@@ -264,7 +264,7 @@ describe("G012 generic data.gouv fixture boundary", () => {
       expect(() =>
         adapter([
           {
-            ...data.raw[0]!,
+            ...data.raw[0],
             applyUrls: [unsafeUrl],
           },
         ]),
@@ -273,7 +273,7 @@ describe("G012 generic data.gouv fixture boundary", () => {
     expect(() =>
       adapter([
         {
-          ...data.raw[0]!,
+          ...data.raw[0],
           sourceUrl: "http://www.data.gouv.fr/datasets/dataset-fixture",
         },
       ]),

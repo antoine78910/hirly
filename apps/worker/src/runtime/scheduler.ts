@@ -21,7 +21,7 @@ function fieldMatches(field: string, value: number): boolean {
       return Number.isInteger(step) && step > 0 && value % step === 0;
     }
     const [start, end] = part.split("-").map(Number);
-    if (end !== undefined) return value >= start! && value <= end;
+    if (end !== undefined) return value >= start && value <= end;
     return value === start;
   });
 }
@@ -53,7 +53,7 @@ export function nextCronOccurrence(expression: string, timezone: string, after: 
   cursor.setUTCMinutes(cursor.getUTCMinutes() + 1);
   for (let offset = 0; offset < 366 * 24 * 60; offset += 1) {
     const values = zonedParts(cursor, timezone);
-    if (fields.every((field, index) => fieldMatches(field!, values[index]!))) {
+    if (fields.every((field, index) => fieldMatches(field, values[index]))) {
       return cursor;
     }
     cursor.setUTCMinutes(cursor.getUTCMinutes() + 1);

@@ -1336,7 +1336,9 @@ function canonicalJson(value) {
 
 function rejectSecretShapedFields(value, path = "input") {
   if (Array.isArray(value)) {
-    value.forEach((entry, index) => rejectSecretShapedFields(entry, `${path}[${index}]`));
+    value.forEach((entry, index) => {
+      rejectSecretShapedFields(entry, `${path}[${index}]`);
+    });
     return;
   }
   if (typeof value === "string") {

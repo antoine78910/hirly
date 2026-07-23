@@ -13,8 +13,8 @@ function TableCellContent({ cell }) {
   if (typeof cell === "string") {
     return (
       <div className="space-y-1 text-sm leading-relaxed text-zinc-700">
-        {cell.split("\n").map((line, index) => (
-          <p key={index}>{line}</p>
+        {cell.split("\n").map((line) => (
+          <p key={line}>{line}</p>
         ))}
       </div>
     );
@@ -47,8 +47,8 @@ function TableCellContent({ cell }) {
     }
     return (
       <div className="flex flex-wrap gap-1.5">
-        {cell.map((item, index) => (
-          <TableCellContent key={index} cell={item} />
+        {cell.map((item, _index) => (
+          <TableCellContent key={JSON.stringify(item)} cell={item} />
         ))}
       </div>
     );
@@ -77,10 +77,13 @@ export default function TrainingDocTable({ block }) {
           </tr>
         </thead>
         <tbody>
-          {rows.map((row, rowIndex) => (
-            <tr key={rowIndex} className="border-b border-zinc-100 align-top last:border-b-0">
-              {row.map((cell, cellIndex) => (
-                <td key={cellIndex} className="px-4 py-3 align-top">
+          {rows.map((row, _rowIndex) => (
+            <tr
+              key={JSON.stringify(row)}
+              className="border-b border-zinc-100 align-top last:border-b-0"
+            >
+              {row.map((cell, _cellIndex) => (
+                <td key={JSON.stringify(cell)} className="px-4 py-3 align-top">
                   <TableCellContent cell={cell} />
                 </td>
               ))}

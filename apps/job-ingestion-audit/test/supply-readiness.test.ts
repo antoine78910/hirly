@@ -19,7 +19,7 @@ function observations(count: number): SupplyObservation[] {
     roleFamilyIds: ["fullstack-engineering"],
     fresh: true,
     visible: true,
-    fulfillmentRoute: (["auto", "assisted", "manual"] as const)[index % 3]!,
+    fulfillmentRoute: (["auto", "assisted", "manual"] as const)[index % 3],
   }));
 }
 
@@ -111,7 +111,7 @@ describe("PR0-S supply readiness", () => {
   test("keeps the aggregate scorecard and digest stable when observations reorder", () => {
     const forward = completeInput();
     const reversed = completeInput();
-    reversed.observations = [...reversed.observations!].reverse();
+    reversed.observations = [...reversed.observations].reverse();
     expect(buildSupplyReadinessScorecard(reversed)).toEqual(buildSupplyReadinessScorecard(forward));
   });
 
@@ -174,14 +174,14 @@ describe("PR0-S supply readiness", () => {
     expect(() =>
       buildSupplyReadinessScorecard({
         ...completeInput(),
-        observations: [observations(1)[0]!, observations(1)[0]!],
+        observations: [observations(1)[0], observations(1)[0]],
       }),
     ).toThrow("duplicate canonical group");
   });
 
   test("refuses malformed runtime booleans instead of scoring truthy values", () => {
     const input = completeInput();
-    input.observations = input.observations!.map((observation, index) =>
+    input.observations = input.observations?.map((observation, index) =>
       index === 0 ? { ...observation, fresh: "yes" as unknown as boolean } : observation,
     );
     expect(() => buildSupplyReadinessScorecard(input)).toThrow(
