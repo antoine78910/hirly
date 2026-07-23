@@ -56,13 +56,13 @@ describe("PostHogLifecycle", () => {
     container.remove();
   });
 
-  it("observes pathname-only navigation and replay lifecycle", () => {
+  it("observes pathname-only navigation and applies the replay route policy", () => {
     mockPathname = "/onboarding";
     act(() => {
       root.render(<PostHogLifecycle />);
     });
     expect(mockCapturePostHogPageview).toHaveBeenLastCalledWith("/onboarding");
-    expect(mockSyncPostHogReplay).toHaveBeenCalledTimes(1);
+    expect(mockSyncPostHogReplay).toHaveBeenCalledWith("/onboarding");
 
     act(() => root.render(<PostHogLifecycle />));
     expect(mockCapturePostHogPageview).toHaveBeenCalledTimes(1);
@@ -71,6 +71,8 @@ describe("PostHogLifecycle", () => {
     act(() => root.render(<PostHogLifecycle />));
     expect(mockCapturePostHogPageview).toHaveBeenCalledTimes(2);
     expect(mockCapturePostHogPageview).toHaveBeenLastCalledWith("/swipe");
+    expect(mockSyncPostHogReplay).toHaveBeenCalledTimes(2);
+    expect(mockSyncPostHogReplay).toHaveBeenLastCalledWith("/swipe");
   });
 
   it("forwards stable identities and anonymous resets to the safe client boundary", () => {

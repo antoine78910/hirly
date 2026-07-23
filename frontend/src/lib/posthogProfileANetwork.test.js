@@ -10,7 +10,6 @@ describe("PostHog Profile A real SDK network seam", () => {
     });
     delete process.env.REACT_APP_POSTHOG_REPLAY_ENABLED;
     delete process.env.REACT_APP_POSTHOG_REPLAY_HOSTILE_QA_APPROVED;
-    delete process.env.REACT_APP_POSTHOG_HOST;
     jest.resetModules();
   });
 
@@ -33,7 +32,6 @@ describe("PostHog Profile A real SDK network seam", () => {
       }),
     });
 
-    process.env.REACT_APP_POSTHOG_HOST = "https://posthog-profile-a.invalid";
     process.env.REACT_APP_POSTHOG_REPLAY_ENABLED = "false";
     process.env.REACT_APP_POSTHOG_REPLAY_HOSTILE_QA_APPROVED = "false";
 
