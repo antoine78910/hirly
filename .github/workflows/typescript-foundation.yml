@@ -38,13 +38,13 @@ jobs:
       G015_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/hirly_test
       CONTRACTSPEC_NPM_TOKEN: ${{ secrets.CONTRACTSPEC_NPM_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.14
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - name: Install release verification system dependencies
@@ -78,8 +78,8 @@ jobs:
     env:
       CONTRACTSPEC_NPM_TOKEN: ${{ secrets.CONTRACTSPEC_NPM_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -99,10 +99,10 @@ jobs:
     name: Stack policy
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
       - name: Stage the checked revision range
@@ -124,7 +124,7 @@ jobs:
     env:
       SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Require the production database credential
         run: test -n "$SUPABASE_DB_URL"
       - uses: supabase/setup-cli@v1
@@ -149,7 +149,7 @@ jobs:
       RAILWAY_SERVICE: ${{ vars.RAILWAY_SERVICE }}
       RAILWAY_BACKEND_URL: ${{ vars.RAILWAY_BACKEND_URL }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 1
       - name: Require Railway release configuration
@@ -203,7 +203,7 @@ jobs:
       VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
       VERCEL_FRONTEND_URL: ${{ vars.VERCEL_FRONTEND_URL }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Require Vercel release configuration
         run: |
           test -n "$VERCEL_TOKEN"

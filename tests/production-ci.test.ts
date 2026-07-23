@@ -84,6 +84,13 @@ describe("main production release workflow", () => {
     expect(productionRelease).not.toMatch(/postgres(?:ql)?:\/\/[^$\s]+/);
   });
 
+  test("uses Node 24-compatible official setup actions", () => {
+    expect(workflow).toContain("actions/checkout@v5");
+    expect(workflow).toContain("actions/setup-node@v5");
+    expect(workflow).toContain("actions/setup-python@v6");
+    expect(workflow).not.toMatch(/actions\/(?:checkout|setup-node)@v4|actions\/setup-python@v5/);
+  });
+
   test("maps the package token into every CI dependency installer job", () => {
     const bunWorkspaces = workflow.slice(
       workflow.indexOf("  bun-workspaces:"),
