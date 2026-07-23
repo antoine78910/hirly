@@ -41,5 +41,11 @@ This directory and the legacy `/api/training/media/...` route remain only to
 serve records uploaded before the Storage migration. They are not used for new
 uploads and must not be relied on for durable production media.
 
+To copy a Railway instance's legacy files and their per-locale metadata into
+Supabase Storage, follow
+[`docs/operations/training-video-storage-migration.md`](../../../docs/operations/training-video-storage-migration.md).
+Back up the legacy directory before a deploy or redeploy: Railway's application
+filesystem is ephemeral unless that exact directory is on a persistent Volume.
+
 Canonical upload slots are defined in `backend/training_media.py` →
 `VIDEO_SLOTS`.

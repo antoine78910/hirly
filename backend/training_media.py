@@ -257,6 +257,25 @@ async def create_training_video_signed_url(storage_path: str) -> str:
     return urljoin(f"{base_url}/", signed_path.lstrip("/"))
 
 
+async def store_training_video_object(
+    storage_path: str,
+    content: bytes,
+    content_type: str,
+) -> None:
+    """Upsert a validated training video at its stable private Storage path."""
+    response = await _storage_api_request(
+        "POST",
+        f"/storage/v1/object/{TRAINING_VIDEO_BUCKET}/{quote(storage_path, safe='/')}",
+        content=content,
+        headers={
+            "Content-Type": content_type,
+            "x-upsert": "true",
+            "cache-control": "3600",
+        },
+    )
+    _require_storage_success(response, "upload the video")
+
+
 async def save_training_video(
     file: UploadFile,
     course_id: str,
@@ -269,17 +288,7 @@ async def save_training_video(
     validate_video_upload(file, content)
     storage_path = training_video_storage_path(course_id, module_id, section_id, lang)
     content_type = (file.content_type or mimetypes.guess_type(file.filename or "")[0] or "video/mp4").split(";", 1)[0]
-    response = await _storage_api_request(
-        "POST",
-        f"/storage/v1/object/{TRAINING_VIDEO_BUCKET}/{quote(storage_path, safe='/')}",
-        content=content,
-        headers={
-            "Content-Type": content_type,
-            "x-upsert": "true",
-            "cache-control": "3600",
-        },
-    )
-    _require_storage_success(response, "upload the video")
+    await store_training_video_object(storage_path, content, content_type)
     return storage_path, await create_training_video_signed_url(storage_path)
 
 
