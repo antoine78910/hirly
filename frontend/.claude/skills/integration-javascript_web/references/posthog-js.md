@@ -44,7 +44,7 @@ Most browser applications should use the default exported singleton and call `po
 
 ```ts
 const instance = new PostHog()
-instance.init('<ph_project_api_key>', { api_host: 'https://us.i.posthog.com' })
+instance.init('<ph_project_api_key>', { api_host: 'https://t.tryhirly.com' })
 ```
 
 ---

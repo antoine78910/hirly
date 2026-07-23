@@ -56,7 +56,7 @@ PostHog AI
       (e.__SV = 1));
   })(document, window.posthog || []);
   posthog.init("<ph_project_token>", {
-    api_host: "https://us.i.posthog.com",
+    api_host: 'https://t.tryhirly.com',
     defaults: "2026-05-30",
   });
 </script>
@@ -134,7 +134,7 @@ PostHog AI
 ```javascript
 import posthog from 'posthog-js'
 posthog.init('<ph_project_token>', {
-  api_host: 'https://us.i.posthog.com',
+  api_host: 'https://t.tryhirly.com',
   defaults: '2026-05-30'
 })
 ```
@@ -200,7 +200,7 @@ import "posthog-js/dist/tracing-headers"
 import "posthog-js/dist/web-vitals"
 import posthog from 'posthog-js/dist/module.no-external'
 // All other posthog commands are the same as usual
-posthog.init('<ph_project_token>', { api_host: 'https://us.i.posthog.com', defaults: '2026-05-30' })
+posthog.init('<ph_project_token>', { api_host: 'https://t.tryhirly.com', defaults: '2026-05-30' })
 ```
 
 **Note:** You should ensure if using this option that you always import `posthog-js` from the same module, otherwise multiple bundles could get included. At this time `@posthog/react` does not work with any module import other than the default.
@@ -220,7 +220,7 @@ import {
     AnalyticsExtensions,
 } from 'posthog-js/dist/extension-bundles'
 posthog.init('<ph_project_token>', {
-    api_host: 'https://us.i.posthog.com',
+    api_host: 'https://t.tryhirly.com',
     defaults: '2026-05-30',
     __extensionClasses: {
         ...SessionReplayExtensions,
@@ -260,7 +260,7 @@ PostHog AI
 
 ```javascript
 if (!window.location.host.includes('127.0.0.1') && !window.location.host.includes('localhost')) {
-    posthog.init('<ph_project_token>', { api_host: 'https://us.i.posthog.com', defaults: '2026-05-30' })
+    posthog.init('<ph_project_token>', { api_host: 'https://t.tryhirly.com', defaults: '2026-05-30' })
 }
 ```
 
