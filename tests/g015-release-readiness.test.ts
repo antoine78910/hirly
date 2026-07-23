@@ -1,6 +1,6 @@
-import { createHmac } from "node:crypto";
 import { describe, expect, test } from "bun:test";
-import { mkdtemp, mkdir, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
+import { createHmac } from "node:crypto";
+import { mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import {
@@ -23,8 +23,8 @@ import {
   resolveManifestOutput,
   sanitizedEnvironment,
   sha256,
-  signShadowRunEvidenceRecord,
   signActivationEvidenceRecord,
+  signShadowRunEvidenceRecord,
   successfullyCreatedDatabaseUrls,
   validateSelectedManifest,
   verifyDeploymentDefaults,
@@ -39,17 +39,21 @@ const SHADOW_EVIDENCE_HMAC_KEY = "g015-test-only-ats-shadow-evidence-key-materia
 const ACTIVATION_ISSUER = "github-actions";
 const ACTIVATION_WORKFLOW_ID = "job-supply-release";
 const ACTIVATION_WORKFLOW_RUN_ID = "20260721.1";
+const ACTIVATION_EVIDENCE_NOW = "2026-07-21T01:00:00.000Z";
 let activationEvidenceSequence = 0;
 
 function evaluateProviderActivationPreflight(input: UnsafeValue) {
-  return evaluateProviderActivationPreflightRaw(input, {
-    evidenceRoot: input.evidenceRoot,
-    trustedAttestationKey: ACTIVATION_HMAC_KEY,
-    trustedShadowEvidenceKey: SHADOW_EVIDENCE_HMAC_KEY,
-    trustedAttestationIssuer: ACTIVATION_ISSUER,
-    trustedWorkflowId: ACTIVATION_WORKFLOW_ID,
-    trustedWorkflowRunId: ACTIVATION_WORKFLOW_RUN_ID,
-  });
+  return evaluateProviderActivationPreflightRaw(
+    { ...input, now: input.now ?? ACTIVATION_EVIDENCE_NOW },
+    {
+      evidenceRoot: input.evidenceRoot,
+      trustedAttestationKey: ACTIVATION_HMAC_KEY,
+      trustedShadowEvidenceKey: SHADOW_EVIDENCE_HMAC_KEY,
+      trustedAttestationIssuer: ACTIVATION_ISSUER,
+      trustedWorkflowId: ACTIVATION_WORKFLOW_ID,
+      trustedWorkflowRunId: ACTIVATION_WORKFLOW_RUN_ID,
+    },
+  );
 }
 
 describe("G015 release verification contract", () => {
@@ -1572,6 +1576,7 @@ async function passingManualPreflight(evidenceRoot: string, provider = "recruite
   });
   return {
     evidenceRoot,
+    now: ACTIVATION_EVIDENCE_NOW,
     provider,
     currentVerdict: "inventory_active",
     targetVerdict: "inventory_manual",

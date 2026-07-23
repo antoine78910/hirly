@@ -234,9 +234,10 @@ Before any external action:
 - `bun run build`
 - build the worker Docker image from the repository root
 - verify the image runs as a non-root user and contains no `.env` or credentials
-- configure `CONTRACTSPEC_NPM_TOKEN` as a sealed Railway build variable. The
-  Railway Docker builder injects it through the build-stage `ARG`; it must not
-  be present in the final image or runtime environment.
+- configure `CONTRACTSPEC_NPM_TOKEN` as a BuildKit secret for the worker image
+  build; block the release if the builder cannot mount that secret.
+  Never substitute a Docker build argument. The token must not be present in the
+  final image or runtime environment.
 - configure Railway `drainingSeconds` above `WORKER_SHUTDOWN_MS` so SIGKILL is
   not the normal drain path
 - run migration, lease-race, restart, scheduler, HTTP authorization, and shutdown
