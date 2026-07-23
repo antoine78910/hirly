@@ -63,7 +63,7 @@ describe("PR0-S scorecard boundary regressions", () => {
   test("is deterministic when evidence observations are reordered", () => {
     const forward = completeInput();
     const reversed = completeInput();
-    reversed.observations = [...reversed.observations].reverse();
+    reversed.observations = [...(reversed.observations ?? [])].reverse();
 
     expect(buildSupplyReadinessScorecard(reversed)).toEqual(buildSupplyReadinessScorecard(forward));
   });

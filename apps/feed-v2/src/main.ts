@@ -1,11 +1,11 @@
-import postgres from "postgres";
 import { FeedV2ReadService } from "@hirly/feed-v2";
+import postgres from "postgres";
 import {
+  createFeedV2Handler,
+  type FeedReadSqlClient,
   HmacFeedAssertionVerifier,
   PostgresFeedReadRepository,
-  createFeedV2Handler,
   parseFeedV2Config,
-  type FeedReadSqlClient,
 } from "./index";
 
 export function startFeedV2(env: Record<string, string | undefined> = Bun.env) {
@@ -27,6 +27,9 @@ export function startFeedV2(env: Record<string, string | undefined> = Bun.env) {
         },
       }),
     });
+  }
+  if (!config.databaseUrl || !config.assertionSecret) {
+    throw new Error("Feed v2 routing requires a database URL and assertion secret");
   }
   const sql = postgres(config.databaseUrl, {
     max: 5,

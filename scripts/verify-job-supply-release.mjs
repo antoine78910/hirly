@@ -1,19 +1,19 @@
 #!/usr/bin/env node
 
+import { spawnSync } from "node:child_process";
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import {
   existsSync,
   lstatSync,
   mkdirSync,
-  readFileSync,
   readdirSync,
+  readFileSync,
   realpathSync,
   renameSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
 import { dirname, relative, resolve, sep } from "node:path";
-import { spawnSync } from "node:child_process";
 
 const MANIFEST_VERSION = "job-supply-release-verification.v4";
 const RELEASE_ATTESTATION_VERSION = "job-supply-release-attestation.v1";
@@ -211,16 +211,29 @@ export function buildReleaseVerificationPlan(options = {}) {
   let dockerTag = null;
   if (includeDocker) {
     dockerTag = `hirly-worker:release-verification-${verificationId}`;
+    const dockerSecretEnvironment = process.env.CONTRACTSPEC_NPM_TOKEN
+      ? { CONTRACTSPEC_NPM_TOKEN: process.env.CONTRACTSPEC_NPM_TOKEN }
+      : {};
     commands.push(
-      command("worker-docker-build", "docker", [
-        "build",
-        "--pull=false",
-        "-f",
-        "apps/worker/Dockerfile",
-        "-t",
-        dockerTag,
-        ".",
-      ]),
+      command(
+        "worker-docker-build",
+        "docker",
+        [
+          "build",
+          "--pull=false",
+          "--secret",
+          "id=CONTRACTSPEC_NPM_TOKEN,env=CONTRACTSPEC_NPM_TOKEN",
+          "-f",
+          "apps/worker/Dockerfile",
+          "-t",
+          dockerTag,
+          ".",
+        ],
+        {
+          env: { DOCKER_BUILDKIT: "1", ...dockerSecretEnvironment },
+          redactEnvironment: true,
+        },
+      ),
       command("worker-docker-proof", "docker", ["image", "inspect", dockerTag], {
         captureOutput: true,
         evidenceKind: "docker-image",

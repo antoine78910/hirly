@@ -2,38 +2,38 @@ import { expect, test } from "bun:test";
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import {
-  createApplicationAgentEventRegistry,
-  fixtureEvidenceItems,
-  fixtureEvidenceSnapshot,
-  fixtureJobSnapshot,
-} from "@hirly/application-agent-contracts";
 import type {
   ApplicationDraft,
   ApplicationSubmissionPlan,
   JobSnapshot,
 } from "@hirly/application-agent-contracts";
 import {
+  createApplicationAgentEventRegistry,
+  fixtureEvidenceItems,
+  fixtureEvidenceSnapshot,
+  fixtureJobSnapshot,
+} from "@hirly/application-agent-contracts";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import {
   assertFixtureOnlyMode,
-  createApprovalPort,
+  controlledAtsSimulator,
   createApplicationAgentMcpServer,
   createApplicationAgentOperationRegistry,
+  createApprovalPort,
   createCandidateMcpOperationRegistry,
-  controlledAtsSimulator,
   createGuardedEventPublisher,
   fixtureAdapterRegistry,
   fixtureJobReader,
+  fixtureModel,
   incrementalIds,
   memoryEvidenceStore,
-  fixtureModel,
   memoryIdempotencyStore,
+  memoryNonceStore,
   memoryOutbox,
   memoryReceiptStore,
   memoryReviewStore,
   memorySafeLogger,
-  memoryNonceStore,
   memoryStore,
   sha256Hasher,
 } from "../src";
@@ -403,6 +403,7 @@ test("approval digest is characterized against the installed runtime-core serial
     entry.startsWith("@lssm-tech+lib.contracts-runtime-core@"),
   );
   expect(install).toBeDefined();
+  if (!install) throw new Error("contracts runtime-core installation is required for this test");
   const runtimeCore: UnsafeValue = await import(
     pathToFileURL(
       join(
@@ -666,11 +667,14 @@ test("MCP candidate tools use host identity and host-only approval receipts", as
   });
   expect(submitTool?.inputSchema.properties).not.toHaveProperty("approvalReceipt");
 
-  const call = async (operation: string, arguments_: Record<string, unknown>) =>
-    client.callTool({
-      name: operationNames.get(operation),
+  const call = async (operation: string, arguments_: Record<string, unknown>) => {
+    const name = operationNames.get(operation);
+    if (!name) throw new Error(`missing MCP operation: ${operation}`);
+    return client.callTool({
+      name,
       arguments: arguments_,
     }) as Promise<UnsafeValue>;
+  };
   const contractData = (result: UnsafeValue) => result.structuredContent.data.data;
   const analyzed = await call("hirlyJob.analyze", { fixtureId: "fixture_job-a" });
   const prepared = await call("hirlyApplication.prepare", {

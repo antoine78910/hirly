@@ -321,23 +321,24 @@ export async function producePaidCohortCoverage(
       (binding) => `${binding.sourceId}\u0000${binding.provider}\u0000${binding.tenantKey}`,
     ),
   );
+  const verifiedTrial: Array<CoverageCandidate & { sourceId: string; tenantKey: string }> = [];
   for (const candidate of trial) {
-    if (
-      candidate.sourceId === null ||
-      candidate.tenantKey === null ||
-      !bindingKeys.has(
-        `${candidate.sourceId}\u0000${candidate.provider}\u0000${candidate.tenantKey}`,
-      )
-    ) {
+    if (candidate.sourceId === null || candidate.tenantKey === null) {
+      refuse("trial candidate escaped its provider/source/tenant binding");
+    }
+    const sourceId = candidate.sourceId;
+    const tenantKey = candidate.tenantKey;
+    if (!bindingKeys.has(`${sourceId}\u0000${candidate.provider}\u0000${tenantKey}`)) {
       refuse("trial candidate escaped its provider/source/tenant binding");
     }
     if (Date.parse(candidate.freshAt) > Date.parse(input.generatedAt)) {
       refuse("trial candidate freshness timestamp is later than generatedAt");
     }
+    verifiedTrial.push({ ...candidate, sourceId, tenantKey });
   }
 
   const currentGroups = new Set(current.map((candidate) => candidate.canonicalGroupDigest));
-  const allCandidates = [...current, ...trial].filter(
+  const allCandidates = [...current, ...verifiedTrial].filter(
     (candidate) => Date.parse(candidate.freshAt) >= Date.parse(input.freshnessCutoff),
   );
   const sourceSet = [...new Set(allCandidates.map((candidate) => candidate.provider))].sort();
@@ -386,11 +387,11 @@ export async function producePaidCohortCoverage(
   const trialGroups = new Map<
     string,
     {
-      candidate: CoverageCandidate;
+      candidate: CoverageCandidate & { sourceId: string; tenantKey: string };
       affected: Set<string>;
     }
   >();
-  for (const candidate of trial) {
+  for (const candidate of verifiedTrial) {
     const key = `${candidate.sourceId}\u0000${candidate.canonicalGroupDigest}`;
     const entry = trialGroups.get(key) ?? { candidate, affected: new Set<string>() };
     for (const member of input.cohort) {

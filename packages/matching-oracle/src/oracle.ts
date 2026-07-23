@@ -215,7 +215,10 @@ export class MatchingOracle {
     for (const roleFamilyId of [...profile.roleFamilyIds].sort()) {
       for (const groupId of this.roleIndex.get(roleFamilyId) ?? []) coarseIds.add(groupId);
     }
-    const roleCandidates = [...coarseIds].map((groupId) => this.documents.get(groupId));
+    const roleCandidates = [...coarseIds].flatMap((groupId) => {
+      const document = this.documents.get(groupId);
+      return document ? [document] : [];
+    });
     const eligible = roleCandidates
       .filter((job) => isEligible(profile, job, actionGroups, now))
       .sort(

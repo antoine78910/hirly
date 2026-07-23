@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import type { JobProjectionLease, JobProjectionSourceRecord } from "@hirly/db";
 import type { JobSearchDocumentPersistenceRow } from "@hirly/contracts";
+import type { JobProjectionLease, JobProjectionSourceRecord } from "@hirly/db";
 import {
   JobProjectionConsumer,
   type JobProjectionStore,
@@ -21,7 +21,7 @@ const lease: JobProjectionLease = {
   maxAttempts: 8,
 };
 
-const source: JobProjectionSourceRecord = {
+const source = {
   authoritativeVersion: "7",
   canonicalGroupId: lease.entityId,
   preferredJobId: "job_0123456789abcdef",
@@ -48,7 +48,7 @@ const source: JobProjectionSourceRecord = {
   sourceEligible: true,
   policyEligible: true,
   data: {},
-};
+} satisfies JobProjectionSourceRecord;
 
 const document = {
   schema_version: "hirly.matching.v1",

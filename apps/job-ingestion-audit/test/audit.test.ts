@@ -1,32 +1,32 @@
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 import {
+  type CoverageManifest,
   computePaidUserCoverageBaseline,
   evaluatePartition,
+  type FranceTravailCensusManifestInput,
   freezeFranceTravailCensusManifest,
   materializeCoverage,
-  reconcileFunnel,
+  type PartitionFact,
   reconcileFranceTravailPartition,
+  reconcileFunnel,
   stableDigest,
-  validatePaginationFixtures,
   validateCoverageManifest,
   validateFranceTravailCensusManifest,
+  validatePaginationFixtures,
   validateRows,
-  type FranceTravailCensusManifestInput,
-  type PartitionFact,
-  type CoverageManifest,
 } from "../src/audit";
 import {
   ExternalDependencyBlockedError,
   parseContentRange,
   runFranceTravailLiveCensus,
 } from "../src/france-travail-census";
+import { buildFranceTravailCensusManifest } from "../src/observability";
 import {
-  JOB_SUPPLY_OBSERVABILITY_QUERIES,
   assertReadOnlyObservabilityQueries,
+  JOB_SUPPLY_OBSERVABILITY_QUERIES,
   runJobSupplyObservabilityQueries,
 } from "../src/queries";
-import { readFileSync } from "node:fs";
-import { buildFranceTravailCensusManifest } from "../src/observability";
 
 const partitions = JSON.parse(
   readFileSync(new URL("../fixtures/pagination-golden.json", import.meta.url), "utf8"),
@@ -147,6 +147,7 @@ describe("job-ingestion audit invariants", () => {
       partition.id.endsWith("permanent-page-failure"),
     );
     expect(permanentFailure).toBeDefined();
+    if (!permanentFailure) throw new Error("permanent page failure fixture is required");
     expect(evaluatePartition(permanentFailure)).toContain("permanent_page_failure");
   });
 
@@ -485,6 +486,7 @@ describe("job-ingestion audit invariants", () => {
       fetcher: async (input) => {
         const url = new URL(String(input));
         const range = url.searchParams.get("range");
+        if (!range) throw new Error("range query parameter is required");
         ranges.push(range);
         return range === "0-1"
           ? Response.json(

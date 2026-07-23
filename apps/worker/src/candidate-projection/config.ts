@@ -32,23 +32,43 @@ const schema = z
     }
   });
 
-export interface CandidateProjectionRuntimeConfig {
-  enabled: boolean;
-  primaryDatabaseUrl?: string;
-  pollMs: number;
-  batchSize: number;
-  leaseSeconds: number;
-}
+export type CandidateProjectionRuntimeConfig =
+  | {
+      enabled: false;
+      primaryDatabaseUrl: undefined;
+      pollMs: number;
+      batchSize: number;
+      leaseSeconds: number;
+    }
+  | {
+      enabled: true;
+      primaryDatabaseUrl: string;
+      pollMs: number;
+      batchSize: number;
+      leaseSeconds: number;
+    };
 
 export function parseCandidateProjectionRuntimeConfig(
   environment: Record<string, string | undefined>,
 ): CandidateProjectionRuntimeConfig {
   const value = schema.parse(environment);
-  return {
-    enabled: value.CANDIDATE_PROJECTION_RELAY_ENABLED === "true",
-    primaryDatabaseUrl: value.CANDIDATE_PROJECTION_PRIMARY_DATABASE_URL,
+  const shared = {
     pollMs: value.CANDIDATE_PROJECTION_POLL_MS,
     batchSize: value.CANDIDATE_PROJECTION_BATCH_SIZE,
     leaseSeconds: value.CANDIDATE_PROJECTION_LEASE_SECONDS,
+  };
+  if (value.CANDIDATE_PROJECTION_RELAY_ENABLED === "true") {
+    const primaryDatabaseUrl = value.CANDIDATE_PROJECTION_PRIMARY_DATABASE_URL;
+    if (!primaryDatabaseUrl) {
+      throw new Error(
+        "primary database URL is required when candidate projection relay is enabled",
+      );
+    }
+    return { enabled: true, primaryDatabaseUrl, ...shared };
+  }
+  return {
+    enabled: false,
+    primaryDatabaseUrl: undefined,
+    ...shared,
   };
 }

@@ -111,7 +111,7 @@ describe("PR0-S supply readiness", () => {
   test("keeps the aggregate scorecard and digest stable when observations reorder", () => {
     const forward = completeInput();
     const reversed = completeInput();
-    reversed.observations = [...reversed.observations].reverse();
+    reversed.observations = [...(reversed.observations ?? [])].reverse();
     expect(buildSupplyReadinessScorecard(reversed)).toEqual(buildSupplyReadinessScorecard(forward));
   });
 

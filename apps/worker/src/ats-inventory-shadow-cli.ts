@@ -5,13 +5,13 @@ import { z } from "zod";
 import {
   assertCompleteShadowSnapshotProven,
   buildAtsRepeatedShadowScorecard,
-  productionShadowProviderSchema,
   type ProductionShadowProvider,
+  productionShadowProviderSchema,
 } from "./providers/ats-inventory-readiness";
+import type { AtsTrialFetch } from "./providers/ats-trial-transport";
 import { createApprovedGreenhouseShadowTransport } from "./providers/greenhouse";
 import { createApprovedNicokaShadowTransport } from "./providers/nicoka";
 import { createApprovedRecruiteeShadowTransport } from "./providers/recruitee";
-import type { AtsTrialFetch } from "./providers/ats-trial-transport";
 
 const usage =
   "usage: ats-inventory-shadow <run|seal> --provider <greenhouse|recruitee|nicoka> --tenant <exact-tenant> --country FR --policy <path> --output <path> --evidence-root <path> --live | seal --run <path> --run <path> --output <path> --evidence-root <path>";
@@ -73,14 +73,17 @@ export function parseAtsInventoryShadowArgs(args: string[]): AtsInventoryShadowC
   if (type === "run") {
     const provider = productionShadowProviderSchema.safeParse(one("--provider"));
     const tenantId = one("--tenant");
+    const policyPath = one("--policy");
+    const outputPath = one("--output");
+    const evidenceRootPath = one("--evidence-root");
     if (
       !provider.success ||
       !tenantId ||
       /[?*[\]{}]/.test(tenantId) ||
       one("--country") !== "FR" ||
-      !one("--policy") ||
-      !one("--output") ||
-      !one("--evidence-root") ||
+      !policyPath ||
+      !outputPath ||
+      !evidenceRootPath ||
       one("--live") !== "true" ||
       values.size !== 7
     ) {
@@ -93,20 +96,30 @@ export function parseAtsInventoryShadowArgs(args: string[]): AtsInventoryShadowC
       provider: provider.data,
       tenantId,
       countryCode: "FR",
-      policyPath: one("--policy"),
-      outputPath: one("--output"),
-      evidenceRootPath: one("--evidence-root"),
+      policyPath,
+      outputPath,
+      evidenceRootPath,
     };
   }
   const runs = values.get("--run") ?? [];
-  if (runs.length !== 2 || !one("--output") || !one("--evidence-root") || values.size !== 3) {
+  const [firstRunPath, secondRunPath] = runs;
+  const outputPath = one("--output");
+  const evidenceRootPath = one("--evidence-root");
+  if (
+    runs.length !== 2 ||
+    !firstRunPath ||
+    !secondRunPath ||
+    !outputPath ||
+    !evidenceRootPath ||
+    values.size !== 3
+  ) {
     throw new Error(`${usage}; seal requires exactly two --run paths, output, and evidence root`);
   }
   return {
     type,
-    runPaths: [runs[0], runs[1]],
-    outputPath: one("--output"),
-    evidenceRootPath: one("--evidence-root"),
+    runPaths: [firstRunPath, secondRunPath],
+    outputPath,
+    evidenceRootPath,
   };
 }
 

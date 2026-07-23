@@ -3,14 +3,19 @@ import { join } from "node:path";
 import { createDatabase } from "@hirly/db";
 import {
   coverageDigest,
-  producePaidCohortCoverage,
   type PaidCohortCoverageInput,
+  producePaidCohortCoverage,
 } from "../src/paid-cohort-coverage";
 import { PostgresPaidCohortCoverageStore } from "../src/paid-cohort-coverage-store";
 
 const databaseUrl = process.env.G016_COVERAGE_DATABASE_URL;
 const repoRoot = join(import.meta.dir, "../../..");
 const runIntegration = databaseUrl ? test : test.skip;
+
+function requiredDatabaseUrl(): string {
+  if (!databaseUrl) throw new Error("G016_COVERAGE_DATABASE_URL is required");
+  return databaseUrl;
+}
 
 async function psql(args: string[]): Promise<string> {
   if (!databaseUrl) throw new Error("G016_COVERAGE_DATABASE_URL is required");
@@ -225,7 +230,7 @@ describe("G016 paid cohort coverage PostgreSQL producer", () => {
   });
 
   runIntegration("persists once, replays idempotently, and never mutates jobs", async () => {
-    const database = createDatabase(databaseUrl, { max: 2 });
+    const database = createDatabase(requiredDatabaseUrl(), { max: 2 });
     try {
       const store = new PostgresPaidCohortCoverageStore(database);
       const before = await psql(["-A", "-t", "-q", "-c", "SELECT count(*) FROM public.jobs"]);
