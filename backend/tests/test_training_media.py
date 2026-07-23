@@ -1,15 +1,45 @@
 """Tests for training video uploads."""
 
+import asyncio
 import io
 
 import pytest
 from fastapi import HTTPException, UploadFile
 
 from training_media import (
+    apply_upload_metadata,
     media_public_path,
     merge_preserved_videos,
     validate_video_upload,
 )
+from training_service import (
+    SEED_COURSE_ID,
+    SEED_CREATOR_ID,
+    _normalize_lang,
+    sync_training_locale_content,
+)
+
+
+class _Collection:
+    def __init__(self, document):
+        self.document = document
+        self.update = None
+
+    async def find_one(self, *_args, **_kwargs):
+        return self.document
+
+    async def update_one(self, _filter, update):
+        self.update = update
+
+
+class _LocaleSyncDb:
+    def __init__(self):
+        self.training_courses = _Collection(
+            {"course_id": SEED_COURSE_ID, "i18n": {"de": {"title": "Sprechende Köpfe"}}},
+        )
+        self.training_creators = _Collection(
+            {"creator_id": SEED_CREATOR_ID, "i18n": {"de": {"display_name": "Hirly Akademie"}}},
+        )
 
 
 def test_media_public_path_module_level():
@@ -20,6 +50,30 @@ def test_media_public_path_module_level():
 def test_media_public_path_section():
     path = media_public_path("course_job_search_mastery", "mod_warm_up", "sec_wu_sop", "fr")
     assert path.endswith("/mod_warm_up/sec_wu_sop/fr")
+
+
+@pytest.mark.parametrize("locale", ["de", "es", "it", "de-DE", "es_ES", "it-IT"])
+def test_media_public_path_supports_new_training_locales(locale):
+    path = media_public_path("course", "mod", "sec_a", locale)
+    assert path.endswith(f"/{locale[:2].lower()}")
+
+
+def test_media_public_path_rejects_unsupported_locale():
+    with pytest.raises(HTTPException) as exc:
+        media_public_path("course", "mod", "sec_a", "pt")
+    assert exc.value.status_code == 400
+
+
+@pytest.mark.parametrize("locale", ["en", "fr-FR", "de-DE", "es_ES", "it"])
+def test_training_service_keeps_supported_locale_for_localized_content(locale):
+    assert _normalize_lang(locale) == locale[:2].lower()
+
+
+def test_training_locale_sync_preserves_added_locale_packs():
+    db = _LocaleSyncDb()
+    asyncio.run(sync_training_locale_content(db))
+    assert db.training_courses.update["$set"]["i18n"]["de"]["title"] == "Sprechende Köpfe"
+    assert db.training_creators.update["$set"]["i18n"]["de"]["display_name"] == "Hirly Akademie"
 
 
 def test_validate_video_upload_accepts_mp4():
@@ -64,3 +118,31 @@ def test_merge_preserved_videos_keeps_uploaded_urls():
     merged = merge_preserved_videos(seed, existing)
     assert merged["en"]["video_url"].endswith("/en")
     assert merged["en"]["sections"][0]["video_url"].endswith("/sec_a/en")
+
+
+def test_upload_metadata_uses_the_requested_new_locale():
+    updated = apply_upload_metadata(
+        {},
+        "sec_a",
+        "de-DE",
+        "/api/training/media/course/mod/sec_a/de",
+        "lesson-de.mp4",
+    )
+    section = updated["de"]["sections"][0]
+    assert section["video_url"].endswith("/de")
+    assert section["video_filename"] == "lesson-de.mp4"
+
+
+def test_merge_preserved_videos_keeps_new_locale_video_only_sections():
+    seed = {"en": {"title": "Warm Up", "sections": []}, "fr": {"title": "Chauffer", "sections": []}}
+    existing = {
+        "i18n": {
+            "it": {
+                "title": "Riscaldamento",
+                "sections": [{"section_id": "sec_a", "video_url": "/api/training/media/course/mod/sec_a/it"}],
+            },
+        },
+    }
+    merged = merge_preserved_videos(seed, existing)
+    assert merged["it"]["title"] == "Riscaldamento"
+    assert merged["it"]["sections"][0]["video_url"].endswith("/it")

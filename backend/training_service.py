@@ -15,9 +15,11 @@ from training_module_content import (
 )
 from training_quizzes import get_quiz, quiz_id_for_module, score_quiz
 from training_media import (
+    TRAINING_VIDEO_LOCALES,
     VIDEO_SLOTS,
     apply_upload_metadata,
     merge_preserved_videos,
+    normalize_training_video_locale,
     save_training_video,
     slot_video_meta,
 )
@@ -190,7 +192,9 @@ MODULE_SEED = [
 
 
 def _normalize_lang(lang: Optional[str]) -> str:
-    return "fr" if (lang or "").lower().startswith("fr") else "en"
+    raw = (lang or "").strip().lower().replace("_", "-")
+    locale = raw.split("-", 1)[0]
+    return locale if locale in TRAINING_VIDEO_LOCALES else "en"
 
 
 def _localize_fields(doc: Dict[str, Any], lang: str, fields: List[str]) -> Dict[str, Any]:
@@ -642,8 +646,7 @@ async def admin_training_videos(db, course_id: Optional[str] = None) -> Dict[str
             "module_id": slot["module_id"],
             "section_id": slot.get("section_id"),
             "label": slot.get("label") or slot["module_id"],
-            "en": slot_video_meta(mod, slot, "en"),
-            "fr": slot_video_meta(mod, slot, "fr"),
+            **{locale: slot_video_meta(mod, slot, locale) for locale in TRAINING_VIDEO_LOCALES},
         })
     return {"course_id": course_id, "slots": slots}
 
@@ -668,7 +671,7 @@ async def upload_training_video(
         video_url,
         file.filename or "video",
     )
-    locale = _normalize_lang(lang)
+    locale = normalize_training_video_locale(lang)
     pack = i18n[locale]
     updates: Dict[str, Any] = {
         "i18n": i18n,
@@ -809,7 +812,8 @@ async def sync_training_locale_content(db) -> None:
             await db.training_courses.update_one(
                 {"course_id": SEED_COURSE_ID},
                 {"$set": {
-                    "i18n": COURSE_I18N,
+                    # Keep locale packs added outside the EN/FR seed fixture.
+                    "i18n": {**(course.get("i18n") or {}), **COURSE_I18N},
                     **COURSE_I18N["en"],
                 }},
             )
@@ -818,7 +822,7 @@ async def sync_training_locale_content(db) -> None:
             await db.training_creators.update_one(
                 {"creator_id": SEED_CREATOR_ID},
                 {"$set": {
-                    "i18n": CREATOR_I18N,
+                    "i18n": {**(creator.get("i18n") or {}), **CREATOR_I18N},
                     **CREATOR_I18N["en"],
                 }},
             )
