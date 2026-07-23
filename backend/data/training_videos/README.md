@@ -11,20 +11,30 @@ training_videos/
       _module/          ← module-level video (no section)
         fr.mp4          ← French upload
         en.mp4          ← English upload
+        de.mp4          ← German upload
+        es.mp4          ← Spanish upload
+        it.mp4          ← Italian upload
       {section_id}/     ← section-level video
         fr.mp4
         en.mp4
+        de.mp4
+        es.mp4
+        it.mp4
 ```
 
 ## Public URL (no file extension)
 
 ```
-/api/training/media/course_job_search_mastery/{module_id}/{section_or__module}/{fr|en}
+/api/training/media/course_job_search_mastery/{module_id}/{section_or__module}/{en|fr|de|es|it}
 ```
 
 ## Admin upload
 
-App: `/admin/training` → pick slot → Upload (EN or FR).
+App: `/admin/training` → **Course videos** → pick the lesson slot and language → choose the video → **Upload video**.
+
+The uploader accepts MP4, WebM, MOV, or M4V files up to 500 MB and replaces the
+previous file for the selected slot and language. It sends large uploads directly
+to the API, rather than through the web-app proxy.
 
 API: `POST /admin/training/videos` with `course_id`, `module_id`, optional `section_id`, `lang`, and `file`.
 

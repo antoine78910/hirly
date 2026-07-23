@@ -1,20 +1,27 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Copy, Link2, Loader2, RefreshCw, Sparkles } from "lucide-react";
 import { createColumnHelper } from "@tanstack/react-table";
+import { Copy, FileVideo, Link2, Loader2, RefreshCw, Sparkles, Upload } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { api } from "../lib/api";
+import AdminDataTable from "../components/admin/AdminDataTable";
+import AdminShell, { AdminAccessDenied } from "../components/admin/AdminShell";
+import { Button } from "../components/ui/button";
 import { adminApiErrorMessage } from "../lib/adminApi";
-import { buildInviteUrl } from "../lib/creatorInvite";
 import {
   formatInviteClicked,
   formatInviteConnectedAccount,
   formatInviteStatus,
 } from "../lib/adminInviteTracking";
-import { Button } from "../components/ui/button";
-import AdminShell, { AdminAccessDenied } from "../components/admin/AdminShell";
-import AdminDataTable from "../components/admin/AdminDataTable";
+import { api, getDirectApiBase } from "../lib/api";
+import { buildInviteUrl } from "../lib/creatorInvite";
 
 const COURSE_ID = "course_job_search_mastery";
+const TRAINING_VIDEO_LANGUAGES = [
+  { code: "en", label: "English" },
+  { code: "fr", label: "French" },
+  { code: "de", label: "German" },
+  { code: "es", label: "Spanish" },
+  { code: "it", label: "Italian" },
+];
 
 const columnHelper = createColumnHelper();
 
@@ -64,6 +71,216 @@ async function copyText(label, value) {
   }
 }
 
+function videoSlotKey(slot) {
+  return `${slot.module_id}:${slot.section_id || "_module"}`;
+}
+
+function uploadState(video) {
+  if (!video?.has_video) return <span className="text-zinc-400">—</span>;
+  return (
+    <div className="min-w-0">
+      <p
+        className="truncate text-sm font-medium text-emerald-700"
+        title={video.video_filename || "Uploaded"}
+      >
+        {video.video_filename || "Uploaded"}
+      </p>
+      {video.video_uploaded_at ? (
+        <p className="text-xs text-zinc-500">{fmtDate(video.video_uploaded_at)}</p>
+      ) : null}
+    </div>
+  );
+}
+
+function TrainingVideosPanel() {
+  const fileInputRef = useRef(null);
+  const [slots, setSlots] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState("");
+  const [selectedSlotKey, setSelectedSlotKey] = useState("");
+  const [language, setLanguage] = useState("en");
+  const [file, setFile] = useState(null);
+
+  const loadVideos = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const { data } = await api.get("/admin/training/videos", {
+        params: { course_id: COURSE_ID },
+      });
+      const nextSlots = data?.slots || [];
+      setSlots(nextSlots);
+      setSelectedSlotKey((current) => current || (nextSlots[0] ? videoSlotKey(nextSlots[0]) : ""));
+    } catch (err) {
+      setSlots([]);
+      setError(adminApiErrorMessage(err, "Could not load course videos"));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadVideos();
+  }, [loadVideos]);
+
+  const selectedSlot = useMemo(
+    () => slots.find((slot) => videoSlotKey(slot) === selectedSlotKey) || null,
+    [selectedSlotKey, slots],
+  );
+
+  const videoColumns = useMemo(
+    () => [
+      columnHelper.accessor("label", {
+        header: "Lesson slot",
+        cell: (info) => <span className="font-medium text-zinc-800">{info.getValue()}</span>,
+      }),
+      ...TRAINING_VIDEO_LANGUAGES.map(({ code, label }) =>
+        columnHelper.accessor((row) => row[code], {
+          id: code,
+          header: label,
+          cell: (info) => uploadState(info.getValue()),
+          enableSorting: false,
+        }),
+      ),
+    ],
+    [],
+  );
+
+  const uploadVideo = async (event) => {
+    event.preventDefault();
+    if (!selectedSlot || !file || uploading) return;
+
+    setUploading(true);
+    setError("");
+    try {
+      const form = new FormData();
+      form.append("course_id", COURSE_ID);
+      form.append("module_id", selectedSlot.module_id);
+      if (selectedSlot.section_id) form.append("section_id", selectedSlot.section_id);
+      form.append("lang", language);
+      form.append("file", file);
+
+      // Large video files bypass the web-app proxy, which has stricter body and timeout limits.
+      const base = (getDirectApiBase() || "").replace(/\/+$/, "");
+      const url = base ? `${base}/admin/training/videos` : "/admin/training/videos";
+      await api.post(url, form, { timeout: 600000 });
+
+      toast.success(
+        `${TRAINING_VIDEO_LANGUAGES.find((item) => item.code === language)?.label} video uploaded`,
+      );
+      setFile(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      await loadVideos();
+    } catch (err) {
+      const message = adminApiErrorMessage(err, "Could not upload course video");
+      setError(message);
+      toast.error(message);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <section className="rounded-xl border border-zinc-200 bg-white shadow-sm">
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-zinc-100 px-5 py-4">
+        <div className="flex items-center gap-2">
+          <FileVideo className="h-5 w-5 text-violet-600" />
+          <div>
+            <h2 className="font-display text-lg font-bold">Course videos</h2>
+            <p className="text-sm text-zinc-500">
+              Upload the localized lesson video for each training slot. A new upload replaces that
+              slot’s previous language version.
+            </p>
+          </div>
+        </div>
+        <Button variant="outline" size="sm" onClick={loadVideos} disabled={loading || uploading}>
+          <RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+          Refresh videos
+        </Button>
+      </div>
+
+      <div className="space-y-5 px-5 py-4">
+        <form
+          onSubmit={uploadVideo}
+          className="grid gap-3 rounded-lg bg-zinc-50 p-4 lg:grid-cols-[minmax(0,1fr)_180px_minmax(0,1fr)_auto] lg:items-end"
+        >
+          <label className="block text-xs font-semibold uppercase tracking-wide text-zinc-500">
+            Lesson slot
+            <select
+              value={selectedSlotKey}
+              onChange={(event) => setSelectedSlotKey(event.target.value)}
+              disabled={loading || uploading || slots.length === 0}
+              className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-normal text-zinc-900"
+            >
+              {slots.map((slot) => (
+                <option key={videoSlotKey(slot)} value={videoSlotKey(slot)}>
+                  {slot.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="block text-xs font-semibold uppercase tracking-wide text-zinc-500">
+            Language
+            <select
+              value={language}
+              onChange={(event) => setLanguage(event.target.value)}
+              disabled={uploading}
+              className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-normal text-zinc-900"
+            >
+              {TRAINING_VIDEO_LANGUAGES.map(({ code, label }) => (
+                <option key={code} value={code}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="block text-xs font-semibold uppercase tracking-wide text-zinc-500">
+            Video file
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="video/mp4,video/webm,video/quicktime,video/x-m4v,.mp4,.webm,.mov,.m4v"
+              onChange={(event) => setFile(event.target.files?.[0] || null)}
+              disabled={uploading}
+              className="mt-1 block w-full text-sm font-normal text-zinc-700 file:mr-3 file:rounded-md file:border-0 file:bg-violet-100 file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-violet-800 hover:file:bg-violet-200"
+            />
+            <span className="mt-1 block normal-case tracking-normal text-zinc-400">
+              MP4, WebM, MOV, or M4V — max 500 MB
+            </span>
+          </label>
+
+          <Button type="submit" disabled={!selectedSlot || !file || uploading}>
+            {uploading ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Upload className="mr-2 h-4 w-4" />
+            )}
+            Upload video
+          </Button>
+        </form>
+
+        {error ? (
+          <p className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            {error}
+          </p>
+        ) : null}
+
+        <AdminDataTable
+          columns={videoColumns}
+          data={slots}
+          loading={loading}
+          getRowId={videoSlotKey}
+          searchPlaceholder="Search lesson slots…"
+          emptyMessage="No course video slots found."
+        />
+      </div>
+    </section>
+  );
+}
+
 function TrainingInvitesPanel() {
   const [invites, setInvites] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -78,7 +295,7 @@ function TrainingInvitesPanel() {
       const { data } = await api.get("/admin/training/invites");
       const rows = data?.invites || [];
       setInvites(rows);
-      if (!latestInvite && rows[0]) setLatestInvite(rows[0]);
+      setLatestInvite((current) => current || rows[0] || null);
     } catch (err) {
       if (err?.response?.status !== 403) {
         toast.error(adminApiErrorMessage(err, "Could not load training invites"));
@@ -86,7 +303,7 @@ function TrainingInvitesPanel() {
     } finally {
       setLoading(false);
     }
-  }, [latestInvite]);
+  }, []);
 
   useEffect(() => {
     loadInvites();
@@ -168,13 +385,13 @@ function TrainingInvitesPanel() {
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
             <label
+              htmlFor="training-invite-label"
               className="text-xs font-semibold uppercase tracking-wide text-zinc-500"
-              htmlFor="creator-label"
             >
               Label (optional)
             </label>
             <input
-              id="creator-label"
+              id="training-invite-label"
               value={label}
               onChange={(e) => setLabel(e.target.value)}
               placeholder="e.g. March cohort — Lisa"
@@ -183,13 +400,13 @@ function TrainingInvitesPanel() {
           </div>
           <div>
             <label
+              htmlFor="training-invite-email-hint"
               className="text-xs font-semibold uppercase tracking-wide text-zinc-500"
-              htmlFor="creator-email-hint"
             >
               Email hint (optional)
             </label>
             <input
-              id="creator-email-hint"
+              id="training-invite-email-hint"
               type="email"
               value={emailHint}
               onChange={(e) => setEmailHint(e.target.value)}
@@ -288,7 +505,7 @@ export default function AdminTraining() {
   }, [load]);
 
   const summary = data?.summary || {};
-  const moduleStats = data?.module_stats || [];
+  const moduleStats = useMemo(() => data?.module_stats || [], [data?.module_stats]);
   const learners = data?.learners || [];
 
   const moduleTitleById = useMemo(
@@ -466,6 +683,7 @@ export default function AdminTraining() {
 
       {!accessDenied && !loading ? (
         <div className="space-y-8">
+          <TrainingVideosPanel />
           <TrainingInvitesPanel />
 
           {analyticsError ? (

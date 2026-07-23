@@ -10,7 +10,13 @@ export default function TrainingLayout({ children }) {
     return <TrainingLocaleUnavailable />;
   }
 
-  if (!hasTrainingContent(locale)) return <TrainingLocaleUnavailable />;
+  if (!hasTrainingContent(locale)) {
+    return (
+      <TrainingLocaleProvider locale={locale}>
+        <TrainingLocaleUnavailable />
+      </TrainingLocaleProvider>
+    );
+  }
 
   return <TrainingLocaleProvider locale={locale}>{children}</TrainingLocaleProvider>;
 }

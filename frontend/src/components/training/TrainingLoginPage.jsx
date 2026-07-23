@@ -1,13 +1,17 @@
-import { useState } from "react";
 import { GraduationCap } from "lucide-react";
-import { api, setSessionToken } from "../../lib/api";
+import { useState } from "react";
 import { useAuth } from "../../context/AuthContext";
+import { useTrainingLocale } from "../../context/TrainingLocaleContext";
+import { api, setSessionToken } from "../../lib/api";
 import { startGoogleLogin, supabaseSessionPayload } from "../../lib/auth";
-import { supabase, supabaseConfigured } from "../../lib/supabase";
 import { setDemoAccountFromUser } from "../../lib/demoAccount";
+import { supabase, supabaseConfigured } from "../../lib/supabase";
+import { trainingPath } from "../../lib/trainingRoutes";
 import { TrainingAuthForm, TrainingAuthPopup } from "./TrainingAuthPopup";
+import TrainingLanguageToggle from "./TrainingLanguageToggle";
 
 export default function TrainingLoginPage() {
+  const { lang, t } = useTrainingLocale();
   const { setUser, setHasProfile, setHasPreferences, setHasTrainingAccess, setIsTrainingCreator } =
     useAuth();
   const [email, setEmail] = useState("");
@@ -16,18 +20,16 @@ export default function TrainingLoginPage() {
   const [authNotice, setAuthNotice] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  const RETURN_PATH = "/fr/training";
+  const returnPath = trainingPath(lang);
 
   const onGoogleClick = () => {
-    startGoogleLogin(RETURN_PATH, email.trim() ? { login_hint: email.trim() } : undefined);
+    startGoogleLogin(returnPath, email.trim() ? { login_hint: email.trim() } : undefined);
   };
 
   const establishSession = async (session) => {
     const accessToken = session?.access_token;
     if (!accessToken) {
-      setAuthNotice(
-        "Vérifiez votre boîte mail pour confirmer votre compte, puis reconnectez-vous.",
-      );
+      setAuthNotice(t("auth.confirmEmail"));
       return null;
     }
     const { data } = await api.post("/auth/supabase-session", supabaseSessionPayload(session));
@@ -47,11 +49,11 @@ export default function TrainingLoginPage() {
     setAuthNotice("");
 
     if (!supabaseConfigured || !supabase) {
-      setAuthError("L'authentification par e-mail n'est pas configurée.");
+      setAuthError(t("auth.emailNotConfigured"));
       return;
     }
     if (!email.trim() || password.length < 6) {
-      setAuthError("Saisissez un e-mail et un mot de passe d'au moins 6 caractères.");
+      setAuthError(t("auth.credentialsRequired"));
       return;
     }
 
@@ -65,12 +67,10 @@ export default function TrainingLoginPage() {
       const sessionUser = await establishSession(data?.session);
       if (!sessionUser) return;
       if (!sessionUser.training_access && !data.has_training_access) {
-        setAuthError("Ce compte n'a pas accès à la formation. Utilisez votre lien d'invitation.");
+        setAuthError(t("auth.accessRequired"));
       }
     } catch (err) {
-      setAuthError(
-        err?.response?.data?.detail || err?.message || "Identifiants incorrects. Réessayez.",
-      );
+      setAuthError(err?.response?.data?.detail || err?.message || t("auth.invalidCredentials"));
     } finally {
       setSubmitting(false);
     }
@@ -81,26 +81,26 @@ export default function TrainingLoginPage() {
       testId="training-login-page"
       aside={
         <>
+          <TrainingLanguageToggle className="mb-8" />
           <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15">
             <GraduationCap className="h-6 w-6" />
           </div>
           <h1 className="font-display text-2xl font-black tracking-tight sm:text-3xl">
-            Accéder à la formation
+            {t("auth.title")}
           </h1>
           <p className="mt-3 text-sm leading-relaxed text-violet-100/95 sm:text-base">
-            Connecte-toi avec le compte que tu as créé lors de ton inscription. Tu as besoin
-            d&apos;un lien d&apos;invitation pour rejoindre la formation.
+            {t("auth.description")}
           </p>
           <div className="mt-6 rounded-2xl border border-white/20 bg-white/10 px-4 py-3 text-sm leading-relaxed text-violet-50">
-            <span className="font-semibold text-white">Pas encore de compte ?</span> Ouvre le lien
-            d&apos;invitation que tu as reçu pour créer ton compte et activer l&apos;accès.
+            <span className="font-semibold text-white">{t("auth.noAccount")}</span>{" "}
+            {t("auth.noAccountHelp")}
           </div>
         </>
       }
     >
       <TrainingAuthForm
-        title="Connexion"
-        subtitle="Connecte-toi pour accéder à ta formation."
+        title={t("auth.signIn")}
+        subtitle={t("auth.description")}
         authMode="login"
         email={email}
         setEmail={setEmail}
@@ -115,6 +115,18 @@ export default function TrainingLoginPage() {
         emailTestId="training-login-email"
         passwordTestId="training-login-password"
         submitTestId="training-login-submit"
+        labels={{
+          signIn: t("auth.signIn"),
+          signUp: t("auth.signUp"),
+          google: t("auth.google"),
+          or: t("auth.or"),
+          email: t("auth.email"),
+          emailPlaceholder: t("auth.emailPlaceholder"),
+          password: t("auth.password"),
+          loading: t("auth.loading"),
+          noAccount: t("auth.noAccount"),
+          alreadyHaveAccount: t("auth.alreadyHaveAccount"),
+        }}
       />
     </TrainingAuthPopup>
   );

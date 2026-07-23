@@ -1,4 +1,7 @@
 import { BookOpen, GraduationCap, ShieldAlert, Sparkles } from "lucide-react";
+import { useTrainingLocale } from "../../context/TrainingLocaleContext";
+import { BRAND } from "../../lib/brand";
+import { Button } from "../ui/button";
 import {
   Dialog,
   DialogContent,
@@ -7,10 +10,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../ui/dialog";
-import { Button } from "../ui/button";
-import { BRAND } from "../../lib/brand";
 
 export default function TrainingWelcomeModal({ open, onOpenChange, onDismiss }) {
+  const { t } = useTrainingLocale();
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
@@ -24,11 +27,10 @@ export default function TrainingWelcomeModal({ open, onOpenChange, onDismiss }) 
           </div>
           <DialogHeader className="space-y-2 text-center sm:text-center">
             <DialogTitle className="font-display text-2xl font-black tracking-tight text-white">
-              Bienvenue dans la formation
+              {t("welcome.title")}
             </DialogTitle>
             <DialogDescription className="text-sm leading-relaxed text-violet-100">
-              Ton accès au programme créateur {BRAND.NAME} est activé. Tu peux commencer le cours
-              dès maintenant.
+              {t("welcome.description", { brand: BRAND.NAME })}
             </DialogDescription>
           </DialogHeader>
         </div>
@@ -37,28 +39,22 @@ export default function TrainingWelcomeModal({ open, onOpenChange, onDismiss }) 
           <div className="flex gap-3 rounded-2xl border border-violet-100 bg-violet-50/60 px-4 py-3">
             <BookOpen className="mt-0.5 h-5 w-5 shrink-0 text-violet-600" />
             <div className="text-sm text-zinc-700">
-              <p className="font-semibold text-zinc-900">Job Search Mastery</p>
-              <p className="mt-1 leading-relaxed text-zinc-600">
-                Parcours les modules, regarde les vidéos et valide les quiz à la fin de chaque
-                chapitre.
-              </p>
+              <p className="font-semibold text-zinc-900">{t("welcome.courseName")}</p>
+              <p className="mt-1 leading-relaxed text-zinc-600">{t("welcome.courseBody")}</p>
             </div>
           </div>
 
           <div className="flex gap-3 rounded-2xl border border-amber-100 bg-amber-50/70 px-4 py-3">
             <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-amber-700" />
             <div className="text-sm text-zinc-700">
-              <p className="font-semibold text-zinc-900">Accès confidentiel</p>
-              <p className="mt-1 leading-relaxed text-zinc-600">
-                Ne partage pas ton accès ni le contenu de la formation. Tout partage détecté
-                entraîne une exclusion immédiate du programme.
-              </p>
+              <p className="font-semibold text-zinc-900">{t("welcome.confidentialTitle")}</p>
+              <p className="mt-1 leading-relaxed text-zinc-600">{t("welcome.confidentialBody")}</p>
             </div>
           </div>
 
           <p className="flex items-center justify-center gap-1.5 text-xs text-zinc-400">
             <Sparkles className="h-3.5 w-3.5" />
-            Bon courage pour la suite !
+            {t("welcome.encouragement")}
           </p>
         </div>
 
@@ -69,7 +65,7 @@ export default function TrainingWelcomeModal({ open, onOpenChange, onDismiss }) 
             onClick={onDismiss}
             data-testid="training-welcome-dismiss"
           >
-            Commencer la formation
+            {t("welcome.start")}
           </Button>
         </DialogFooter>
       </DialogContent>

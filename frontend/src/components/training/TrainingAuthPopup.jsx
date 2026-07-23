@@ -1,10 +1,10 @@
+import { Loader2 } from "lucide-react";
 import { useEffect } from "react";
 import { Link } from "react-router-dom";
-import { Loader2 } from "lucide-react";
-import Logo from "../Logo";
-import GoogleSignInButton from "../auth/GoogleSignInButton";
-import { Input } from "../ui/input";
 import { BRAND } from "../../lib/brand";
+import GoogleSignInButton from "../auth/GoogleSignInButton";
+import Logo from "../Logo";
+import { Input } from "../ui/input";
 
 export function TrainingAuthPopup({ aside, children, testId = "training-auth-popup" }) {
   useEffect(() => {
@@ -68,9 +68,22 @@ export function TrainingAuthForm({
   passwordTestId = "training-auth-password",
   submitTestId = "training-auth-submit",
   showModeToggle = false,
+  labels = {},
 }) {
-  const resolvedSubmitLabel =
-    submitLabel || (authMode === "login" ? "Se connecter" : "Créer mon compte");
+  const copy = {
+    signIn: "Se connecter",
+    signUp: "Créer mon compte",
+    google: "Continuer avec Google",
+    or: "ou",
+    email: "E-mail",
+    emailPlaceholder: "vous@email.com",
+    password: "Mot de passe",
+    loading: "Chargement…",
+    noAccount: "Pas encore de compte ?",
+    alreadyHaveAccount: "Déjà un compte ?",
+    ...labels,
+  };
+  const resolvedSubmitLabel = submitLabel || (authMode === "login" ? copy.signIn : copy.signUp);
 
   return (
     <>
@@ -81,7 +94,7 @@ export function TrainingAuthForm({
         <GoogleSignInButton
           onClick={onGoogleClick}
           disabled={submitting}
-          label="Continuer avec Google"
+          label={copy.google}
           testId={googleTestId}
           className="rounded-full"
         />
@@ -89,19 +102,19 @@ export function TrainingAuthForm({
 
       <div className="my-5 flex items-center gap-3">
         <div className="h-px flex-1 bg-zinc-200" />
-        <span className="text-xs font-medium text-zinc-400">ou</span>
+        <span className="text-xs font-medium text-zinc-400">{copy.or}</span>
         <div className="h-px flex-1 bg-zinc-200" />
       </div>
 
       <form className="space-y-4" onSubmit={onSubmit}>
         <label className="block" htmlFor="training-auth-email">
-          <span className="mb-1.5 block text-sm font-medium text-zinc-700">E-mail</span>
+          <span className="mb-1.5 block text-sm font-medium text-zinc-700">{copy.email}</span>
           <Input
             id="training-auth-email"
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder="vous@email.com"
+            placeholder={copy.emailPlaceholder}
             className="h-11 rounded-2xl border-zinc-200 focus-visible:ring-violet-400/40"
             autoComplete="email"
             required
@@ -110,7 +123,7 @@ export function TrainingAuthForm({
         </label>
 
         <label className="block" htmlFor="training-auth-password">
-          <span className="mb-1.5 block text-sm font-medium text-zinc-700">Mot de passe</span>
+          <span className="mb-1.5 block text-sm font-medium text-zinc-700">{copy.password}</span>
           <Input
             id="training-auth-password"
             type="password"
@@ -136,7 +149,7 @@ export function TrainingAuthForm({
           {submitting ? (
             <>
               <Loader2 className="h-4 w-4 animate-spin" />
-              Chargement…
+              {copy.loading}
             </>
           ) : (
             resolvedSubmitLabel
@@ -148,24 +161,24 @@ export function TrainingAuthForm({
         <p className="mt-5 text-center text-sm text-zinc-500">
           {authMode === "login" ? (
             <>
-              Pas encore de compte ?{" "}
+              {copy.noAccount}{" "}
               <button
                 type="button"
                 className="font-semibold text-linkedin hover:text-linkedin-dark"
                 onClick={() => onToggleMode("signup")}
               >
-                S&apos;inscrire
+                {copy.signUp}
               </button>
             </>
           ) : (
             <>
-              Déjà un compte ?{" "}
+              {copy.alreadyHaveAccount}{" "}
               <button
                 type="button"
                 className="font-semibold text-linkedin hover:text-linkedin-dark"
                 onClick={() => onToggleMode("login")}
               >
-                Se connecter
+                {copy.signIn}
               </button>
             </>
           )}

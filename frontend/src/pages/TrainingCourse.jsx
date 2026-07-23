@@ -1,22 +1,28 @@
+import { CheckCircle2, ChevronRight, Loader2, Play } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { CheckCircle2, ChevronRight, Loader2, Play } from "lucide-react";
-import { resolveApiAssetUrl } from "../lib/api";
-import { useTrainingLocale } from "../context/TrainingLocaleContext";
-import { useAuth } from "../context/AuthContext";
-import { TrainingTopBar, useTrainingPageMode } from "../components/training/TrainingShell";
+import BunnyVideoIframe from "../components/training/BunnyVideoIframe";
 import ModuleDocView from "../components/training/ModuleDocView";
-import ModuleSectionNav from "../components/training/ModuleSectionNav";
 import ModuleQuiz from "../components/training/ModuleQuiz";
-import TrainingModuleStepper from "../components/training/TrainingModuleStepper";
+import ModuleSectionNav from "../components/training/ModuleSectionNav";
 import ScrollToContinueHint from "../components/training/ScrollToContinueHint";
+import TrainingCompletionFeedbackModal from "../components/training/TrainingCompletionFeedbackModal";
+import TrainingModuleStepper from "../components/training/TrainingModuleStepper";
+import { TrainingTopBar, useTrainingPageMode } from "../components/training/TrainingShell";
 import {
-  SCORED_MODULE_IDS,
-  courseProgressFraction,
-  saveProgressEvent,
-  willAllScoredModulesBeComplete,
-} from "../lib/trainingProgress";
+  stripDuplicateSectionHeadings,
+  TRAINING_PAGE_OFFSET_CLASS,
+} from "../components/training/trainingLayoutConstants";
+import { useAuth } from "../context/AuthContext";
+import { useTrainingLocale } from "../context/TrainingLocaleContext";
+import { resolveApiAssetUrl } from "../lib/api";
+import { structureContentBankBlocks } from "../lib/contentBankDocStructure";
+import {
+  dismissTrainingCompletionFeedback,
+  queueTrainingCompletionFeedback,
+  shouldShowTrainingCompletionFeedback,
+} from "../lib/trainingCompletionFeedback";
 import {
   fetchTrainingCourseDetail,
   isQuizPassed,
@@ -27,20 +33,14 @@ import {
   trySubmitQuiz,
   tryTrackTrainingActivity,
 } from "../lib/trainingData";
+import {
+  courseProgressFraction,
+  SCORED_MODULE_IDS,
+  saveProgressEvent,
+  willAllScoredModulesBeComplete,
+} from "../lib/trainingProgress";
 import { quizForModule } from "../lib/trainingQuizzes";
 import { parseTrainingLocale, trainingHubPath, trainingModulePath } from "../lib/trainingRoutes";
-import {
-  dismissTrainingCompletionFeedback,
-  queueTrainingCompletionFeedback,
-  shouldShowTrainingCompletionFeedback,
-} from "../lib/trainingCompletionFeedback";
-import TrainingCompletionFeedbackModal from "../components/training/TrainingCompletionFeedbackModal";
-import { structureContentBankBlocks } from "../lib/contentBankDocStructure";
-import BunnyVideoIframe from "../components/training/BunnyVideoIframe";
-import {
-  stripDuplicateSectionHeadings,
-  TRAINING_PAGE_OFFSET_CLASS,
-} from "../components/training/trainingLayoutConstants";
 
 function bunnyEmbedUrl(resolvedUrl) {
   const playMatch = resolvedUrl.match(/mediadelivery\.net\/play\/(\d+)\/([a-f0-9-]+)/i);
@@ -178,13 +178,13 @@ export default function TrainingCourse() {
     load();
   }, [load]);
 
-  const modules = data?.modules || [];
+  const modules = useMemo(() => data?.modules || [], [data?.modules]);
   const activeModule = useMemo(
     () => modules.find((m) => m.module_id === activeModuleId) || modules[0],
     [modules, activeModuleId],
   );
 
-  const sections = activeModule?.sections || [];
+  const sections = useMemo(() => activeModule?.sections || [], [activeModule?.sections]);
   const hasSections = sections.length > 0;
 
   const activeSection = useMemo(() => {
@@ -535,7 +535,7 @@ export default function TrainingCourse() {
 
       {activeSection?.resources?.length ? (
         <section className="space-y-4 border-t border-zinc-100 pt-8">
-          <h3 className="text-lg font-semibold text-zinc-900">Ressources</h3>
+          <h3 className="text-lg font-semibold text-zinc-900">{t("resources")}</h3>
           <ModuleDocView blocks={activeSection.resources} lang={lang} />
         </section>
       ) : null}
@@ -640,7 +640,7 @@ export default function TrainingCourse() {
             {showPresentationVideoAtTop ? (
               <section className="space-y-2" data-testid="training-presentation-video">
                 <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
-                  Vidéo de présentation
+                  {t("presentationVideo")}
                 </p>
                 <div ref={videoContainerRef}>
                   <VideoBlock

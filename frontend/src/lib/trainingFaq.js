@@ -1,4 +1,4 @@
-/** Creator training hub FAQ — French copy for /training. */
+/** Creator training hub FAQ — localized copy for /training. */
 
 const TRAINING_FAQ_FR = [
   {
@@ -174,7 +174,178 @@ const TRAINING_FAQ_FR = [
   },
 ];
 
+const TRAINING_FAQ_EN = [
+  {
+    id: "pro-access",
+    question: "How do I get Pro access?",
+    answer: [
+      {
+        type: "p",
+        text: "If you still cannot access the app, send me a WhatsApp message and I will send you an invitation link. You should normally have received it with this course link.",
+      },
+    ],
+  },
+  {
+    id: "payment",
+    question: "How does payment work?",
+    answer: [
+      {
+        type: "p",
+        text: "Payments are in US dollars ($1 per 1,000 views). You can withdraw through PayPal, bank transfer, international transfer, or crypto. Topr offers many withdrawal options: open your profile picture at the top right in Topr to see them all. Everything is explained in the Submit Content module.",
+      },
+    ],
+  },
+  {
+    id: "referral",
+    question: "How does the referral program work if I bring another creator?",
+    answer: [
+      {
+        type: "p",
+        text: "It is simple: if the creator you refer reaches 100K views, you earn $100. There is no limit to the number of creators you can refer.",
+      },
+      {
+        type: "p",
+        text: "To refer someone, send them my number and ask them to introduce themselves with their first and last name, mentioning that they came from you. I will add them to the group and record that you referred them.",
+      },
+    ],
+  },
+  {
+    id: "daily-posts",
+    question: "How many videos can I post each day?",
+    answer: [
+      {
+        type: "p",
+        text: "There is no limit. Start with one a day and increase when you feel ready. Some creators post almost four times a day, sometimes even five. Posting several times a day usually gives the best results.",
+      },
+    ],
+  },
+  {
+    id: "submit-topr",
+    question: "How do I submit my videos in Topr?",
+    answer: [
+      {
+        type: "p",
+        text: "After posting on TikTok, Instagram, or YouTube, copy the link and paste it directly into Topr. This lets the app track your views. I then approve the video and you receive payment.",
+      },
+    ],
+  },
+  {
+    id: "auto-tracking",
+    question: "Does Topr automatically track my videos when I post them on TikTok?",
+    answer: [
+      {
+        type: "p",
+        text: "No. You must manually copy the link for each video and paste it into Topr after publishing.",
+      },
+    ],
+  },
+  {
+    id: "test-video",
+    question: "Should I send a test video before I start?",
+    answer: [
+      {
+        type: "p",
+        text: "Yes. Start by posting warm-up content, with examples in module 2, so the algorithms understand the audience persona you want to reach.",
+      },
+      {
+        type: "p",
+        text: "Post a few warm-up videos, then begin posting the viral formats for Hirly.",
+      },
+      {
+        type: "p",
+        text: "I will see them in Topr, approve them, and give you feedback so you can improve.",
+      },
+    ],
+  },
+  {
+    id: "warm-up",
+    question: "How should I warm up my account?",
+    answer: [
+      { type: "p", text: "Everything is explained in module 2." },
+      {
+        type: "p",
+        text: "You can also follow the people who work with us; I will send you their profiles. Follow them, watch their videos, like them, and leave a few comments to show the algorithm that you are a real user.",
+      },
+      {
+        type: "p",
+        text: "Take time to scroll your feed and spend longer on some videos, ideally related to job search. You can like and leave a few comments too. The most important thing is to show the algorithm that you are not a bot.",
+      },
+      {
+        type: "p",
+        text: "For the warm-up, spend about five days scrolling, watching videos, following accounts, and liking posts. Then start posting. Stay active during the following week by continuing to scroll, like, and follow regularly. Follow creators making similar content, especially people in the group.",
+      },
+      {
+        type: "p",
+        text: "In short: warm up for five days, then start posting and stay active for seven days. That is the best approach.",
+      },
+    ],
+  },
+  {
+    id: "old-videos",
+    question: "Can videos I posted before, but did not add to Topr then, still count now?",
+    answer: [
+      {
+        type: "p",
+        text: "Yes, no problem. Send me the links and I will check that they have not already been added. If they have not, I can add them manually. Please do this yourself whenever possible, because manual checks take a lot of time.",
+      },
+    ],
+  },
+  {
+    id: "vpn",
+    question: "I am not based in France. Do I need a VPN?",
+    answer: [
+      {
+        type: "p",
+        text: "It can work without a VPN as long as your videos are in French. If you can use one, it is better. We have creators outside France who perform very well simply by posting in French.",
+      },
+    ],
+  },
+  {
+    id: "new-accounts",
+    question: "Should I create new accounts?",
+    answer: [
+      {
+        type: "p",
+        text: "Yes. Create accounts specifically for Hirly on TikTok, Instagram, and YouTube. We pay on all three platforms, so it is worth posting everywhere. Once they are created, send me the links so I can follow you.",
+      },
+    ],
+  },
+  {
+    id: "stats",
+    question: "How do I track my earnings and stats?",
+    answer: [
+      {
+        type: "p",
+        text: "You can see them directly in Topr based on the videos you have posted. It is easier to view on a computer.",
+      },
+    ],
+  },
+  {
+    id: "username",
+    question: "What username and profile photo should I use?",
+    answer: [
+      {
+        type: "p",
+        parts: [
+          { text: "Use a " },
+          { bold: "natural username" },
+          { text: ", for example: first-name.jobs or FirstName.career." },
+        ],
+      },
+      {
+        type: "p",
+        parts: [
+          { text: "For your profile photo, choose a " },
+          { bold: "normal photo" },
+          {
+            text: ", such as a face photo or a clean avatar. Your account should not look too promotional at first glance.",
+          },
+        ],
+      },
+    ],
+  },
+];
+
 export function getTrainingFaq(lang = "fr") {
-  if (lang === "fr") return TRAINING_FAQ_FR;
-  return TRAINING_FAQ_FR;
+  return String(lang).toLowerCase().startsWith("fr") ? TRAINING_FAQ_FR : TRAINING_FAQ_EN;
 }

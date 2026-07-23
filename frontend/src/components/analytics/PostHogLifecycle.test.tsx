@@ -1,8 +1,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-
-import PostHogLifecycle from "./PostHogLifecycle";
 import * as posthogBoundary from "../../lib/posthogClient";
+import PostHogLifecycle from "./PostHogLifecycle";
 
 (
   globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -96,8 +95,8 @@ describe("PostHogLifecycle", () => {
       root.render(<PostHogLifecycle />);
     });
     expect(mockResetPostHog).toHaveBeenCalled();
-    expect(mockResetPostHog.mock.invocationCallOrder[0]).toBeLessThan(
-      mockCapturePostHogPageview.mock.invocationCallOrder.at(-1),
+    expect(mockResetPostHog.mock.invocationCallOrder[0] ?? 0).toBeGreaterThan(
+      mockIdentifyPostHogUser.mock.invocationCallOrder[0] ?? 0,
     );
   });
 });

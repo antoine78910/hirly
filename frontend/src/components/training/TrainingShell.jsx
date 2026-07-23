@@ -1,31 +1,25 @@
-import { useEffect } from "react";
-
-import { createPortal } from "react-dom";
-
-import { NavLink, useLocation, useNavigate, useSearchParams } from "react-router-dom";
-
 import {
+  ArrowLeft,
+  BookOpen,
+  ChevronDown,
   GraduationCap,
   LayoutDashboard,
-  BookOpen,
   Sparkles,
-  ArrowLeft,
-  ChevronDown,
   User,
 } from "lucide-react";
-
-import Logo from "../Logo";
-
-import { BRAND } from "../../lib/brand";
+import { useEffect } from "react";
+import { createPortal } from "react-dom";
+import { NavLink, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
-
 import { useTrainingLocale } from "../../context/TrainingLocaleContext";
-
+import { BRAND } from "../../lib/brand";
 import { parseTrainingLocale, trainingHubPath, trainingPath } from "../../lib/trainingRoutes";
+import Logo from "../Logo";
+import TrainingLanguageToggle from "./TrainingLanguageToggle";
 
 import {
-  TRAINING_TOPBAR_CLASS,
   TRAINING_PAGE_OFFSET_CLASS,
+  TRAINING_TOPBAR_CLASS,
   TRAINING_VIEWPORT_FILL_CLASS,
 } from "./trainingLayoutConstants";
 
@@ -85,7 +79,7 @@ export function TrainingTopBar({ actions, backTo, progressPct = null, moduleStep
               type="button"
               onClick={() => navigate(backTo)}
               className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-zinc-500 transition-colors hover:bg-zinc-100"
-              aria-label="Back"
+              aria-label={t("back")}
             >
               <ArrowLeft className="h-4 w-4" />
             </button>
@@ -106,6 +100,8 @@ export function TrainingTopBar({ actions, backTo, progressPct = null, moduleStep
 
         <div className="flex min-w-0 shrink-0 items-center justify-end gap-1.5 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] sm:gap-3 [&::-webkit-scrollbar]:hidden">
           {moduleStepper ? <div className="shrink-0">{moduleStepper}</div> : null}
+
+          <TrainingLanguageToggle className="shrink-0" />
 
           {actions}
 
