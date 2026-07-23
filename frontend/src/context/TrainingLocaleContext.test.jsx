@@ -5,9 +5,9 @@ import { TrainingLocaleProvider, useTrainingLocale } from "./TrainingLocaleConte
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
-function Probe() {
+function Probe({ translationKey = "academy" }) {
   const { t } = useTrainingLocale();
-  return <output>{t("academy")}</output>;
+  return <output>{t(translationKey)}</output>;
 }
 
 describe("TrainingLocaleProvider", () => {
@@ -43,6 +43,26 @@ describe("TrainingLocaleProvider", () => {
       ),
     );
     expect(container.textContent).toBe("Academy");
+  });
+
+  test("translates training welcome chrome with the route locale", () => {
+    act(() =>
+      root.render(
+        <TrainingLocaleProvider locale="en">
+          <Probe translationKey="welcome.title" />
+        </TrainingLocaleProvider>,
+      ),
+    );
+    expect(container.textContent).toBe("Welcome to the training");
+
+    act(() =>
+      root.render(
+        <TrainingLocaleProvider locale="fr">
+          <Probe translationKey="welcome.title" />
+        </TrainingLocaleProvider>,
+      ),
+    );
+    expect(container.textContent).toBe("Bienvenue dans la formation");
   });
 
   test("uses a neutral unavailable message for an unsupported route prefix", () => {

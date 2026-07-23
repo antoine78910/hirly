@@ -128,23 +128,29 @@ def resolve_media_file(course_id: str, module_id: str, section_part: str, lang: 
         if candidate.is_file():
             return candidate
 
-    # Manual drop-ins (e.g. "swiping features.mp4") when fr.mp4 / en.mp4 is absent.
+    # Support legacy manual drop-ins (for example, "swiping features.mp4") without
+    # ever serving a video uploaded for a different locale.  A named en.mp4 must
+    # not silently become the French or German lesson just because it is the only
+    # file in the slot.
     candidates = [
         path
         for ext in ALLOWED_VIDEO_EXTENSIONS
         for path in base.glob(f"*{ext}")
-        if path.is_file() and path.name != ".gitkeep"
+        if path.is_file()
+        and path.name != ".gitkeep"
+        and path.stem.lower() not in TRAINING_VIDEO_LOCALES
     ]
     if not candidates:
         return None
-    if len(candidates) == 1:
-        return candidates[0]
 
     lang_hint = normalized_lang.lower()
     for path in sorted(candidates, key=lambda item: item.name.lower()):
         if lang_hint in path.stem.lower():
             return path
-    return sorted(candidates, key=lambda item: item.stat().st_mtime, reverse=True)[0]
+
+    # A single unlabelled legacy file has no claimed locale and remains available
+    # during migration.  Multiple unlabelled files are ambiguous, so do not guess.
+    return candidates[0] if len(candidates) == 1 else None
 
 
 def _guess_ext(filename: str, content_type: Optional[str]) -> str:
@@ -181,10 +187,11 @@ async def save_training_video(
 ) -> Tuple[Path, str]:
     content = await file.read()
     ext = validate_video_upload(file, content)
-    dest = media_storage_path(course_id, module_id, section_id, lang, ext)
+    locale = normalize_training_video_locale(lang)
+    dest = media_storage_path(course_id, module_id, section_id, locale, ext)
     dest.parent.mkdir(parents=True, exist_ok=True)
 
-    for existing in dest.parent.glob(f"{_normalize_lang(lang)}.*"):
+    for existing in dest.parent.glob(f"{locale}.*"):
         if existing.is_file():
             existing.unlink()
 

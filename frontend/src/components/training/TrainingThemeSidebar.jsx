@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTrainingLocale } from "../../context/TrainingLocaleContext";
 
 import {
   TRAINING_SIDEBAR_STICKY_CLASS,
@@ -12,6 +13,7 @@ import {
  */
 
 export default function TrainingThemeSidebar({ items, renderContent, className = "" }) {
+  const { t } = useTrainingLocale();
   const [activeIndex, setActiveIndex] = useState(0);
 
   const safeItems = items || [];
@@ -24,7 +26,7 @@ export default function TrainingThemeSidebar({ items, renderContent, className =
     <div className={`training-theme-layout ${className}`}>
       <nav
         className={`${TRAINING_SIDEBAR_STICKY_CLASS} ${TRAINING_SIDEBAR_WIDTH_CLASS}`}
-        aria-label="Themes"
+        aria-label={t("themes")}
       >
         <ul className="flex gap-1 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] md:flex-col md:overflow-visible [&::-webkit-scrollbar]:hidden">
           {safeItems.map((item, index) => {

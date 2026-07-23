@@ -10,12 +10,16 @@ from training_media import (
     apply_upload_metadata,
     media_public_path,
     merge_preserved_videos,
+    save_training_video,
     validate_video_upload,
 )
 from training_service import (
     SEED_COURSE_ID,
     SEED_CREATOR_ID,
     _normalize_lang,
+    COURSE_I18N,
+    MODULE_I18N,
+    MODULE_SEED,
     sync_training_locale_content,
 )
 
@@ -76,10 +80,51 @@ def test_training_locale_sync_preserves_added_locale_packs():
     assert db.training_creators.update["$set"]["i18n"]["de"]["display_name"] == "Hirly Akademie"
 
 
+def test_seeded_training_content_has_complete_english_and_french_packs():
+    assert set(COURSE_I18N) >= {"en", "fr"}
+    for locale in ("en", "fr"):
+        assert COURSE_I18N[locale]["title"]
+        assert COURSE_I18N[locale]["description"]
+
+    for module in MODULE_SEED:
+        packs = MODULE_I18N[module["module_id"]]
+        assert set(packs) >= {"en", "fr"}
+        assert packs["en"]["title"]
+        assert packs["fr"]["title"]
+        assert packs["en"]["description"]
+        assert packs["fr"]["description"]
+        assert [section["section_id"] for section in packs["en"]["sections"]] == [
+            section["section_id"] for section in packs["fr"]["sections"]
+        ]
+
+
 def test_validate_video_upload_accepts_mp4():
     upload = UploadFile(filename="lesson.mp4", file=io.BytesIO(b"fake"), headers={"content-type": "video/mp4"})
     ext = validate_video_upload(upload, b"fake")
     assert ext == ".mp4"
+
+
+def test_save_training_video_replaces_only_the_selected_locale(tmp_path, monkeypatch):
+    import training_media as media
+
+    slot_dir = tmp_path / "course" / "mod" / "sec_a"
+    slot_dir.mkdir(parents=True)
+    (slot_dir / "de.webm").write_bytes(b"previous German video")
+    (slot_dir / "en.mp4").write_bytes(b"English video")
+    upload = UploadFile(
+        filename="lesson-de.mp4",
+        file=io.BytesIO(b"new German video"),
+        headers={"content-type": "video/mp4"},
+    )
+
+    monkeypatch.setattr(media, "MEDIA_ROOT", tmp_path)
+    destination, public_path = asyncio.run(save_training_video(upload, "course", "mod", "sec_a", "de-DE"))
+
+    assert destination == slot_dir / "de.mp4"
+    assert destination.read_bytes() == b"new German video"
+    assert not (slot_dir / "de.webm").exists()
+    assert (slot_dir / "en.mp4").read_bytes() == b"English video"
+    assert public_path.endswith("/de")
 
 
 def test_validate_video_upload_rejects_empty():
@@ -100,6 +145,19 @@ def test_resolve_media_file_falls_back_to_any_video_in_slot(tmp_path, monkeypatc
     monkeypatch.setattr(media, "MEDIA_ROOT", tmp_path)
     resolved = media.resolve_media_file("course", "mod", "sec_a", "fr")
     assert resolved == video
+
+
+def test_resolve_media_file_never_falls_back_to_another_locale(tmp_path, monkeypatch):
+    import training_media as media
+
+    slot_dir = tmp_path / "course" / "mod" / "sec_a"
+    slot_dir.mkdir(parents=True)
+    english_video = slot_dir / "en.mp4"
+    english_video.write_bytes(b"fake")
+
+    monkeypatch.setattr(media, "MEDIA_ROOT", tmp_path)
+    assert media.resolve_media_file("course", "mod", "sec_a", "en") == english_video
+    assert media.resolve_media_file("course", "mod", "sec_a", "fr") is None
 
 
 def test_merge_preserved_videos_keeps_uploaded_urls():

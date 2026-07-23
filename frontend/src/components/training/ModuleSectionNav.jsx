@@ -1,4 +1,5 @@
 import { createPortal } from "react-dom";
+import { useTrainingLocale } from "../../context/TrainingLocaleContext";
 
 import TrainingSectionBadge from "./TrainingSectionBadge";
 
@@ -19,6 +20,7 @@ export default function ModuleSectionNav({
 
   placement = "sticky",
 }) {
+  const { t } = useTrainingLocale();
   if (!sections?.length) return null;
 
   if (variant === "sidebar") {
@@ -28,7 +30,7 @@ export default function ModuleSectionNav({
         : `${TRAINING_SIDEBAR_STICKY_CLASS} ${TRAINING_SIDEBAR_WIDTH_CLASS}`;
 
     const nav = (
-      <nav className={shellClass} aria-label="Sub-chapters" data-training-sidebar>
+      <nav className={shellClass} aria-label={t("subChapters")} data-training-sidebar>
         <ul className="flex flex-col gap-1.5">
           {sections.map((section, index) => {
             const active = section.section_id === activeSectionId;
@@ -73,7 +75,7 @@ export default function ModuleSectionNav({
   return (
     <nav
       className="-mx-1 flex gap-2 overflow-x-auto border-b border-zinc-100 px-1 pb-3 [-ms-overflow-style:none] [scrollbar-width:none] sm:flex-wrap sm:overflow-visible sm:pb-4 [&::-webkit-scrollbar]:hidden"
-      aria-label="Sub-chapters"
+      aria-label={t("subChapters")}
     >
       {sections.map((section, index) => {
         const active = section.section_id === activeSectionId;

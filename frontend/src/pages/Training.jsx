@@ -1,29 +1,29 @@
+import { Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
+import ModuleGalleryCard from "../components/training/ModuleGalleryCard";
+import TrainingCompletionFeedbackModal from "../components/training/TrainingCompletionFeedbackModal";
+import TrainingFaq from "../components/training/TrainingFaq";
+import TrainingShell, { useTrainingPageMode } from "../components/training/TrainingShell";
+import TrainingWelcomeModal from "../components/training/TrainingWelcomeModal";
 import { useAuth } from "../context/AuthContext";
 import { useTrainingLocale } from "../context/TrainingLocaleContext";
-import TrainingShell, { useTrainingPageMode } from "../components/training/TrainingShell";
-import ModuleGalleryCard from "../components/training/ModuleGalleryCard";
-import TrainingFaq from "../components/training/TrainingFaq";
-import TrainingCompletionFeedbackModal from "../components/training/TrainingCompletionFeedbackModal";
-import TrainingWelcomeModal from "../components/training/TrainingWelcomeModal";
+import { TRAINING_COURSE_ID } from "../lib/demoTrainingData";
+import {
+  dismissTrainingCompletionFeedback,
+  queueTrainingCompletionFeedback,
+  shouldShowTrainingCompletionFeedback,
+} from "../lib/trainingCompletionFeedback";
 import {
   fetchTrainingCatalog,
   fetchTrainingCourseDetail,
   syncLocalTrainingProgress,
   tryEnrollCourse,
 } from "../lib/trainingData";
-import { TRAINING_COURSE_ID } from "../lib/demoTrainingData";
 import { areAllScoredModulesComplete, courseProgressFraction } from "../lib/trainingProgress";
-import {
-  dismissTrainingCompletionFeedback,
-  queueTrainingCompletionFeedback,
-  shouldShowTrainingCompletionFeedback,
-} from "../lib/trainingCompletionFeedback";
-import { dismissTrainingWelcome, shouldOpenTrainingWelcome } from "../lib/trainingWelcome";
 import { parseTrainingLocale, trainingModulePath } from "../lib/trainingRoutes";
+import { dismissTrainingWelcome, shouldOpenTrainingWelcome } from "../lib/trainingWelcome";
 
 export default function Training() {
   useTrainingPageMode();
@@ -206,7 +206,7 @@ export default function Training() {
             onClick={load}
             className="mt-4 rounded-md border border-zinc-200 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
           >
-            Retry
+            {t("retry")}
           </button>
         </section>
       )}

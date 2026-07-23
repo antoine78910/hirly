@@ -1,6 +1,7 @@
-import { useState } from "react";
 import { GraduationCap, Loader2, Star } from "lucide-react";
+import { useState } from "react";
 import { toast } from "sonner";
+import { useTrainingLocale } from "../../context/TrainingLocaleContext";
 import { api } from "../../lib/api";
 import { Button } from "../ui/button";
 import {
@@ -12,18 +13,18 @@ import {
   DialogTitle,
 } from "../ui/dialog";
 
-const BENEFICIAL_OPTIONS = [
-  { id: "very", label: "Oui, beaucoup" },
-  { id: "somewhat", label: "Plutôt oui" },
-  { id: "not_really", label: "Pas vraiment" },
-];
-
 export default function TrainingCompletionFeedbackModal({
   open,
   courseId,
   onDismiss,
   onSubmitted,
 }) {
+  const { t } = useTrainingLocale();
+  const beneficialOptions = [
+    { id: "very", label: t("feedback.very") },
+    { id: "somewhat", label: t("feedback.somewhat") },
+    { id: "not_really", label: t("feedback.notReally") },
+  ];
   const [beneficial, setBeneficial] = useState("very");
   const [rating, setRating] = useState(5);
   const [message, setMessage] = useState("");
@@ -40,10 +41,10 @@ export default function TrainingCompletionFeedbackModal({
         rating,
         message: message.trim(),
       });
-      toast.success("Merci pour votre retour !");
+      toast.success(t("feedback.sent"));
       onSubmitted?.();
     } catch (error) {
-      toast.error(error?.response?.data?.detail || "Impossible d'envoyer votre retour");
+      toast.error(error?.response?.data?.detail || t("feedback.sendError"));
     } finally {
       setSubmitting(false);
     }
@@ -67,11 +68,10 @@ export default function TrainingCompletionFeedbackModal({
           </div>
           <DialogHeader className="space-y-2 text-center sm:text-center">
             <DialogTitle className="font-display text-2xl font-black tracking-tight text-white">
-              Formation terminée !
+              {t("feedback.title")}
             </DialogTitle>
             <DialogDescription className="text-sm leading-relaxed text-violet-100">
-              Bravo — vous avez complété l&apos;intégralité du programme. Votre avis nous aide à
-              l&apos;améliorer.
+              {t("feedback.description")}
             </DialogDescription>
           </DialogHeader>
         </div>
@@ -80,10 +80,10 @@ export default function TrainingCompletionFeedbackModal({
           <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-6 py-5">
             <div>
               <p className="text-sm font-semibold text-zinc-900">
-                Cette formation vous a-t-elle été utile ?
+                {t("feedback.beneficialQuestion")}
               </p>
               <div className="mt-2 flex flex-wrap gap-2">
-                {BENEFICIAL_OPTIONS.map((option) => (
+                {beneficialOptions.map((option) => (
                   <button
                     key={option.id}
                     type="button"
@@ -101,7 +101,7 @@ export default function TrainingCompletionFeedbackModal({
             </div>
 
             <div>
-              <p className="text-sm font-semibold text-zinc-900">Note globale</p>
+              <p className="text-sm font-semibold text-zinc-900">{t("feedback.rating")}</p>
               <div className="mt-2 flex items-center gap-1">
                 {[1, 2, 3, 4, 5].map((value) => (
                   <button
@@ -109,7 +109,7 @@ export default function TrainingCompletionFeedbackModal({
                     type="button"
                     onClick={() => setRating(value)}
                     className="rounded-md p-1 transition-transform hover:scale-110"
-                    aria-label={`${value} étoile${value > 1 ? "s" : ""}`}
+                    aria-label={t("feedback.star", { value })}
                   >
                     <Star
                       className={`h-6 w-6 ${
@@ -122,14 +122,12 @@ export default function TrainingCompletionFeedbackModal({
             </div>
 
             <label className="block">
-              <span className="text-sm font-semibold text-zinc-900">
-                Retours, critiques ou suggestions (optionnel)
-              </span>
+              <span className="text-sm font-semibold text-zinc-900">{t("feedback.comments")}</span>
               <textarea
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
                 rows={4}
-                placeholder="Ce qui vous a plu, ce qui manque, ce qu'on pourrait améliorer…"
+                placeholder={t("feedback.placeholder")}
                 className="mt-2 w-full resize-y rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-3 text-sm text-zinc-900 outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-200/60"
                 data-testid="training-feedback-message"
               />
@@ -143,14 +141,14 @@ export default function TrainingCompletionFeedbackModal({
               className="h-11 w-full rounded-full font-bold"
               data-testid="training-feedback-submit"
             >
-              {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Envoyer mon retour"}
+              {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : t("feedback.submit")}
             </Button>
             <button
               type="button"
               onClick={() => onDismiss?.({ submitted: false })}
               className="text-sm font-medium text-zinc-500 hover:text-zinc-700"
             >
-              Plus tard
+              {t("feedback.later")}
             </button>
           </DialogFooter>
         </form>

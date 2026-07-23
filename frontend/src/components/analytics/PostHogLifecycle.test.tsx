@@ -1,8 +1,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-
-import PostHogLifecycle from "./PostHogLifecycle";
 import * as posthogBoundary from "../../lib/posthogClient";
+import PostHogLifecycle from "./PostHogLifecycle";
 
 (
   globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }

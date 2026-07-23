@@ -1,23 +1,23 @@
+import axios from "axios";
+import { parseApiPath } from "./apiPath";
+import { applyJobFilters, feedQueryToFilters } from "./applyJobFilters";
+import { consumeDemoCredit, isDemoAccountEnabled } from "./demoAccount";
+import { buildDemoApplicationFromSwipe } from "./demoApplicationFactory";
+import { mergeDemoCvIntoProfile } from "./demoCvUpload";
 import {
+  DEMO_APPLICATIONS,
+  DEMO_HISTORY_LEFT,
+  DEMO_HISTORY_RIGHT,
+  DEMO_IMPROVE,
+  DEMO_INTERVIEW_PREP,
+  DEMO_INTERVIEW_SCORE,
   DEMO_JOBS,
   DEMO_PROFILE,
-  DEMO_APPLICATIONS,
-  DEMO_INTERVIEW_PREP,
   DEMO_STREAK,
-  DEMO_IMPROVE,
-  DEMO_INTERVIEW_SCORE,
-  DEMO_HISTORY_RIGHT,
-  DEMO_HISTORY_LEFT,
   demoSwipeRow,
 } from "./demoData";
 import { getDemoTrainingCatalog, getDemoTrainingCourseDetail } from "./demoTrainingData";
 import { getInviteDevResponse } from "./inviteDevMocks";
-import { isDemoAccountEnabled, consumeDemoCredit } from "./demoAccount";
-import { mergeDemoCvIntoProfile } from "./demoCvUpload";
-import { buildDemoApplicationFromSwipe } from "./demoApplicationFactory";
-import axios from "axios";
-import { parseApiPath } from "./apiPath";
-import { applyJobFilters, feedQueryToFilters } from "./applyJobFilters";
 
 const state = {
   feedJobs: DEMO_JOBS.map((j) => ({ ...j })),
@@ -555,6 +555,10 @@ export function getDemoResponse(config) {
 
   if (method === "get" && path === "/admin/training/videos") {
     return { slots: [] };
+  }
+
+  if (method === "post" && path === "/admin/training/videos") {
+    return { ok: true };
   }
 
   if (method === "get" && path === "/admin/demo/invites") {

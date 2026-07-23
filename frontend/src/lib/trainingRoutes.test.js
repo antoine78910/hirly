@@ -1,9 +1,9 @@
 import {
-  TRAINING_LOCALES,
   hasTrainingContent,
   isTrainingRoute,
   parseTrainingLocale,
   replaceTrainingLocale,
+  TRAINING_LOCALES,
   trainingPath,
 } from "./trainingRoutes";
 
@@ -27,6 +27,12 @@ describe("training locale routes", () => {
     expect(hasTrainingContent("en")).toBe(true);
     expect(hasTrainingContent("fr")).toBe(true);
     expect(replaceTrainingLocale("/de/training", "", "pt")).toBeNull();
+  });
+
+  test("switches the legacy training URL without dropping the current lesson query", () => {
+    expect(replaceTrainingLocale("/training", "?module=mod_warm_up&section=sec_wu_sop", "en")).toBe(
+      "/en/training?module=mod_warm_up&section=sec_wu_sop",
+    );
   });
 
   test("does not recognize arbitrary locale prefixes as supported training routes", () => {

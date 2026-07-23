@@ -385,13 +385,13 @@ function TrainingInvitesPanel() {
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
             <label
+              htmlFor="training-invite-label"
               className="text-xs font-semibold uppercase tracking-wide text-zinc-500"
-              htmlFor="creator-label"
             >
               Label (optional)
             </label>
             <input
-              id="creator-label"
+              id="training-invite-label"
               value={label}
               onChange={(e) => setLabel(e.target.value)}
               placeholder="e.g. March cohort — Lisa"
@@ -400,13 +400,13 @@ function TrainingInvitesPanel() {
           </div>
           <div>
             <label
+              htmlFor="training-invite-email-hint"
               className="text-xs font-semibold uppercase tracking-wide text-zinc-500"
-              htmlFor="creator-email-hint"
             >
               Email hint (optional)
             </label>
             <input
-              id="creator-email-hint"
+              id="training-invite-email-hint"
               type="email"
               value={emailHint}
               onChange={(e) => setEmailHint(e.target.value)}
@@ -505,7 +505,7 @@ export default function AdminTraining() {
   }, [load]);
 
   const summary = data?.summary || {};
-  const moduleStats = data?.module_stats || [];
+  const moduleStats = useMemo(() => data?.module_stats || [], [data?.module_stats]);
   const learners = data?.learners || [];
 
   const moduleTitleById = useMemo(
