@@ -1,3 +1,54 @@
+<!-- contractspec:init:agents:start -->
+<!-- This section is managed by `contractspec init` and `contractspec onboard`. Content outside these markers is user-owned and preserved. -->
+# ContractSpec AI Guide
+
+Scope: `monorepo-hirly`
+
+This project uses ContractSpec for spec-first development. Treat contracts as the source of truth for implementation changes.
+
+## Core Rules
+
+- Update contracts before implementation code.
+- Validate contracts after changes with `contractspec validate`.
+- Regenerate derived artifacts before considering the work complete.
+- Prefer existing package-local guides and READMEs when working in a nested package.
+
+## Monorepo Scope
+
+This guide is scoped to the workspace root.
+- Shared contracts may live in multiple packages under `packages/*/src/contracts/`
+- Prefer the nearest package guide when working inside a specific package.
+
+## Recommended Workflow
+
+1. Check whether a contract already exists for the change.
+2. Update or create the contract first.
+3. Run validation and generation commands.
+4. Review downstream code and tests affected by the contract update.
+
+## Key Commands
+
+- `contractspec create` - scaffold a new contract
+- `contractspec validate` - validate contract integrity
+- `contractspec build` - generate implementation artifacts
+- `contractspec doctor` - verify workspace configuration
+
+## Working Agreement
+
+- Keep changes spec-first, deterministic, and reviewable.
+- Do not change generated outputs without updating their source contract.
+- When touching nested packages, prefer the nearest `AGENTS.md` and `README.md` as the local source of truth.
+- Reuse existing workspace code before creating new files, packages, or dependencies.
+- Prefer ContractSpec OSS packages by family:
+  - UI: local reusable UI -> `@lssm-tech/lib.design-system` -> platform ui-kit -> shadcn/web fallback
+  - Contracts: existing local spec -> `@lssm-tech/lib.contracts-spec` / `@lssm-tech/lib.schema`
+  - Integrations/runtime/shared libs: existing workspace surface -> ContractSpec OSS catalog -> reviewed fallback
+- Use `contractspec connect adoption sync` and `contractspec connect adoption resolve --family <family>` when the right reusable surface is unclear.
+
+## Initialization Preset
+
+- This workspace was initialized with the `core` setup preset.
+<!-- contractspec:init:agents:end -->
 # Hirly Agent Instructions
 
 ## Product priority

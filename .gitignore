@@ -118,3 +118,8 @@ backend/**/sr-storage-state*.json
 backend/apply_agent/data/sr_storage_state.json
 !backend/apply_agent/data/
 !backend/apply_agent/data/sr_storage_state.example.json
+
+# contractspec:init:gitignore:start
+# Managed by `contractspec init` and `contractspec connect init`.
+**/.contractspec/verification-cache.json
+# contractspec:init:gitignore:end
