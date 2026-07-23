@@ -213,6 +213,10 @@ describe("posthog client", () => {
     expect(normalEvent?.properties).toEqual({ plan: "pro" });
   });
 
+  it("rejects person labels containing control characters", () => {
+    expect(buildPostHogPersonProperties({ name: "Ada\u0000Lovelace" })).toEqual({});
+  });
+
   it("links anonymous activity on first identify and resets only for account switches", () => {
     process.env.REACT_APP_POSTHOG_TOKEN = "phc_test";
     process.env.REACT_APP_POSTHOG_HOST = "https://us.i.posthog.com";

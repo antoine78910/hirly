@@ -34,7 +34,7 @@ export interface PostHogIdentityProfile {
 }
 
 const hasControlCharacter = (value: string) =>
-  [...value].some((character) => {
+  Array.from(value).some((character) => {
     const codePoint = character.charCodeAt(0);
     return codePoint <= 0x1f || codePoint === 0x7f;
   });
