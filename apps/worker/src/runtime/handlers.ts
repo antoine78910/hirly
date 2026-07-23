@@ -1,30 +1,30 @@
-import type { TaskHandlers, RuntimeStore } from "./types";
-import { PermanentTaskError, safeErrorMessage } from "./retry";
 import {
-  providerSchema,
-  providerSearchRequestSchema,
   enqueueRunSchema,
   type Provider,
+  providerSchema,
+  providerSearchRequestSchema,
 } from "@hirly/contracts";
-import type { Logger } from "@hirly/observability";
 import type { ClaimedTask } from "@hirly/db";
 import { IngestionError, ProviderRateGate, runIngestion } from "@hirly/ingestion";
+import type { Logger } from "@hirly/observability";
 import { getProviderModule, providerModules } from "../providers";
 import type { ProviderCore } from "../providers/core";
 import {
-  SPROUT_FRANCE_DISABLED_REGISTRATION,
-  SproutHttpTransport,
-  SproutSchemaDriftError,
   createSproutCommitRepository,
   hasSproutCountryLocation,
   runSproutPageTask,
-  sproutCheckpointSchema,
-  sproutTaskPayloadSchema,
+  SPROUT_FRANCE_DISABLED_REGISTRATION,
+  SproutHttpTransport,
   type SproutRawJob,
+  SproutSchemaDriftError,
   type SproutSecretResolver,
   type SproutTokenRefresher,
+  sproutCheckpointSchema,
+  sproutTaskPayloadSchema,
 } from "../providers/sprout";
-import { SproutSessionCipher, type SproutSession } from "../providers/sprout/session";
+import { type SproutSession, SproutSessionCipher } from "../providers/sprout/session";
+import { PermanentTaskError, safeErrorMessage } from "./retry";
+import type { RuntimeStore, TaskHandlers } from "./types";
 
 function emitSproutOperation(
   logger: Logger | undefined,
@@ -260,6 +260,7 @@ export function createTaskHandlers(
   return {
     "inventory.maintenance": async (_task, signal) => {
       signal.throwIfAborted();
+      return undefined;
     },
     "provider.fetch_page": async (task, signal) => {
       signal.throwIfAborted();

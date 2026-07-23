@@ -104,7 +104,10 @@ describe("trial scorecard", () => {
     expect(() => buildTrialScorecard(baselineFixture, [])).toThrow("at least one run");
     expect(() => buildTrialScorecard({}, snapshotsFixture)).toThrow("schemaVersion");
     const snapshots = clone(snapshotsFixture);
-    snapshots[0]?.jobs[0].matchedUserIds = ["outside-cohort"];
+    const snapshot = snapshots[0];
+    const job = snapshot?.jobs[0];
+    if (!job) throw new Error("trial scorecard fixture requires a job");
+    job.matchedUserIds = ["outside-cohort"];
     expect(() => buildTrialScorecard(baselineFixture, snapshots)).toThrow("outside the cohort");
   });
 

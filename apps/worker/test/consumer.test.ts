@@ -51,7 +51,7 @@ describe("consumer lifecycle", () => {
     const repository = new FakeRepository();
     const consumer = new Consumer(
       repository,
-      { "inventory.maintenance": async () => {} },
+      { "inventory.maintenance": async () => undefined },
       createJsonLogger(() => {}),
       {
         concurrency: 1,
