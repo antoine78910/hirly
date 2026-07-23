@@ -34,8 +34,8 @@ export default function PostHogLifecycle() {
   }, [pathname]);
 
   useEffect(() => {
-    syncPostHogReplay();
-  }, []);
+    syncPostHogReplay(pathname);
+  }, [pathname]);
 
   return null;
 }

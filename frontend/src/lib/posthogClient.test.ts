@@ -23,8 +23,10 @@ import {
   initializePostHog,
   isCanonicalAnalyticsUserId,
   resetPostHog,
+  resolvePostHogReplayMode,
   sanitizeAnalyticsProperties,
   sanitizePostHogEvent,
+  syncPostHogReplay,
 } from "./posthogClient";
 
 const mockInit = posthog.init as jest.Mock;
@@ -47,18 +49,21 @@ describe("posthog client", () => {
     mockInit.mockReturnValue(mockClient);
   });
 
-  it("stays disabled without a complete valid config", () => {
-    expect(initializePostHog()).toBeNull();
-    process.env.REACT_APP_POSTHOG_TOKEN = "phc_test";
-    process.env.REACT_APP_POSTHOG_HOST = "javascript:alert(1)";
-    __resetPostHogForTests();
+  it("stays disabled without a project token", () => {
     expect(initializePostHog()).toBeNull();
     expect(mockInit).not.toHaveBeenCalled();
   });
 
+  it("pins the first-party API host, samples the app at 1%, and ignores host overrides", () => {
+    process.env.REACT_APP_POSTHOG_HOST = "https://us.i.posthog.com";
+    expect(buildPostHogConfig()).toMatchObject({
+      api_host: "https://t.tryhirly.com",
+      session_recording: { sampleRate: 0.01 },
+    });
+  });
+
   it("initializes one singleton and keeps replay stopped in profile A", () => {
     process.env.REACT_APP_POSTHOG_TOKEN = "phc_test";
-    process.env.REACT_APP_POSTHOG_HOST = "https://us.i.posthog.com";
     expect(initializePostHog()).toBe(mockClient);
     expect(initializePostHog()).toBe(mockClient);
     expect(mockInit).toHaveBeenCalledTimes(1);
@@ -84,10 +89,11 @@ describe("posthog client", () => {
     process.env.REACT_APP_POSTHOG_REPLAY_HOSTILE_QA_APPROVED = "true";
     const profileB = buildPostHogConfig();
     expect(profileB).toMatchObject({
-      disable_session_recording: false,
+      disable_session_recording: true,
       advanced_disable_flags: false,
       advanced_disable_feature_flags: false,
       session_recording: {
+        sampleRate: 0.01,
         maskAllInputs: true,
         maskTextSelector: "*",
         recordCrossOriginIframes: false,
@@ -97,6 +103,36 @@ describe("posthog client", () => {
       },
     });
     expect(profileB).not.toHaveProperty("enable_heatmaps");
+  });
+
+  it("records onboarding in full, samples only candidate app routes, and ignores landing or admin", () => {
+    expect(resolvePostHogReplayMode("/")).toBe("none");
+    expect(resolvePostHogReplayMode("/signup")).toBe("none");
+    expect(resolvePostHogReplayMode("/onboarding")).toBe("onboarding");
+    expect(resolvePostHogReplayMode("onboarding/profile")).toBe("onboarding");
+    expect(resolvePostHogReplayMode("/swipe")).toBe("sampled-app");
+    expect(resolvePostHogReplayMode("/review/123/cover-letter")).toBe("sampled-app");
+    expect(resolvePostHogReplayMode("/admin/users")).toBe("none");
+
+    process.env.REACT_APP_POSTHOG_TOKEN = "phc_test";
+    process.env.REACT_APP_POSTHOG_REPLAY_ENABLED = "true";
+    process.env.REACT_APP_POSTHOG_REPLAY_HOSTILE_QA_APPROVED = "true";
+    initializePostHog();
+    mockStartSessionRecording.mockClear();
+    mockStopSessionRecording.mockClear();
+
+    syncPostHogReplay("/");
+    expect(mockStopSessionRecording).toHaveBeenCalledTimes(1);
+    expect(mockStartSessionRecording).not.toHaveBeenCalled();
+
+    syncPostHogReplay("/onboarding");
+    expect(mockStartSessionRecording).toHaveBeenCalledWith({ sampling: true });
+
+    syncPostHogReplay("/swipe");
+    expect(mockStartSessionRecording).toHaveBeenLastCalledWith();
+
+    syncPostHogReplay("/admin/overview");
+    expect(mockStopSessionRecording).toHaveBeenCalledTimes(2);
   });
 
   it("removes nested sensitive keys, unsafe values, cycles, and URL secrets", () => {
@@ -219,7 +255,6 @@ describe("posthog client", () => {
 
   it("links anonymous activity on first identify and resets only for account switches", () => {
     process.env.REACT_APP_POSTHOG_TOKEN = "phc_test";
-    process.env.REACT_APP_POSTHOG_HOST = "https://us.i.posthog.com";
     initializePostHog();
 
     capturePostHogPageview("/onboarding");
@@ -264,7 +299,6 @@ describe("posthog client", () => {
 
   it("resets persisted identity state on anonymous and invalid transitions", () => {
     process.env.REACT_APP_POSTHOG_TOKEN = "phc_test";
-    process.env.REACT_APP_POSTHOG_HOST = "https://us.i.posthog.com";
     initializePostHog();
 
     resetPostHog();
@@ -290,7 +324,6 @@ describe("posthog client", () => {
 
   it("keeps capture best-effort", () => {
     process.env.REACT_APP_POSTHOG_TOKEN = "phc_test";
-    process.env.REACT_APP_POSTHOG_HOST = "https://us.i.posthog.com";
     initializePostHog();
     mockCapture.mockImplementationOnce(() => {
       throw new Error("blocked");
@@ -300,7 +333,6 @@ describe("posthog client", () => {
 
   it("preserves validated occurrence time in the SDK capture options", () => {
     process.env.REACT_APP_POSTHOG_TOKEN = "phc_test";
-    process.env.REACT_APP_POSTHOG_HOST = "https://us.i.posthog.com";
     initializePostHog();
 
     capturePostHogEvent("checkout_intent_started", { plan: "pro" }, "2026-07-20T18:00:00.000Z");

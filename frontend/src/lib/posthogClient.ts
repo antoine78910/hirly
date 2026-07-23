@@ -5,6 +5,7 @@ import posthog, {
   type Properties,
 } from "posthog-js";
 
+import { isAppPath } from "./appDomains";
 import { resolveAnalyticsEvent } from "./analyticsRegistry";
 
 const MAX_DEPTH = 6;
@@ -21,6 +22,11 @@ const ALLOWED_SYSTEM_EVENTS = new Set(["$identify", "$pageview"]);
 const TRUSTED_SDK_PROPERTY_KEYS = new Set(["token", "$session_id", "$window_id"]);
 const CANONICAL_USER_ID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+const POSTHOG_API_HOST = "https://t.tryhirly.com";
+// The first 5,000 replay recordings are free each month. Keep the core app at
+// a deterministic 1% sample. Onboarding deliberately overrides this rate so
+// every onboarding journey is captured.
+const POSTHOG_APP_REPLAY_SAMPLE_RATE = 0.01;
 
 let client: PostHog | null = null;
 let initialized = false;
@@ -32,6 +38,21 @@ export interface PostHogIdentityProfile {
   email?: unknown;
   name?: unknown;
 }
+
+export type PostHogReplayMode = "none" | "onboarding" | "sampled-app";
+
+export const resolvePostHogReplayMode = (pathname: string): PostHogReplayMode => {
+  const normalizedPathname = pathname.startsWith("/") ? pathname : `/${pathname}`;
+  if (normalizedPathname === "/onboarding" || normalizedPathname.startsWith("/onboarding/")) {
+    return "onboarding";
+  }
+  // Admin is intentionally excluded: replay is for the candidate product
+  // journey, not operational back-office data.
+  if (isAppPath(normalizedPathname) && !normalizedPathname.startsWith("/admin")) {
+    return "sampled-app";
+  }
+  return "none";
+};
 
 const hasControlCharacter = (value: string) =>
   Array.from(value).some((character) => {
@@ -161,9 +182,8 @@ export const isReplayEnabled = (): boolean =>
   process.env.REACT_APP_POSTHOG_REPLAY_HOSTILE_QA_APPROVED === "true";
 
 export const buildPostHogConfig = (): Partial<PostHogConfig> => {
-  const replayEnabled = isReplayEnabled();
   return {
-    api_host: process.env.REACT_APP_POSTHOG_HOST?.trim(),
+    api_host: POSTHOG_API_HOST,
     person_profiles: "identified_only",
     autocapture: false,
     capture_pageview: false,
@@ -172,7 +192,9 @@ export const buildPostHogConfig = (): Partial<PostHogConfig> => {
     capture_dead_clicks: false,
     capture_heatmaps: false,
     disable_surveys: true,
-    disable_session_recording: !replayEnabled,
+    // Do not auto-start replay. The route lifecycle starts onboarding at 100%
+    // and the candidate app at 1%; all marketing and admin routes remain off.
+    disable_session_recording: true,
     // Remote feature flags are the production control plane for operational UI
     // such as the maintenance banner. Automatic capture remains disabled and
     // `$feature_flag_called` events are still rejected by before_send.
@@ -181,6 +203,7 @@ export const buildPostHogConfig = (): Partial<PostHogConfig> => {
     enable_recording_console_log: false,
     capture_performance: false,
     session_recording: {
+      sampleRate: POSTHOG_APP_REPLAY_SAMPLE_RATE,
       maskAllInputs: true,
       maskTextSelector: "*",
       recordCrossOriginIframes: false,
@@ -197,11 +220,12 @@ export const initializePostHog = (): PostHog | null => {
   if (initialized) return client;
   initialized = true;
   const token = process.env.REACT_APP_POSTHOG_TOKEN?.trim();
-  const host = process.env.REACT_APP_POSTHOG_HOST?.trim();
-  if (!token || !host || !/^https:\/\//i.test(host)) return null;
+  if (!token) return null;
   try {
     client = posthog.init(token, buildPostHogConfig()) || null;
-    if (!isReplayEnabled()) client?.stopSessionRecording();
+    // Clear any persisted recorder state before the route policy decides whether
+    // the current page may record.
+    client?.stopSessionRecording();
     return client;
   } catch {
     client = null;
@@ -265,17 +289,25 @@ export const identifyPostHogUser = (userId: string, profile: PostHogIdentityProf
 export const resetPostHog = (): void => {
   if (!client) return;
   try {
+    client.stopSessionRecording();
     client.reset();
     identifiedUserId = null;
     identifiedPersonPropertiesKey = null;
   } catch {}
 };
 
-export const syncPostHogReplay = (): void => {
+export const syncPostHogReplay = (pathname: string): void => {
   if (!client) return;
   try {
-    if (isReplayEnabled()) client.startSessionRecording();
-    else client.stopSessionRecording();
+    const replayMode = resolvePostHogReplayMode(pathname);
+    if (!isReplayEnabled() || replayMode === "none") {
+      client.stopSessionRecording();
+    } else if (replayMode === "onboarding") {
+      // Override the 1% app sample only for the high-value onboarding flow.
+      client.startSessionRecording({ sampling: true });
+    } else {
+      client.startSessionRecording();
+    }
   } catch {}
 };
 
