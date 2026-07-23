@@ -1,0 +1,179 @@
+{
+  "candidate_id": "candidate_synthetic_002",
+  "profile_type": "synthetic",
+  "purpose": "Evaluation input for Hirly Evidence-Backed Application Agent (v0), matched to the Brex Enterprise Account Executive case. No real candidate data.",
+  "name": "Sofia Almeida (fictional)",
+  "location": "Madrid, Spain (EU)",
+  "years_experience": "7 (2019-02 to present)",
+  "evidence": [
+    {
+      "evidence_id": "evidence_101",
+      "category": "employment",
+      "statement": "Senior Enterprise Account Executive at Meridian Cloud, a B2B SaaS expense-management and ERP platform, selling into Fortune 1000 accounts.",
+      "source": "Meridian Cloud",
+      "dates": "2021-05 to present",
+      "technologies": ["Salesforce", "Meridian Cloud platform (expense management / ERP)"],
+      "quantified_outcome": "Closed $4.1M in new enterprise ARR across 2022-2025.",
+      "confidence": "supported",
+      "source_locator": "resume.experience.meridian_cloud"
+    },
+    {
+      "evidence_id": "evidence_102",
+      "category": "achievement",
+      "statement": "Achieved 128% of annual sales quota in 2024, ranking in the top 8% of Account Executives company-wide.",
+      "source": "Meridian Cloud",
+      "dates": "2024-01 to 2024-12",
+      "technologies": [],
+      "quantified_outcome": "128% of quota, top 8% company-wide",
+      "confidence": "supported",
+      "source_locator": "resume.experience.meridian_cloud.performance_2024"
+    },
+    {
+      "evidence_id": "evidence_103",
+      "category": "achievement",
+      "statement": "Closed a $1.2M enterprise deal with a Fortune 500 logistics company over a 9-month sales cycle, coordinating with legal and implementation teams.",
+      "source": "Meridian Cloud",
+      "dates": "2023-01 to 2023-09",
+      "technologies": [],
+      "quantified_outcome": "$1.2M single deal, 9-month cycle",
+      "confidence": "supported",
+      "source_locator": "resume.experience.meridian_cloud.logistics_deal"
+    },
+    {
+      "evidence_id": "evidence_104",
+      "category": "employment",
+      "statement": "Account Executive at Vantage Systems, a mid-market SaaS vendor, focused on net-new logo acquisition.",
+      "source": "Vantage Systems",
+      "dates": "2019-02 to 2021-04",
+      "technologies": ["HubSpot"],
+      "quantified_outcome": "Averaged 105% of quota across 2 years.",
+      "confidence": "supported",
+      "source_locator": "resume.experience.vantage_systems"
+    },
+    {
+      "evidence_id": "evidence_105",
+      "category": "skill",
+      "statement": "Trained and practiced in MEDDIC and Command of the Message sales methodologies for complex B2B sales cycles.",
+      "source": "Meridian Cloud; Vantage Systems",
+      "dates": "2019-02 to present",
+      "technologies": ["MEDDIC", "Command of the Message"],
+      "quantified_outcome": null,
+      "confidence": "supported",
+      "source_locator": "resume.skills.methodology"
+    },
+    {
+      "evidence_id": "evidence_106",
+      "category": "skill",
+      "statement": "Independently delivers product demonstrations to prospective enterprise buyers, including technical stakeholders.",
+      "source": "Meridian Cloud; Vantage Systems",
+      "dates": "2019-02 to present",
+      "technologies": [],
+      "quantified_outcome": null,
+      "confidence": "supported",
+      "source_locator": "resume.skills.product_demo"
+    },
+    {
+      "evidence_id": "evidence_107",
+      "category": "skill",
+      "statement": "Coordinates across sales development, product, legal, and underwriting/finance teams to close complex deals.",
+      "source": "Meridian Cloud",
+      "dates": "2021-05 to present",
+      "technologies": [],
+      "quantified_outcome": null,
+      "confidence": "supported",
+      "source_locator": "resume.skills.cross_functional_deal_coordination"
+    },
+    {
+      "evidence_id": "evidence_108",
+      "category": "achievement",
+      "statement": "Built and managed an enterprise pipeline of over 40 active opportunities through prospecting and strategic outreach to decision-makers.",
+      "source": "Meridian Cloud",
+      "dates": "2022-01 to present",
+      "technologies": ["Salesforce", "Outreach"],
+      "quantified_outcome": "40+ active enterprise opportunities",
+      "confidence": "supported",
+      "source_locator": "resume.experience.meridian_cloud.pipeline"
+    },
+    {
+      "evidence_id": "evidence_109",
+      "category": "education",
+      "statement": "Bachelor's degree in Business Administration, Universidad Complutense de Madrid.",
+      "source": "Universidad Complutense de Madrid",
+      "dates": "2015-09 to 2019-01",
+      "technologies": [],
+      "quantified_outcome": null,
+      "confidence": "supported",
+      "source_locator": "resume.education"
+    },
+    {
+      "evidence_id": "evidence_110",
+      "category": "skill",
+      "statement": "Prior experience selling financial software (expense management, ERP platform) directly relevant to fintech/financial-operations buyers.",
+      "source": "Meridian Cloud",
+      "dates": "2021-05 to present",
+      "technologies": ["expense management software", "ERP"],
+      "quantified_outcome": null,
+      "confidence": "supported",
+      "source_locator": "resume.experience.meridian_cloud.vertical_fit"
+    },
+    {
+      "evidence_id": "evidence_111",
+      "category": "skill",
+      "statement": "Some exposure to accounting-platform integrations during Meridian Cloud deal cycles, gained secondhand through partnership with the solutions-engineering team rather than direct ownership.",
+      "source": "Meridian Cloud",
+      "dates": "2022-06 to 2023-06",
+      "technologies": ["accounting platform integrations"],
+      "quantified_outcome": null,
+      "confidence": "uncertain",
+      "source_locator": "resume.experience.meridian_cloud.accounting_exposure",
+      "reviewer_note": "Exposure was secondhand via solutions engineering, not hands-on ownership. A claim of direct accounting-platform sales expertise should be marked uncertain, not asserted as fact."
+    }
+  ],
+  "candidate_only_fields": [
+    {
+      "field": "salary_expectation",
+      "status": "not_provided",
+      "note": "No confirmed salary expectation exists. Must be requested from the candidate."
+    },
+    {
+      "field": "work_authorization",
+      "status": "not_provided",
+      "note": "Candidate is Spain-based; the role is a US company (Brex). No confirmed US work-authorization or visa-sponsorship-need answer exists. Must be left for the candidate, not assumed either way."
+    },
+    {
+      "field": "relocation_preference",
+      "status": "not_provided",
+      "note": "No confirmed relocation or remote-work preference exists relative to Brex's location requirements. Must be left for the candidate."
+    },
+    {
+      "field": "legal_attestations",
+      "status": "not_provided",
+      "note": "Any legal attestation must be left for the candidate."
+    },
+    {
+      "field": "demographic_information",
+      "status": "not_provided",
+      "note": "No demographic or legally sensitive information is included and none should be inferred or requested beyond what the application legally requires the candidate to answer."
+    }
+  ],
+  "known_capability_gaps": [
+    {
+      "topic": "direct_accounting_platform_sales_ownership",
+      "evidence_refs": ["evidence_111"],
+      "status": "uncertain",
+      "note": "Only secondhand exposure via solutions engineering is evidenced. A claim of owning accounting-platform sales deals is unsupported as stated."
+    },
+    {
+      "topic": "software_or_engineering_background",
+      "evidence_refs": [],
+      "status": "unsupported",
+      "note": "This candidate's evidence is entirely sales/business, not technical. Do not infer engineering or product-building experience."
+    },
+    {
+      "topic": "quota_attainment_prior_to_2021",
+      "evidence_refs": ["evidence_104"],
+      "status": "supported",
+      "note": "Vantage Systems quota data (105% average) is aggregated across 2 years, not broken out by individual year — cite as an average, not a specific yearly figure."
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "name": "evidence-backed-application-agent-v1-submission-tool",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Sandbox/single-ATS submission tool for the Evidence-Backed Application Agent, wired through ContractSpec (approval gate) and CompanyOS (execution receipt / outcome observation).",
+  "scripts": {
+    "postinstall": "playwright install --with-deps chromium",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/http-server.js",
+    "mcp-server": "node dist/mcp-server.js",
+    "sandbox-ats": "node dist/sandbox-ats/server.js",
+    "test:e2e": "node dist/test/e2e.js"
+  },
+  "dependencies": {
+    "@lssm-tech/lib.companyos-spec": "0.8.0",
+    "@lssm-tech/lib.contracts-runtime-core": "1.1.0",
+    "@lssm-tech/lib.contracts-runtime-server-mcp": "3.11.0",
+    "@lssm-tech/lib.contracts-spec": "14.0.0",
+    "@lssm-tech/lib.schema": "4.0.4",
+    "playwright": "^1.61.1",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.3",
+    "@types/node": "^20.0.0"
+  }
+}

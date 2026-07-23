@@ -1,0 +1,2 @@
+../../../synthetic-candidate-001-evidence.json
+(candidate_synthetic_001 — Alex Mercier, senior product/full-stack engineer)

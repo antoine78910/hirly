@@ -1,0 +1,14 @@
+# Mirrors agent.json for `ant beta:agents create` / update. json is the source of truth.
+name: evidence-backed-application-agent
+model:
+  id: claude-opus-4-8
+tools:
+  - type: agent_toolset_20260401
+mcp_servers: []
+skills: []
+description: >
+  Hirly customer-facing feature: given a candidate-evidence profile and one
+  job post, drafts a tailored, evidence-traceable application and blocks
+  unsupported claims.
+# system: see agent.json — long multi-paragraph prompt kept out of YAML for readability;
+#         pass agent.json directly to the API rather than hand-copying this file.

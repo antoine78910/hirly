@@ -1,0 +1,10 @@
+Draft an evidence-backed job application for the attached candidate and the job below.
+
+Candidate-evidence file: synthetic-candidate-001-evidence.json (attached to this session).
+
+Job source (URL — fetch it with web_fetch; if it cannot be read reliably, stop and ask for pasted job text instead of inferring):
+https://lssm.tech/tech-builder
+
+Follow your system instructions exactly: extract the job's material requirements and application questions, map every requirement to specific evidence_id references, draft a tailored application and proposed form answers, block any unsupported/uncertain/conflicting claim instead of inventing experience, and leave salary/work-authorization/relocation/legal/demographic answers for the candidate unless the evidence file already provides them.
+
+Write application-pack.md, claim-map.json, and submission-plan.json to /mnt/session/outputs/.

@@ -1,0 +1,219 @@
+{
+  "candidate_id": "candidate_synthetic_001",
+  "candidate_name": "Alex Mercier (fictional)",
+  "job_source": "https://lssm.tech/tech-builder",
+  "application_target": "LSSM Tech — Tech Builder / 'Apply to Join the Architects'",
+  "generated_note": "Every application claim below traces to a specific evidence_id from synthetic-candidate-001-evidence.json. No evidence_id was invented. Claims with support_status other than 'supported' must NOT be presented as fact.",
+  "claims": [
+    {
+      "claim_id": "C1",
+      "claim": "Alex Mercier has ~6 years of continuous professional software engineering experience, from 2019-04 to present.",
+      "evidence_ids": ["evidence_010", "evidence_001", "evidence_003"],
+      "support_status": "supported",
+      "verifier_reason": "evidence_010 (Ferro Systems 2019-04 to 2022-02) and evidence_001 (Northlight Labs 2022-03 to present) establish continuous employment since 2019-04; profile field years_experience states 6. Stated as a range to avoid over-precision."
+    },
+    {
+      "claim_id": "C2",
+      "claim": "Currently a Senior Software Engineer at Northlight Labs (Berlin, remote-first), leading full-stack feature development for a B2B SaaS analytics product.",
+      "evidence_ids": ["evidence_001"],
+      "support_status": "supported",
+      "verifier_reason": "Directly stated in evidence_001 with confidence 'supported'."
+    },
+    {
+      "claim": "Shipped 3 major product features from discovery to GA within 12 months, contributing to a 22% increase in weekly active accounts.",
+      "claim_id": "C3",
+      "evidence_ids": ["evidence_001"],
+      "support_status": "supported",
+      "verifier_reason": "Quantified outcome recorded in evidence_001 ('supported')."
+    },
+    {
+      "claim_id": "C4",
+      "claim": "Designed and shipped a production AI-assisted customer-support triage feature using the Claude API for ticket summarization and routing, reducing average first-response time by 35%.",
+      "evidence_ids": ["evidence_002"],
+      "support_status": "supported",
+      "verifier_reason": "evidence_002 ('supported') documents the production feature and the 35% quantified outcome at Northlight Labs."
+    },
+    {
+      "claim_id": "C5",
+      "claim": "Proficient in TypeScript and Node.js for backend and full-stack development.",
+      "evidence_ids": ["evidence_003"],
+      "support_status": "supported",
+      "verifier_reason": "evidence_003 ('supported') across Northlight Labs and Ferro Systems, 2019-04 to present."
+    },
+    {
+      "claim_id": "C6",
+      "claim": "Built and maintained production React front-ends, including shared component libraries and client state management (Redux, React Query) — i.e., reusable UI 'tech bricks'.",
+      "evidence_ids": ["evidence_004"],
+      "support_status": "supported",
+      "verifier_reason": "evidence_004 ('supported') covers React, shared component libraries, Redux and React Query."
+    },
+    {
+      "claim_id": "C7",
+      "claim": "Designs relational schemas and writes complex queries and migrations for production PostgreSQL databases.",
+      "evidence_ids": ["evidence_005"],
+      "support_status": "supported",
+      "verifier_reason": "evidence_005 ('supported')."
+    },
+    {
+      "claim_id": "C8",
+      "claim": "Uses Python for internal data-pipeline scripts and automation tasks (not as a primary backend language).",
+      "evidence_ids": ["evidence_006"],
+      "support_status": "supported",
+      "verifier_reason": "evidence_006 ('supported'); scope caveat ('not a primary backend language') is part of the evidence and must be preserved."
+    },
+    {
+      "claim_id": "C9",
+      "claim": "Deployed and operated services on AWS (EC2, RDS, S3, Lambda) as part of a small engineering team without a dedicated DevOps/SRE function.",
+      "evidence_ids": ["evidence_007"],
+      "support_status": "supported",
+      "verifier_reason": "evidence_007 ('supported'); the 'small team, no dedicated DevOps/SRE' scope must be preserved and not inflated into infra-at-scale leadership."
+    },
+    {
+      "claim_id": "C10",
+      "claim": "Built and maintained REST and GraphQL APIs for an early-stage HR-tech startup, working directly with founders and customers on scope changes.",
+      "evidence_ids": ["evidence_008"],
+      "support_status": "supported",
+      "verifier_reason": "evidence_008 ('supported')."
+    },
+    {
+      "claim_id": "C11",
+      "claim": "Directly supported enterprise pilot customers during onboarding, including live troubleshooting calls and technical Q&A.",
+      "evidence_ids": ["evidence_009"],
+      "support_status": "supported",
+      "verifier_reason": "evidence_009 ('supported')."
+    },
+    {
+      "claim_id": "C12",
+      "claim": "Worked as a Software Engineer at Ferro Systems, an early-stage HR-tech startup (~15 employees at the time).",
+      "evidence_ids": ["evidence_010"],
+      "support_status": "supported",
+      "verifier_reason": "evidence_010 ('supported')."
+    },
+    {
+      "claim_id": "C13",
+      "claim": "Took a candidate-matching feature from initial discovery workshops through to production launch, including requirements gathering with two customer design partners.",
+      "evidence_ids": ["evidence_011"],
+      "support_status": "supported",
+      "verifier_reason": "evidence_011 ('supported')."
+    },
+    {
+      "claim_id": "C14",
+      "claim": "Familiar with Docker for local development and containerized deployment of internal services.",
+      "evidence_ids": ["evidence_012"],
+      "support_status": "supported",
+      "verifier_reason": "evidence_012 ('supported')."
+    },
+    {
+      "claim_id": "C15",
+      "claim": "Mentored two junior engineers on code-review practices and onboarding.",
+      "evidence_ids": ["evidence_014"],
+      "support_status": "supported",
+      "verifier_reason": "evidence_014 ('supported'). Reviewer note limits this to mentoring 2 engineers; it does NOT support managing a team or having direct reports."
+    },
+    {
+      "claim_id": "C16",
+      "claim": "Holds a BSc in Computer Science from the University of Porto.",
+      "evidence_ids": ["evidence_015"],
+      "support_status": "supported",
+      "verifier_reason": "evidence_015 ('supported')."
+    },
+    {
+      "claim_id": "C17",
+      "claim": "Built a personal, non-production side project connecting a retrieval-augmented-generation pipeline to a Slack bot for internal documentation search.",
+      "evidence_ids": ["evidence_016"],
+      "support_status": "supported",
+      "verifier_reason": "evidence_016 ('supported') but explicitly personal/non-production; must be labelled as such and not presented as production/enterprise AI experience."
+    },
+    {
+      "claim_id": "C18",
+      "claim": "Writes and maintains automated test suites (Jest, Playwright) for full-stack applications.",
+      "evidence_ids": ["evidence_017"],
+      "support_status": "supported",
+      "verifier_reason": "evidence_017 ('supported')."
+    },
+    {
+      "claim_id": "C19",
+      "claim": "Collaborates cross-functionally with product, design, and customer success in fast-moving startup environments.",
+      "evidence_ids": ["evidence_019"],
+      "support_status": "supported",
+      "verifier_reason": "evidence_019 ('supported')."
+    },
+    {
+      "claim_id": "C20",
+      "claim": "Improved p95 API latency by 40% on a high-traffic analytics endpoint through query optimization and caching.",
+      "evidence_ids": ["evidence_020"],
+      "support_status": "supported",
+      "verifier_reason": "evidence_020 ('supported') with quantified 40% p95 reduction; maps to 'decay-resistant systems'."
+    },
+    {
+      "claim_id": "C21",
+      "claim": "Maintains an active public GitHub profile with open-source contributions and personal repositories, including the RAG/Slack-bot project and a small TypeScript utility library.",
+      "evidence_ids": ["evidence_021"],
+      "support_status": "supported",
+      "verifier_reason": "evidence_021 ('supported') confirms the profile exists; NOTE the actual URL/username/handle is NOT in the evidence file, so the specific handle cannot be asserted (candidate-only)."
+    },
+    {
+      "claim_id": "C22",
+      "claim": "Prefers roles with direct customer contact and applied-AI product work; open to individual-contributor senior/staff tracks.",
+      "evidence_ids": ["evidence_018"],
+      "support_status": "supported",
+      "verifier_reason": "evidence_018 ('supported') is a self-reported preference; used only to frame tone/framing, not as a verifiable employment fact."
+    },
+    {
+      "claim_id": "C23",
+      "claim": "Primary technical expertise is full-stack software engineering (TypeScript/Node.js backend + React frontend) with applied-AI product work — proposed answer for the 'Primary Technical Expertise' dropdown.",
+      "evidence_ids": ["evidence_003", "evidence_004", "evidence_002"],
+      "support_status": "supported",
+      "verifier_reason": "Composed from supported skill/project evidence. The dropdown's exact option list was not visible, so the candidate must select the closest available option."
+    },
+    {
+      "claim_id": "C24",
+      "claim": "Alex Mercier has led or owned production Kubernetes infrastructure / infrastructure at scale.",
+      "evidence_ids": ["evidence_013"],
+      "support_status": "uncertain",
+      "verifier_reason": "evidence_013 is confidence 'uncertain' and documents only a personal, non-production minikube learning project. known_capability_gaps.production_kubernetes_leadership marks a production-K8s-leadership claim as unsupported/uncertain. BLOCKED from being stated as fact."
+    },
+    {
+      "claim_id": "C25",
+      "claim": "Alex Mercier has provided formal architecture / product-design leadership or design-production ownership (i.e., functioned as an 'architect' in a formal leadership sense).",
+      "evidence_ids": ["evidence_001", "evidence_011"],
+      "support_status": "uncertain",
+      "verifier_reason": "known_capability_gaps.product_design_ownership_leadership: evidence supports taking features from discovery to production as an engineer, NOT formal design/architecture leadership. Given the role's 'architect' title, this must be marked uncertain, not asserted."
+    },
+    {
+      "claim_id": "C26",
+      "claim": "Alex Mercier has owned or led SOC 2 or other formal security-certification work.",
+      "evidence_ids": [],
+      "support_status": "unsupported",
+      "verifier_reason": "known_capability_gaps.soc2_or_security_certification_ownership has no supporting evidence. Any such claim must be blocked."
+    },
+    {
+      "claim_id": "C27",
+      "claim": "Alex Mercier has managed a team of more than three people / had direct reports.",
+      "evidence_ids": ["evidence_014"],
+      "support_status": "unsupported",
+      "verifier_reason": "known_capability_gaps.team_management_over_3_reports: only mentoring of 2 engineers (evidence_014) is evidenced. A team-management claim is unsupported and must be blocked."
+    },
+    {
+      "claim_id": "C28",
+      "claim": "Alex Mercier is fluent in French.",
+      "evidence_ids": [],
+      "support_status": "unsupported",
+      "verifier_reason": "known_capability_gaps.french_language_fluency has no supporting evidence. Not requested by this posting, but blocked if any later step requires it."
+    },
+    {
+      "claim_id": "C29",
+      "claim": "Alex Mercier has quota-carrying B2B SaaS sales / enterprise deal-closing / pipeline-management experience.",
+      "evidence_ids": [],
+      "support_status": "unsupported",
+      "verifier_reason": "known_capability_gaps.b2b_saas_quota_carrying_sales_experience has no supporting evidence; the profile is engineering/product, not sales. Blocked."
+    },
+    {
+      "claim_id": "C30",
+      "claim": "Alex Mercier's email address, portfolio URL, and GitHub username are [specific values].",
+      "evidence_ids": [],
+      "support_status": "unsupported",
+      "verifier_reason": "None of these specific values are present in the evidence file. evidence_021 confirms a public GitHub profile exists but gives no handle/URL. Email and portfolio URL are absent entirely. All are candidate-only fields and must not be fabricated."
+    }
+  ]
+}

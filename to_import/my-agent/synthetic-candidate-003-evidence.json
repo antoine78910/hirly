@@ -1,0 +1,168 @@
+{
+  "candidate_id": "candidate_synthetic_003",
+  "profile_type": "synthetic",
+  "purpose": "Evaluation input for Hirly Evidence-Backed Application Agent (v0), matched to the GRACE Head of Product & Design case. No real candidate data.",
+  "name": "Camille Duret (fictional)",
+  "location": "Paris, France",
+  "years_experience": "8 (2017-09 to present)",
+  "evidence": [
+    {
+      "evidence_id": "evidence_201",
+      "category": "employment",
+      "statement": "Senior Product Manager & Design Lead at Lumière Fintech, a B2B2C fintech platform serving retail banking partners in France and Belgium.",
+      "source": "Lumière Fintech",
+      "dates": "2021-03 to present",
+      "technologies": ["Figma", "product analytics tooling"],
+      "quantified_outcome": "Grew subscription-product adoption from 12% to 34% of the partner user base over 18 months.",
+      "confidence": "supported",
+      "source_locator": "resume.experience.lumiere_fintech"
+    },
+    {
+      "evidence_id": "evidence_202",
+      "category": "achievement",
+      "statement": "Defined the product vision, roadmap, and prioritization strategy for Lumière's core B2B2C subscription product.",
+      "source": "Lumière Fintech",
+      "dates": "2021-03 to present",
+      "technologies": [],
+      "quantified_outcome": null,
+      "confidence": "supported",
+      "source_locator": "resume.experience.lumiere_fintech.roadmap_ownership"
+    },
+    {
+      "evidence_id": "evidence_203",
+      "category": "employment",
+      "statement": "Product Designer at Atelier Noir, a Paris-based direct-to-consumer luxury e-commerce brand, owning design production end-to-end.",
+      "source": "Atelier Noir",
+      "dates": "2018-01 to 2021-02",
+      "technologies": ["Figma", "design systems"],
+      "quantified_outcome": "Redesigned the checkout flow, reducing cart abandonment by 18%.",
+      "confidence": "supported",
+      "source_locator": "resume.experience.atelier_noir"
+    },
+    {
+      "evidence_id": "evidence_204",
+      "category": "achievement",
+      "statement": "Led end-to-end design work from discovery through delivery at Atelier Noir, setting brand-aligned visual and interaction principles for a luxury audience.",
+      "source": "Atelier Noir",
+      "dates": "2018-01 to 2021-02",
+      "technologies": [],
+      "quantified_outcome": null,
+      "confidence": "supported",
+      "source_locator": "resume.experience.atelier_noir.design_leadership"
+    },
+    {
+      "evidence_id": "evidence_205",
+      "category": "skill",
+      "statement": "Native French speaker; professional-level English used daily in cross-border product work.",
+      "source": "self-reported, corroborated by employment history in French and English-speaking teams",
+      "dates": "2017-09 to present",
+      "technologies": [],
+      "quantified_outcome": null,
+      "confidence": "supported",
+      "source_locator": "resume.languages"
+    },
+    {
+      "evidence_id": "evidence_206",
+      "category": "skill",
+      "statement": "Owns design production directly (wireframes through high-fidelity UI), rather than only directing designers.",
+      "source": "Lumière Fintech; Atelier Noir",
+      "dates": "2018-01 to present",
+      "technologies": ["Figma"],
+      "quantified_outcome": null,
+      "confidence": "supported",
+      "source_locator": "resume.skills.design_production"
+    },
+    {
+      "evidence_id": "evidence_207",
+      "category": "achievement",
+      "statement": "Drives execution with engineering teams across core user journeys, running weekly cross-functional planning with 4 engineers and 1 designer.",
+      "source": "Lumière Fintech",
+      "dates": "2021-03 to present",
+      "technologies": [],
+      "quantified_outcome": "Cross-functional pod of 4 engineers + 1 designer",
+      "confidence": "supported",
+      "source_locator": "resume.experience.lumiere_fintech.execution"
+    },
+    {
+      "evidence_id": "evidence_208",
+      "category": "achievement",
+      "statement": "Established product success metrics (activation, retention, NPS) and iterated the roadmap based on client feedback loops with partner banks.",
+      "source": "Lumière Fintech",
+      "dates": "2022-01 to present",
+      "technologies": ["product analytics tooling"],
+      "quantified_outcome": null,
+      "confidence": "supported",
+      "source_locator": "resume.experience.lumiere_fintech.metrics"
+    },
+    {
+      "evidence_id": "evidence_209",
+      "category": "education",
+      "statement": "Master's degree in Design, ENSCI - Les Ateliers, Paris.",
+      "source": "ENSCI - Les Ateliers",
+      "dates": "2015-09 to 2017-06",
+      "technologies": [],
+      "quantified_outcome": null,
+      "confidence": "supported",
+      "source_locator": "resume.education"
+    },
+    {
+      "evidence_id": "evidence_210",
+      "category": "project",
+      "statement": "Consulted briefly on a UX audit for an insurtech partner integration at Lumière Fintech, reviewing partner-facing flows over a 6-week engagement rather than owning the product long-term.",
+      "source": "Lumière Fintech",
+      "dates": "2023-02 to 2023-03",
+      "technologies": [],
+      "quantified_outcome": null,
+      "confidence": "uncertain",
+      "source_locator": "resume.experience.lumiere_fintech.insurtech_audit",
+      "reviewer_note": "This was a short consulting engagement, not sustained insurtech product ownership. A claim of insurtech product-leadership experience should be marked uncertain, not asserted as fact."
+    }
+  ],
+  "candidate_only_fields": [
+    {
+      "field": "salary_expectation",
+      "status": "not_provided",
+      "note": "No confirmed salary expectation exists. Must be requested from the candidate."
+    },
+    {
+      "field": "work_authorization",
+      "status": "not_provided",
+      "note": "Candidate is France-based and the role is Paris on-site; no confirmed EU work-authorization status is on file even though it is likely straightforward. Must be left for the candidate, not assumed."
+    },
+    {
+      "field": "relocation_preference",
+      "status": "not_provided",
+      "note": "No confirmed relocation preference exists (role is on-site in Paris, candidate's current city — but must still not be assumed without confirmation)."
+    },
+    {
+      "field": "legal_attestations",
+      "status": "not_provided",
+      "note": "Any legal attestation must be left for the candidate."
+    },
+    {
+      "field": "demographic_information",
+      "status": "not_provided",
+      "note": "No demographic or legally sensitive information is included and none should be inferred or requested beyond what the application legally requires the candidate to answer."
+    }
+  ],
+  "known_capability_gaps": [
+    {
+      "topic": "sustained_insurtech_product_ownership",
+      "evidence_refs": ["evidence_210"],
+      "status": "uncertain",
+      "note": "Only a 6-week consulting audit is evidenced. A claim of insurtech product-leadership experience is unsupported as a sustained claim."
+    },
+    {
+      "topic": "team_size_managed",
+      "evidence_refs": ["evidence_207"],
+      "status": "supported",
+      "note": "Evidence supports leading a cross-functional pod of 4 engineers + 1 designer through execution, not formal people-management/HR authority over them — phrase as execution leadership, not headcount management, unless the candidate confirms otherwise."
+    },
+    {
+      "topic": "enterprise_B2B_saas_scale",
+      "evidence_refs": ["evidence_201"],
+      "status": "uncertain",
+      "note": "Lumière Fintech is B2B2C via retail-banking partners, not direct enterprise B2B SaaS sales motion. If the job specifically requires enterprise B2B SaaS scale, flag the distinction rather than presenting it as an exact match."
+    }
+  ]
+}

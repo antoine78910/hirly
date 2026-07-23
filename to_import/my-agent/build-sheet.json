@@ -1,0 +1,110 @@
+{
+  "meta": {
+    "founder": "Théo Boutron",
+    "company": "Hirly",
+    "problem": "A customer-facing Hirly feature: given a candidate-evidence profile and one job post, produce a tailored, evidence-traceable application draft — never inventing experience, always blocking unsupported claims and asking the candidate for what only they can answer.",
+    "created": "2026-07-22",
+    "skill_version": "0.1"
+  },
+  "agent": {
+    "name": "evidence-backed-application-agent",
+    "model": "claude-opus-4-8",
+    "model_rationale": "Newest Opus-class — the default; the job is evidence-mapping and claim-verification, where rigor matters more than speed/cost.",
+    "version": null,
+    "system_summary": "Given a candidate-evidence file and a job post (URL, with pasted text as fallback), extracts material requirements and application questions, maps each requirement to exact candidate evidence, drafts a tailored application, blocks unsupported/uncertain/conflicting claims, asks the candidate for anything only they can answer, and writes application-pack.md, claim-map.json, and submission-plan.json to /mnt/session/outputs/.",
+    "never_dos": [
+      "Never present an unsupported, uncertain, or conflicting claim as fact",
+      "Never fill salary expectation, work authorization, relocation, legal attestations, or demographic/personal answers unless explicitly provided",
+      "Never claim an application was submitted or that any callback/interview/offer/outcome occurred",
+      "Never fabricate or infer job requirements if the job page cannot be read reliably — stop and ask for pasted job text instead",
+      "Never write generic, non-job-specific application content"
+    ]
+  },
+  "outcome": {
+    "description": "Produce application-pack.md, claim-map.json, and submission-plan.json for the supplied candidate + job, fully evidence-traceable and never overstating readiness to submit.",
+    "rubric_criteria": [
+      "Every material application claim has at least one valid candidate-evidence reference (evidence_id)",
+      "No unsupported, uncertain, or conflicting claim is presented as fact",
+      "Salary expectations, work authorization, relocation, legal attestations, demographic information, and other personal answers are left for the candidate unless explicitly provided",
+      "The draft is specific to the supplied job, not generic",
+      "Job requirements and draft claims remain traceable to their sources",
+      "The output never claims an application was submitted or that a callback, interview, offer, or job outcome occurred"
+    ],
+    "max_iterations": 3
+  },
+  "tools": {
+    "toolset": "agent_toolset_20260401",
+    "enabled": ["bash", "read", "write", "edit", "glob", "grep", "web_fetch"],
+    "disabled": [],
+    "permission_overrides": [],
+    "custom_tools": []
+  },
+  "connections": {
+    "mcp_servers": [],
+    "vault_credentials": [],
+    "github": null,
+    "notes": "v0 is analysis + drafting only — no delivery connector, no submission. Web fetch reads the public job posting; pasted job text is the fallback when the page can't be read reliably."
+  },
+  "skills": [],
+  "memory": {
+    "stores": []
+  },
+  "environment": {
+    "name": "evidence-backed-application-agent-env",
+    "type": "cloud",
+    "networking": "unrestricted",
+    "allowed_hosts": [],
+    "packages": {}
+  },
+  "schedule": {
+    "mode": "on_demand",
+    "cron": null,
+    "timezone": null,
+    "human": "Triggered manually today; later by Hirly's host application per candidate/job pair — not a recurring clock job.",
+    "kickoff": "user.define_outcome (task + rubric above)"
+  },
+  "evals": {
+    "cases": [
+      {"name": "case-01-lssm-tech-builder", "input": "evals/case-01-lssm-tech-builder/", "candidate": "candidate_synthetic_001 (Alex Mercier — synthetic-candidate-001-evidence.json)", "expected": "Strong-fit case: LSSM Architect Network posting vs. a senior product/full-stack engineer — used for the live v0 launch run. Tests uncertain-claim blocking on Kubernetes/team-size/SOC2 gaps.", "last_verdict": "satisfied", "session_id": "sesn_019z7Y4EereU2bj3AwhPKb2k"},
+      {"name": "case-02-grace-head-of-product-design", "input": "evals/case-02-grace-head-of-product-design/", "candidate": "candidate_synthetic_003 (Camille Duret — synthetic-candidate-003-evidence.json)", "expected": "Strong-fit, held back: GRACE Head of Product & Design vs. a bilingual Paris-based product/design lead. Tests the insurtech-audit uncertain claim and B2B2C-vs-enterprise-B2B distinction.", "last_verdict": "satisfied", "session_id": "sesn_0176fJwQv9eFtGqBB4KJDAg6"},
+      {"name": "case-03-brex-enterprise-ae", "input": "evals/case-03-brex-enterprise-ae/", "candidate": "candidate_synthetic_002 (Sofia Almeida — synthetic-candidate-002-evidence.json)", "expected": "Strong-fit, held back: Brex Enterprise AE vs. a quota-carrying B2B SaaS AE with direct financial-software vertical fit. Tests the accounting-platform-exposure uncertain claim and the US-work-authorization candidate-only question.", "last_verdict": "satisfied", "session_id": "sesn_016Gk5rthV1g5SmhsCPgLgJ5"}
+    ],
+    "notes": "Each case pairs a matched synthetic candidate with its job posting so fit is realistic; each candidate still carries deliberate unsupported/uncertain/candidate-only gaps to exercise the blocking behavior. Case 1 is the v0 build/launch input; cases 2-3 are held back as a regression check before promoting any new agent version."
+  },
+  "defaults_applied": {
+    "iteration_bound": "Outcome stops after 3 grade-and-improve cycles",
+    "write_actions": "None — v0 drafts only, no real submission, no production credentials, no real candidate PII"
+  },
+  "interface": {
+    "who": "Théo (today); Hirly's host application and its candidates later",
+    "how": "Deliverables land as files (application-pack.md, claim-map.json, submission-plan.json); reopened via the overview page and Console for now."
+  },
+  "next_directions": [
+    {
+      "what": "Sandbox or single-ATS submission tool controlled by the Hirly host application",
+      "why_deferred": "Write-action into an external system — requires explicit candidate approval of the exact current submission plan and independent confirmation before it's safe",
+      "how": "A custom tool (or MCP connector for the target ATS) gated always_ask, that: (1) requires the candidate to approve the exact submission-plan.json content immediately before the call, (2) executes at most one submission, (3) independently observes confirmation (not a model-asserted success), (4) returns a submission receipt. The model must never generate its own approval or treat a button click alone as proof of successful submission."
+    },
+    {
+      "what": "Wire ContractSpec / CompanyOS as the application-side contract and enforcement boundary",
+      "why_deferred": "Out of scope for this workshop build by explicit choice — today's behavior is implemented directly with CMA primitives",
+      "how": "Once v1's submission tool exists, front it with a ContractSpec contract defining the submission precondition (candidate approval + evidence completeness) and CompanyOS as the enforcement/observability layer"
+    },
+    {
+      "what": "Multiagent orchestration, memory store, and scheduled deployment",
+      "why_deferred": "Explicitly out of scope for this workshop iteration — one agent, one candidate, one job per run, on-demand only",
+      "how": "Not planned as a near-term next step; revisit only if Hirly's host application needs cross-run memory (e.g. a per-candidate evidence store) or batch/recurring triggering"
+    },
+    {
+      "what": "Lock environment networking to job-board domains only",
+      "why_deferred": "Hardening — unrestricted is acceptable while the agent is read-only and no credentials are in play",
+      "how": "Switch environment.networking to limited with the relevant job-board hosts in allowed_hosts once the target ATS/job sources are known"
+    },
+    {
+      "what": "Re-run the 3 eval cases before promoting any new agent version",
+      "why_deferred": "Process habit, not a build task",
+      "how": "Run evals/run-evals.sh against the new version; only update behavior when verdicts hold across best/partial/poor-fit cases"
+    }
+  ],
+  "ids": {}
+}

@@ -1,0 +1,4 @@
+.env
+IDS.env
+*.txt.transcript
+transcript-*.md

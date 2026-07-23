@@ -1,0 +1,8 @@
+{
+  "name": "evidence-backed-application-agent-env",
+  "config": {
+    "type": "cloud",
+    "networking": {"type": "unrestricted"},
+    "packages": {"pip": [], "npm": []}
+  }
+}

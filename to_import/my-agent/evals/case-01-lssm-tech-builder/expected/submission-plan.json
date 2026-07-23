@@ -1,0 +1,104 @@
+{
+  "does_not_authorize_submission": "This plan is a DRAFT for candidate review only. It does NOT authorize, trigger, or constitute submission of any application. No application has been submitted; no callback, interview, offer, or outcome is implied. The agent drafts; it never submits.",
+  "overall_status": "BLOCKED",
+  "job_source": {
+    "type": "url",
+    "value": "https://lssm.tech/tech-builder",
+    "read_reliably": true,
+    "read_method": "web_fetch",
+    "notes": "Page returned extractable text and a working application form ('Apply to Join the Architects', steps 1-3 + 'Continue'). Posting is thematic/manifesto-style with no explicit hard requirements. Form shows step markers 1/2/3, so later-step fields may exist beyond those captured."
+  },
+  "application_target": {
+    "company": "LSSM Tech (Living Systems, Scaling Metamorphosis)",
+    "path": "Tech Builder Path",
+    "form_heading": "Apply to Join the Architects",
+    "url": "https://lssm.tech/tech-builder"
+  },
+  "candidate_reference": {
+    "candidate_id": "candidate_synthetic_001",
+    "name": "Alex Mercier (fictional)",
+    "profile_type": "synthetic",
+    "evidence_file": "synthetic-candidate-001-evidence.json",
+    "evidence_file_sha256": "db818b63739c77dc3c0e4c9fe4f9f55bd40a10d24f2eadbeee0c493c679a99bb"
+  },
+  "job_fingerprint": {
+    "url": "https://lssm.tech/tech-builder",
+    "title": "Tech Builder Path | LSSM Tech Portal",
+    "sentry_release_ref": "ca9b939a5e8d2c3325b2d0baffafa180d8d173b5",
+    "captured_themes": ["Reusable Tech Bricks", "Decay-Resistant Systems", "Learning Architectures", "Co-Evolving Architectures"],
+    "captured_form_fields": ["Full Name", "Email", "Primary Technical Expertise", "Years of Experience", "Portfolio URL", "GitHub Username"]
+  },
+  "proposed_form_fields": [
+    {
+      "field": "Full Name",
+      "type": "text",
+      "proposed_answer": "Alex Mercier",
+      "source": "profile.name",
+      "status": "proposed",
+      "note": "Fictional/synthetic identity provided in the evidence file."
+    },
+    {
+      "field": "Email",
+      "type": "text",
+      "proposed_answer": null,
+      "source": "candidate-only",
+      "status": "blocked",
+      "note": "Not present in the evidence file. Must be provided by the candidate."
+    },
+    {
+      "field": "Primary Technical Expertise",
+      "type": "dropdown",
+      "proposed_answer": "Full-stack software engineering (TypeScript/Node.js backend + React frontend), with applied-AI/LLM product work",
+      "source": ["evidence_003", "evidence_004", "evidence_002"],
+      "status": "proposed_pending_options",
+      "note": "Dropdown option list was not visible in the fetched page. Candidate should select the closest available option and confirm."
+    },
+    {
+      "field": "Years of Experience",
+      "type": "dropdown",
+      "proposed_answer": "~6 years (continuous since 2019-04; likely a '5-10 years' band)",
+      "source": ["evidence_010", "evidence_001"],
+      "status": "proposed_pending_options",
+      "note": "Profile states 6; continuous employment since 2019-04 per evidence_010 + evidence_001. Exact bucket options not visible; candidate confirms."
+    },
+    {
+      "field": "Portfolio URL",
+      "type": "text",
+      "proposed_answer": null,
+      "source": "candidate-only",
+      "status": "blocked",
+      "note": "No portfolio URL in the evidence file. evidence_021 confirms a public GitHub profile exists, but no portfolio link is on file."
+    },
+    {
+      "field": "GitHub Username",
+      "type": "text",
+      "proposed_answer": null,
+      "source": "candidate-only",
+      "status": "blocked",
+      "note": "evidence_021 confirms an active public GitHub profile exists, but the actual username/handle is NOT in the evidence file. Must be provided by the candidate; do not fabricate."
+    }
+  ],
+  "unresolved_blockers": [
+    "Email address — required form field, not in evidence file (candidate-only).",
+    "Portfolio URL — required form field, no portfolio URL on file (candidate-only).",
+    "GitHub username/handle — required form field; profile existence supported by evidence_021 but the handle itself is not on file (candidate-only).",
+    "Primary Technical Expertise dropdown — option list not visible; candidate must map to the closest provided option.",
+    "Years of Experience dropdown — bucket options not visible; candidate must select the correct band.",
+    "Definition of 'Architect' — role may expect formal architecture/design leadership; current evidence supports senior-engineer systems work only (claim C25 = uncertain). Candidate should confirm scope before applying.",
+    "Possible later/hidden form steps — form shows steps 1-3 with a 'Continue' button; any additional fields are unknown and may include candidate-only items.",
+    "If any later step requests salary expectation, work authorization, relocation preference, legal attestations, or demographic information, these are marked not_provided in the evidence file and MUST be answered by the candidate — not inferred here."
+  ],
+  "blocked_or_flagged_claims": [
+    {"topic": "production_kubernetes_leadership", "status": "uncertain", "claim_ref": "C24", "evidence_refs": ["evidence_013"]},
+    {"topic": "formal_architecture_or_design_leadership", "status": "uncertain", "claim_ref": "C25", "evidence_refs": ["evidence_001", "evidence_011"]},
+    {"topic": "soc2_or_security_certification_ownership", "status": "unsupported", "claim_ref": "C26", "evidence_refs": []},
+    {"topic": "team_management_over_3_reports", "status": "unsupported", "claim_ref": "C27", "evidence_refs": ["evidence_014"]},
+    {"topic": "french_language_fluency", "status": "unsupported", "claim_ref": "C28", "evidence_refs": []},
+    {"topic": "b2b_saas_quota_carrying_sales_experience", "status": "unsupported", "claim_ref": "C29", "evidence_refs": []}
+  ],
+  "sensitive_fields_left_for_candidate": {
+    "requested_by_this_form": false,
+    "fields": ["salary_expectation", "work_authorization", "relocation_preference", "legal_attestations", "demographic_information"],
+    "note": "None of these are requested by the captured form. All are marked not_provided in the evidence file and must be answered by the candidate if a later step requests them. Not inferred or guessed here."
+  }
+}

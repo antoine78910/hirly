@@ -1,0 +1,310 @@
+{
+  "candidate_id": "candidate_synthetic_001",
+  "profile_type": "synthetic",
+  "purpose": "Evaluation input for Hirly Evidence-Backed Application Agent (v0). No real candidate data.",
+  "name": "Alex Mercier (fictional)",
+  "location": "Lisbon, Portugal (EU)",
+  "years_experience": "6 (2019-04 to present)",
+  "evidence": [
+    {
+      "evidence_id": "evidence_001",
+      "category": "employment",
+      "statement": "Senior Software Engineer at Northlight Labs (Berlin, remote-first), leading full-stack feature development for a B2B SaaS analytics product.",
+      "source": "Northlight Labs",
+      "dates": "2022-03 to present",
+      "technologies": ["TypeScript", "Node.js", "React", "PostgreSQL", "AWS"],
+      "quantified_outcome": "Shipped 3 major product features from discovery to GA within 12 months, contributing to a 22% increase in weekly active accounts.",
+      "confidence": "supported",
+      "source_locator": "resume.experience.northlight_labs"
+    },
+    {
+      "evidence_id": "evidence_002",
+      "category": "project",
+      "statement": "Designed and implemented an AI-assisted customer support triage feature using the Claude API for ticket summarization and routing.",
+      "source": "Northlight Labs",
+      "dates": "2023-06 to 2023-11",
+      "technologies": ["TypeScript", "Node.js", "Claude API", "PostgreSQL"],
+      "quantified_outcome": "Reduced average first-response time on support tickets by 35%.",
+      "confidence": "supported",
+      "source_locator": "resume.projects.support_triage"
+    },
+    {
+      "evidence_id": "evidence_003",
+      "category": "skill",
+      "statement": "Proficient in TypeScript and Node.js for backend and full-stack application development.",
+      "source": "Northlight Labs; Ferro Systems",
+      "dates": "2019-04 to present",
+      "technologies": ["TypeScript", "Node.js"],
+      "quantified_outcome": null,
+      "confidence": "supported",
+      "source_locator": "resume.skills.backend"
+    },
+    {
+      "evidence_id": "evidence_004",
+      "category": "skill",
+      "statement": "Built and maintained production React front-ends including shared component libraries and client state management (Redux, React Query).",
+      "source": "Northlight Labs; Ferro Systems",
+      "dates": "2019-04 to present",
+      "technologies": ["React", "Redux", "React Query"],
+      "quantified_outcome": null,
+      "confidence": "supported",
+      "source_locator": "resume.skills.frontend"
+    },
+    {
+      "evidence_id": "evidence_005",
+      "category": "skill",
+      "statement": "Designed relational schemas and wrote complex queries and migrations for PostgreSQL databases in production systems.",
+      "source": "Northlight Labs; Ferro Systems",
+      "dates": "2019-04 to present",
+      "technologies": ["PostgreSQL", "SQL"],
+      "quantified_outcome": null,
+      "confidence": "supported",
+      "source_locator": "resume.skills.data"
+    },
+    {
+      "evidence_id": "evidence_006",
+      "category": "skill",
+      "statement": "Used Python for internal data-pipeline scripts and automation tasks; not used as a primary backend language.",
+      "source": "Northlight Labs",
+      "dates": "2021-01 to 2023-12",
+      "technologies": ["Python"],
+      "quantified_outcome": null,
+      "confidence": "supported",
+      "source_locator": "resume.skills.python_scope_limited"
+    },
+    {
+      "evidence_id": "evidence_007",
+      "category": "skill",
+      "statement": "Deployed and operated services on AWS (EC2, RDS, S3, Lambda) as part of a small engineering team without a dedicated DevOps/SRE function.",
+      "source": "Northlight Labs",
+      "dates": "2020-01 to present",
+      "technologies": ["AWS EC2", "AWS RDS", "AWS S3", "AWS Lambda"],
+      "quantified_outcome": null,
+      "confidence": "supported",
+      "source_locator": "resume.skills.cloud"
+    },
+    {
+      "evidence_id": "evidence_008",
+      "category": "project",
+      "statement": "Built and maintained REST and GraphQL APIs for an early-stage HR-tech startup, working directly with founders and customers on scope changes.",
+      "source": "Ferro Systems",
+      "dates": "2019-04 to 2022-02",
+      "technologies": ["Node.js", "GraphQL", "PostgreSQL"],
+      "quantified_outcome": null,
+      "confidence": "supported",
+      "source_locator": "resume.experience.ferro_systems.projects"
+    },
+    {
+      "evidence_id": "evidence_009",
+      "category": "achievement",
+      "statement": "Directly supported enterprise pilot customers during onboarding, including live troubleshooting calls and technical Q&A.",
+      "source": "Ferro Systems",
+      "dates": "2020-01 to 2022-02",
+      "technologies": [],
+      "quantified_outcome": null,
+      "confidence": "supported",
+      "source_locator": "resume.experience.ferro_systems.customer_support"
+    },
+    {
+      "evidence_id": "evidence_010",
+      "category": "employment",
+      "statement": "Software Engineer at Ferro Systems, an early-stage HR-tech startup (~15 employees at the time).",
+      "source": "Ferro Systems",
+      "dates": "2019-04 to 2022-02",
+      "technologies": [],
+      "quantified_outcome": null,
+      "confidence": "supported",
+      "source_locator": "resume.experience.ferro_systems"
+    },
+    {
+      "evidence_id": "evidence_011",
+      "category": "achievement",
+      "statement": "Took a candidate-matching feature from initial discovery workshops through to production launch, including requirements gathering with two customer design partners.",
+      "source": "Ferro Systems",
+      "dates": "2021-02 to 2021-09",
+      "technologies": ["Node.js", "PostgreSQL"],
+      "quantified_outcome": null,
+      "confidence": "supported",
+      "source_locator": "resume.experience.ferro_systems.candidate_matching"
+    },
+    {
+      "evidence_id": "evidence_012",
+      "category": "skill",
+      "statement": "Familiar with Docker for local development and containerized deployment of internal services.",
+      "source": "Northlight Labs; Ferro Systems",
+      "dates": "2019-04 to present",
+      "technologies": ["Docker"],
+      "quantified_outcome": null,
+      "confidence": "supported",
+      "source_locator": "resume.skills.containers"
+    },
+    {
+      "evidence_id": "evidence_013",
+      "category": "skill",
+      "statement": "Completed a personal learning project deploying a small cluster via minikube; no production Kubernetes experience is documented.",
+      "source": "personal project",
+      "dates": "2023-04",
+      "technologies": ["Kubernetes", "minikube"],
+      "quantified_outcome": null,
+      "confidence": "uncertain",
+      "source_locator": "resume.side_projects.k8s_learning",
+      "reviewer_note": "Insufficient evidence to support a claim of production Kubernetes expertise or of leading Kubernetes infrastructure. Any such claim must be blocked or marked uncertain, not treated as fact."
+    },
+    {
+      "evidence_id": "evidence_014",
+      "category": "achievement",
+      "statement": "Mentored two junior engineers on code review practices and onboarding.",
+      "source": "Northlight Labs",
+      "dates": "2023-01 to present",
+      "technologies": [],
+      "quantified_outcome": "2 engineers mentored",
+      "confidence": "supported",
+      "source_locator": "resume.experience.northlight_labs.mentoring",
+      "reviewer_note": "This is the only people-development evidence on file. It supports mentoring of 2 engineers; it does NOT support a claim of managing a team, having direct reports, or managing more than 3 people."
+    },
+    {
+      "evidence_id": "evidence_015",
+      "category": "education",
+      "statement": "BSc in Computer Science, University of Porto.",
+      "source": "University of Porto",
+      "dates": "2015-09 to 2019-06",
+      "technologies": [],
+      "quantified_outcome": null,
+      "confidence": "supported",
+      "source_locator": "resume.education"
+    },
+    {
+      "evidence_id": "evidence_016",
+      "category": "project",
+      "statement": "Built a personal, non-production side project connecting a retrieval-augmented-generation pipeline to a Slack bot for internal documentation search.",
+      "source": "personal project",
+      "dates": "2023-08 to 2023-10",
+      "technologies": ["Python", "Claude API", "vector database"],
+      "quantified_outcome": null,
+      "confidence": "supported",
+      "source_locator": "resume.side_projects.rag_slack_bot",
+      "reviewer_note": "Explicitly a personal/non-production project. Must not be presented as production or enterprise AI experience."
+    },
+    {
+      "evidence_id": "evidence_017",
+      "category": "skill",
+      "statement": "Writes and maintains automated test suites (Jest, Playwright) for full-stack applications.",
+      "source": "Northlight Labs; Ferro Systems",
+      "dates": "2019-04 to present",
+      "technologies": ["Jest", "Playwright"],
+      "quantified_outcome": null,
+      "confidence": "supported",
+      "source_locator": "resume.skills.testing"
+    },
+    {
+      "evidence_id": "evidence_018",
+      "category": "preference",
+      "statement": "Prefers roles with direct customer contact and applied-AI product work; open to individual-contributor senior/staff tracks.",
+      "source": "candidate self-report during profile intake",
+      "dates": "2026-07",
+      "technologies": [],
+      "quantified_outcome": null,
+      "confidence": "supported",
+      "source_locator": "intake.preferences",
+      "reviewer_note": "Self-reported preference, not a verifiable employment fact. May inform tone/framing of the application draft but is not itself an application claim requiring further evidence."
+    },
+    {
+      "evidence_id": "evidence_019",
+      "category": "skill",
+      "statement": "Cross-functional collaboration with product, design, and customer success in fast-moving startup environments.",
+      "source": "Northlight Labs; Ferro Systems",
+      "dates": "2019-04 to present",
+      "technologies": [],
+      "quantified_outcome": null,
+      "confidence": "supported",
+      "source_locator": "resume.skills.collaboration"
+    },
+    {
+      "evidence_id": "evidence_020",
+      "category": "achievement",
+      "statement": "Improved p95 API latency by 40% on a high-traffic analytics endpoint through query optimization and caching.",
+      "source": "Northlight Labs",
+      "dates": "2024-02 to 2024-04",
+      "technologies": ["PostgreSQL", "Node.js", "caching"],
+      "quantified_outcome": "40% p95 latency reduction",
+      "confidence": "supported",
+      "source_locator": "resume.experience.northlight_labs.performance"
+    },
+    {
+      "evidence_id": "evidence_021",
+      "category": "achievement",
+      "statement": "Maintains an active public GitHub profile with open-source contributions and personal project repositories, including the RAG/Slack-bot side project and a small library of TypeScript utilities.",
+      "source": "personal GitHub",
+      "dates": "2020-01 to present",
+      "technologies": ["TypeScript", "Python", "Git"],
+      "quantified_outcome": null,
+      "confidence": "supported",
+      "source_locator": "resume.links.github"
+    }
+  ],
+  "candidate_only_fields": [
+    {
+      "field": "salary_expectation",
+      "status": "not_provided",
+      "note": "No confirmed salary expectation exists. The agent must not infer, estimate, or fabricate one; it must be requested from the candidate."
+    },
+    {
+      "field": "work_authorization",
+      "status": "not_provided",
+      "note": "No confirmed work-authorization answer exists. Must be left for the candidate."
+    },
+    {
+      "field": "relocation_preference",
+      "status": "not_provided",
+      "note": "No confirmed relocation preference exists. Must be left for the candidate."
+    },
+    {
+      "field": "legal_attestations",
+      "status": "not_provided",
+      "note": "Any legal attestation (e.g. right-to-work declarations, background-check consent) must be left for the candidate."
+    },
+    {
+      "field": "demographic_information",
+      "status": "not_provided",
+      "note": "No demographic or legally sensitive information is included in this profile and none should be inferred or requested beyond what the job application legally requires the candidate (not the agent) to answer."
+    }
+  ],
+  "known_capability_gaps": [
+    {
+      "topic": "production_kubernetes_leadership",
+      "evidence_refs": ["evidence_013"],
+      "status": "uncertain",
+      "note": "Only personal-project, non-production Kubernetes exposure is evidenced. A claim of leading Kubernetes infrastructure in production is unsupported."
+    },
+    {
+      "topic": "soc2_or_security_certification_ownership",
+      "evidence_refs": [],
+      "status": "unsupported",
+      "note": "No evidence exists of owning or leading SOC 2 or formal security certification work. Any such claim must be blocked."
+    },
+    {
+      "topic": "team_management_over_3_reports",
+      "evidence_refs": ["evidence_014"],
+      "status": "unsupported",
+      "note": "Only mentoring of 2 engineers is evidenced. A claim of managing a team larger than 3 people is unsupported."
+    },
+    {
+      "topic": "french_language_fluency",
+      "evidence_refs": [],
+      "status": "unsupported",
+      "note": "No evidence of French-language proficiency exists. Any application requiring fluent French must flag this as a candidate-only question, not assume fluency."
+    },
+    {
+      "topic": "b2b_saas_quota_carrying_sales_experience",
+      "evidence_refs": [],
+      "status": "unsupported",
+      "note": "No evidence of carrying a sales quota, closing enterprise deals, or managing a sales pipeline exists. This candidate's evidence is engineering/product, not sales."
+    },
+    {
+      "topic": "product_design_ownership_leadership",
+      "evidence_refs": ["evidence_001", "evidence_011"],
+      "status": "uncertain",
+      "note": "Evidence supports taking features from discovery to production as an engineer, not formal design leadership, visual/design-production ownership, or B2B2C/luxury product design experience. A claim of design leadership must be marked uncertain, not asserted as fact."
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "agent_version": 1,
+  "agent_id": "agent_01UCbqpvwhktEKwcZrmHr7ZJ",
+  "results": [
+    {"case": "case-01-lssm-tech-builder", "session_id": "sesn_019z7Y4EereU2bj3AwhPKb2k", "verdict": "satisfied", "note": "v0 build/launch run; output saved as evals/case-01-lssm-tech-builder/expected/"},
+    {"case": "case-02-grace-head-of-product-design", "session_id": "sesn_0176fJwQv9eFtGqBB4KJDAg6", "verdict": "satisfied", "note": "held-back regression case"},
+    {"case": "case-03-brex-enterprise-ae", "session_id": "sesn_016Gk5rthV1g5SmhsCPgLgJ5", "verdict": "satisfied", "note": "held-back regression case"}
+  ],
+  "summary": "3/3 cases satisfied on agent version 1, first attempt each (no iteration needed)."
+}
