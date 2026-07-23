@@ -36,7 +36,9 @@ const pct = (value) =>
 const mergeTrendSeries = (series = {}) => {
   const dates = new Set();
   Object.values(series).forEach((items) => {
-    (items || []).forEach((item) => dates.add(item.date));
+    (items || []).forEach((item) => {
+      dates.add(item.date);
+    });
   });
   return [...dates].sort().map((date) => ({
     date,

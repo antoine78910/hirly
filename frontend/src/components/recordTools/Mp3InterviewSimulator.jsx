@@ -172,7 +172,7 @@ function useMicrophoneSilenceDetector({
 
   const stop = useCallback(() => stopAll(), [stopAll]);
 
-  useEffect(() => () => stopAll(), []);
+  useEffect(() => () => stopAll(), [stopAll]);
 
   return { start, stop, listening, level, error };
 }
@@ -293,12 +293,12 @@ function InterviewTurnIndicator({
             Listen only — this does not start the dialogue.
           </p>
           <div className="mt-5 flex h-10 items-end justify-center gap-1">
-            {Array.from({ length: 7 }).map((_, i) => (
+            {Array.from({ length: 7 }, (_, index) => index).map((index) => (
               <span
-                key={i}
+                key={index}
                 className="w-1.5 rounded-full bg-sky-500 animate-pulse"
                 style={{
-                  height: `${12 + ((i * 5 + previewIndex * 3) % 24)}px`,
+                  height: `${12 + ((index * 5 + previewIndex * 3) % 24)}px`,
                   animationDelay: `${i * 0.08}s`,
                 }}
               />
@@ -323,12 +323,12 @@ function InterviewTurnIndicator({
             Step {currentIndex + 1} of {totalSteps}
           </p>
           <div className="mt-5 flex h-12 items-end justify-center gap-1.5">
-            {Array.from({ length: 9 }).map((_, i) => (
+            {Array.from({ length: 9 }, (_, index) => index).map((index) => (
               <span
-                key={i}
+                key={index}
                 className="w-2 animate-bounce rounded-full bg-violet-500"
                 style={{
-                  height: `${16 + (i % 3) * 10}px`,
+                  height: `${16 + (index % 3) * 10}px`,
                   animationDelay: `${i * 0.07}s`,
                   animationDuration: "0.55s",
                 }}
@@ -501,7 +501,7 @@ function TeleprompterPanel({ text }) {
   useEffect(() => {
     if (containerRef.current) containerRef.current.scrollTop = 0;
     setScrolling(true);
-  }, [text]);
+  }, []);
 
   useEffect(() => {
     if (!scrolling || !text) {
@@ -1317,11 +1317,12 @@ export default function Mp3InterviewSimulator() {
               </div>
 
               <div className="mt-3 space-y-3">
-                <label className="block text-sm">
+                <label className="block text-sm" htmlFor="mp3-silence-threshold">
                   <span className="block text-xs font-semibold text-zinc-600">
                     Silence threshold (dB)
                   </span>
                   <Input
+                    id="mp3-silence-threshold"
                     type="number"
                     step={1}
                     value={thresholdDb}
@@ -1329,11 +1330,12 @@ export default function Mp3InterviewSimulator() {
                     className="mt-1"
                   />
                 </label>
-                <label className="block text-sm">
+                <label className="block text-sm" htmlFor="mp3-min-silence">
                   <span className="block text-xs font-semibold text-zinc-600">
                     Min silence (ms)
                   </span>
                   <Input
+                    id="mp3-min-silence"
                     type="number"
                     step={50}
                     value={minSilenceMs}
@@ -1341,9 +1343,10 @@ export default function Mp3InterviewSimulator() {
                     className="mt-1"
                   />
                 </label>
-                <label className="block text-sm">
+                <label className="block text-sm" htmlFor="mp3-padding">
                   <span className="block text-xs font-semibold text-zinc-600">Padding (ms)</span>
                   <Input
+                    id="mp3-padding"
                     type="number"
                     step={50}
                     value={paddingMs}
@@ -1354,11 +1357,12 @@ export default function Mp3InterviewSimulator() {
                     Extra time kept before/after each detected cut (default 500 ms).
                   </span>
                 </label>
-                <label className="block text-sm">
+                <label className="block text-sm" htmlFor="mp3-min-segment">
                   <span className="block text-xs font-semibold text-zinc-600">
                     Min segment (ms)
                   </span>
                   <Input
+                    id="mp3-min-segment"
                     type="number"
                     step={50}
                     value={minSegmentMs}
@@ -1392,7 +1396,7 @@ export default function Mp3InterviewSimulator() {
                           })),
                         );
                         setAnalysisLoading(false);
-                      } catch (e) {
+                      } catch (_e) {
                         setAnalysisLoading(false);
                       }
                     }}
@@ -1532,9 +1536,10 @@ export default function Mp3InterviewSimulator() {
                       </div>
 
                       <div className="mt-3 grid grid-cols-2 gap-2">
-                        <label className="block text-xs">
+                        <label className="block text-xs" htmlFor={`mp3-segment-${idx}-start`}>
                           <span className="block font-semibold text-zinc-600">Start (s)</span>
                           <Input
+                            id={`mp3-segment-${idx}-start`}
                             type="number"
                             step={0.1}
                             value={Number(seg.start.toFixed(2))}
@@ -1542,9 +1547,10 @@ export default function Mp3InterviewSimulator() {
                             disabled={!canEditSegment || status !== "setup"}
                           />
                         </label>
-                        <label className="block text-xs">
+                        <label className="block text-xs" htmlFor={`mp3-segment-${idx}-end`}>
                           <span className="block font-semibold text-zinc-600">End (s)</span>
                           <Input
+                            id={`mp3-segment-${idx}-end`}
                             type="number"
                             step={0.1}
                             value={Number(seg.end.toFixed(2))}
@@ -1638,6 +1644,7 @@ export default function Mp3InterviewSimulator() {
                 <p className="mt-3 text-xs font-semibold text-rose-700">{micError}</p>
               ) : null}
 
+              {/* biome-ignore lint/a11y/useMediaCaption: This editor-only playback has a synchronized editable transcript. */}
               <audio ref={audioRef} src={audioUrl || undefined} preload="metadata" />
               <div className="mt-3 text-xs text-zinc-400">
                 Tip: if the split is off, adjust silence threshold and min silence, then Re-analyze.

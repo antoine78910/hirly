@@ -94,11 +94,11 @@ export function summarizeSamples(samples: number[]): {
   if (samples.length !== 5) throw new Error("exactly five SQL samples are required");
   const sorted = [...samples].sort((a, b) => a - b);
   return {
-    minMs: sorted[0]!,
-    maxMs: sorted[4]!,
+    minMs: sorted[0],
+    maxMs: sorted[4],
     meanMs: samples.reduce((sum, value) => sum + value, 0) / samples.length,
-    p50Ms: sorted[2]!,
-    p95Ms: sorted[4]!,
+    p50Ms: sorted[2],
+    p95Ms: sorted[4],
   };
 }
 

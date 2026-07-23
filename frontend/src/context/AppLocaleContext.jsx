@@ -56,7 +56,7 @@ export function AppLocaleProvider({ children }) {
       api.put("/account/settings", { language: lang }).catch(() => {});
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.user_id, user?.language]);
+  }, [user?.user_id, user?.language, lang]);
 
   useEffect(() => {
     document.documentElement.lang = lang;

@@ -7,7 +7,7 @@ export const GMAIL_READONLY_SCOPE = "https://www.googleapis.com/auth/gmail.reado
 export const ONBOARDING_RETURN_STORAGE_KEY = "hirly.onboarding_return";
 
 export function storeOnboardingReturnPath(path) {
-  const normalized = path && path.startsWith("/") ? path : "/onboarding?step=jobSearch";
+  const normalized = path?.startsWith("/") ? path : "/onboarding?step=jobSearch";
   try {
     sessionStorage.setItem("swiipr_onboarding_return", normalized);
     localStorage.setItem(ONBOARDING_RETURN_STORAGE_KEY, normalized);
@@ -34,7 +34,7 @@ export function clearOnboardingReturnPath() {
 }
 
 export function splitAppPath(rawPath) {
-  const raw = rawPath && rawPath.startsWith("/") ? rawPath : `/${rawPath || ""}`;
+  const raw = rawPath?.startsWith("/") ? rawPath : `/${rawPath || ""}`;
   const qIndex = raw.indexOf("?");
   if (qIndex === -1) return { pathname: raw, search: "" };
   return { pathname: raw.slice(0, qIndex) || "/", search: raw.slice(qIndex) };
@@ -133,7 +133,7 @@ export function supabaseSessionPayload(session) {
  * @param {{ login_hint?: string, prompt?: string }} [opts] - Optional OAuth hints.
  */
 export async function startGoogleLogin(returnPath = "/swipe", opts = {}) {
-  const path = returnPath && returnPath.startsWith("/") ? returnPath : "/swipe";
+  const path = returnPath?.startsWith("/") ? returnPath : "/swipe";
   storeOnboardingReturnPath(path);
   setSessionToken(null);
 
@@ -147,7 +147,7 @@ export async function startGoogleLogin(returnPath = "/swipe", opts = {}) {
         window.location.href = path;
         return true;
       }
-    } catch (error) {
+    } catch (_error) {
       console.warn("Dev login unavailable, falling back to hosted auth.");
     }
   }
@@ -176,7 +176,7 @@ export async function startGoogleLogin(returnPath = "/swipe", opts = {}) {
 }
 
 export function authCallbackRedirectUrl(returnPath = "/swipe") {
-  const path = returnPath && returnPath.startsWith("/") ? returnPath : "/swipe";
+  const path = returnPath?.startsWith("/") ? returnPath : "/swipe";
   storeOnboardingReturnPath(path);
   return authCallbackBaseUrl();
 }

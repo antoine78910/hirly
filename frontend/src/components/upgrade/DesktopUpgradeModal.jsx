@@ -54,8 +54,7 @@ function TierCard({ tier, selected, onSelect, isMonthly, t, lang }) {
   return (
     <button
       type="button"
-      role="radio"
-      aria-checked={selected}
+      aria-pressed={selected}
       data-state={selected ? "on" : "off"}
       onClick={onSelect}
       className={`relative cursor-pointer rounded-xl border-2 px-2.5 pb-2.5 pt-5 text-center transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/40 sm:px-4 sm:pb-4 sm:pt-6 lg:px-6 lg:pb-6 lg:pt-7 ${

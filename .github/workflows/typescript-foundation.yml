@@ -54,7 +54,21 @@ jobs:
           python -m venv .venv
           .venv/bin/python -m pip install --disable-pip-version-check -r backend/requirements.txt
           .venv/bin/python -m pip install --disable-pip-version-check pytest==9.1.1
-      - run: bun install --frozen-lockfile
+      - name: Install Bun workspaces
+        shell: bash
+        run: |
+          for attempt in 1 2 3; do
+            if bun install --frozen-lockfile; then
+              exit 0
+            fi
+
+            if [ "$attempt" -eq 3 ]; then
+              echo "::error::bun install failed after ${attempt} attempts."
+              exit 1
+            fi
+
+            sleep "$((attempt * 15))"
+          done
       - name: Validate formatting, lint rules, and import organization
         run: bun run check:changed
       - name: Run G003 worker adversarial matrix

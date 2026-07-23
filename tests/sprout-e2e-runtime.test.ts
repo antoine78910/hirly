@@ -319,7 +319,7 @@ describe("Sprout source commit pipeline", () => {
   });
 
   test("normalizes, validates, canonicalizes tracking URLs, and preserves sanitized source evidence", () => {
-    const raw = parseSproutResponse(fixture).jobs[0]!;
+    const raw = parseSproutResponse(fixture).jobs[0];
     const entry = buildSproutCommitEntry({
       raw,
       policyId,
@@ -457,7 +457,7 @@ describe("Sprout source commit pipeline", () => {
         sproutFetch: (async () => Response.json(fixture)) as typeof fetch,
         providerClaimHeartbeatMs: 10_000,
       },
-    )["provider.fetch_page"]!;
+    )["provider.fetch_page"];
 
     await expect(handler(task("canary"), new AbortController().signal)).resolves.toEqual({
       taskCompleted: true,
@@ -523,7 +523,7 @@ describe("Sprout source commit pipeline", () => {
         sproutFetch: (async () => Response.json(fixture)) as typeof fetch,
         providerClaimHeartbeatMs: 10_000,
       },
-    )["provider.fetch_page"]!;
+    )["provider.fetch_page"];
     await expect(failedHandler(task("canary"), new AbortController().signal)).rejects.toThrow(
       "sprout_credential_unavailable",
     );
@@ -564,7 +564,7 @@ describe("Sprout source commit pipeline", () => {
           })) as typeof fetch,
         providerClaimHeartbeatMs: 10_000,
       },
-    )["provider.fetch_page"]!;
+    )["provider.fetch_page"];
     await expect(fallbackHandler(task("backfill"), new AbortController().signal)).resolves.toEqual({
       taskCompleted: true,
     });
@@ -586,7 +586,7 @@ describe("Sprout source commit pipeline", () => {
       },
       sproutFetch: (async () => Response.json(fixture)) as typeof fetch,
       providerClaimHeartbeatMs: 10_000,
-    })["provider.fetch_page"]!;
+    })["provider.fetch_page"];
     await expect(
       frontierHandler(
         {

@@ -320,7 +320,7 @@ export default function OnboardingSignup({ onClose, lang = "en" }) {
                 </div>
 
                 <form onSubmit={handleEmailSignup} className="space-y-3">
-                  <label className="block">
+                  <label className="block" htmlFor="signup-first-name">
                     <span className="sr-only">{copy.firstNamePlaceholder}</span>
                     <div className="relative">
                       <User className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
@@ -337,7 +337,7 @@ export default function OnboardingSignup({ onClose, lang = "en" }) {
                     </div>
                   </label>
 
-                  <label className="block">
+                  <label className="block" htmlFor="signup-email">
                     <span className="sr-only">{copy.emailPlaceholder}</span>
                     <div className="relative">
                       <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />

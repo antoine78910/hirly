@@ -71,12 +71,12 @@ function TrustLogoMarqueeRow({ logos, reverse = false, duration = 36, loose = fa
         className={`flex w-max flex-nowrap items-center ${reverse ? "pain-marquee-right" : "pain-marquee-left"}`}
         style={{ animationDuration: `${duration}s` }}
       >
-        {Array.from({ length: MARQUEE_COPIES }, (_, copy) => (
+        {Array.from({ length: MARQUEE_COPIES }, (_, copy) => `c${copy}`).map((suffix) => (
           <TrustLogoTrack
-            key={copy}
+            key={suffix}
             logos={logos}
-            suffix={`c${copy}`}
-            hidden={copy > 0}
+            suffix={suffix}
+            hidden={suffix !== "c0"}
             loose={loose}
           />
         ))}

@@ -252,7 +252,7 @@ export class PostgresPaidCohortCoverageStore implements PaidCohortCoverageStore 
         WHERE id = ${evidence.coverageRunId}::uuid
         FOR UPDATE
       `;
-      if (!run || run.kind !== "inventory_maintenance" || run.provider !== null) {
+      if (run?.kind !== "inventory_maintenance" || run.provider !== null) {
         throw new Error("PAID_COHORT_COVERAGE_REFUSED: invalid coverage run boundary");
       }
       if (run.status === "succeeded") {

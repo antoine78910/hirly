@@ -74,7 +74,7 @@ export default function TrainingCreator() {
     } finally {
       setLoading(false);
     }
-  }, [loadOverview, loadStudents, loadLeads, navigate, t]);
+  }, [loadOverview, loadStudents, loadLeads, navigate, t, lang]);
 
   useEffect(() => {
     load();

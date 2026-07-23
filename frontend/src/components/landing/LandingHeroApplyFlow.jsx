@@ -4,10 +4,7 @@ import { Check } from "lucide-react";
 
 function ShimmerStatus({ children }) {
   return (
-    <span
-      aria-label={children}
-      className="inline-block bg-[length:200%_100%] bg-gradient-to-r from-zinc-400 via-zinc-900 to-zinc-400 bg-clip-text text-sm font-semibold tracking-tight text-transparent animate-[landing-shimmer_1.5s_linear_infinite]"
-    >
+    <span className="inline-block bg-[length:200%_100%] bg-gradient-to-r from-zinc-400 via-zinc-900 to-zinc-400 bg-clip-text text-sm font-semibold tracking-tight text-transparent animate-[landing-shimmer_1.5s_linear_infinite]">
       {children}
     </span>
   );
@@ -63,7 +60,7 @@ export default function LandingHeroApplyFlow({ steps, activeStep, visible }) {
   useEffect(() => {
     if (!listRef.current || visibleCount === 0) return;
     listRef.current.scrollTo({ top: listRef.current.scrollHeight, behavior: "smooth" });
-  }, [visibleCount, activeStep]);
+  }, [visibleCount]);
 
   return (
     <div className="relative h-[320px] w-full overflow-hidden rounded-xl border border-zinc-100 bg-white">

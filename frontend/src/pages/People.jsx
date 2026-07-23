@@ -165,6 +165,7 @@ function PersonCard({ person, index, onConnect }) {
       {/* Button */}
       {person.connected ? (
         <button
+          type="button"
           disabled
           className="shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold text-sprout-dim bg-sprout-surface-2 border border-sprout-border cursor-default"
         >
@@ -172,6 +173,7 @@ function PersonCard({ person, index, onConnect }) {
         </button>
       ) : (
         <button
+          type="button"
           onClick={() => onConnect(person)}
           className="shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold text-sprout-mint bg-sprout-mint-soft border border-sprout-mint/30 hover:bg-sprout-mint/20 transition-colors"
         >

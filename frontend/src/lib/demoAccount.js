@@ -23,7 +23,7 @@ export function ensureDemoAccountDefaults() {
 }
 
 export function setDemoAccountFromUser(user, isAdmin = false) {
-  const nextDemoAccount = Boolean(user?.demo_account) && !isAdmin && !Boolean(user?.is_admin);
+  const nextDemoAccount = Boolean(user?.demo_account) && !isAdmin && !user?.is_admin;
   cachedDemoAccount = nextDemoAccount;
   setFinanceDemoEligibility(cachedDemoAccount, isAdmin);
   if (cachedDemoAccount) {
@@ -203,7 +203,9 @@ export function seedTutorialShowcaseIfEmpty(jobs = []) {
   const picks = (jobs || []).filter((job) => job?.job_id).slice(0, 3);
   if (!picks.length) return;
 
-  picks.forEach((job) => cacheJobForDemo(job));
+  picks.forEach((job) => {
+    cacheJobForDemo(job);
+  });
 
   const applications = picks.map((job, index) => ({
     ...buildDemoApplication(job, index),
@@ -268,7 +270,9 @@ export function seedDemoShowcaseIfEmpty() {
   ];
 
   const jobs = TECH_SHOWCASE_JOBS;
-  jobs.forEach((job) => cacheJobForDemo(job));
+  jobs.forEach((job) => {
+    cacheJobForDemo(job);
+  });
 
   const applications = jobs.map((job, index) => ({
     ...buildDemoApplication(job, index),

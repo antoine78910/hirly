@@ -83,7 +83,9 @@ export default function ContactSupportDialog({ open, onClose }) {
       const form = new FormData();
       form.append("reply_email", email);
       form.append("message", text);
-      files.forEach(({ file }) => form.append("files", file));
+      files.forEach(({ file }) => {
+        form.append("files", file);
+      });
 
       await api.post("/feedback/contact", form, {
         headers: { "Content-Type": "multipart/form-data" },

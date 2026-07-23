@@ -123,12 +123,12 @@ function workModes(source: JobProjectionSource): Array<"onsite" | "hybrid" | "re
 
 const INDUSTRY_ALIASES: Array<[string, RegExp]> = [
   ["healthcare", /health|healthcare|medtech|medical|pharma|hospital/],
-  ["hr-tech", /human resources|hr|recruit|talent/],
+  ["hr-tech", /human resources|\bhr\b|recruit|talent/],
   ["manufacturing", /manufactur|industrial|automotive|factory/],
   ["financial-services", /fintech|financial|bank|insurance|payments?/],
   ["retail", /retail|e-commerce|ecommerce|marketplace/],
   ["public-sector", /public sector|govtech|government|civil service/],
-  ["saas", /saas|software as a service/],
+  ["saas", /\bsaas\b|software as a service/],
   ["defense", /defen[cs]e|military|sovereign/],
   ["ad-tech", /adtech|advertis|marketing technology/],
 ];

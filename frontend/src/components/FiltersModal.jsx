@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Plus, Info } from "lucide-react";
+import { X, Info } from "lucide-react";
 import { toast } from "sonner";
 import { Switch } from "../components/ui/switch";
 import PlacesAutocomplete, { hasGooglePlacesKey } from "./PlacesAutocomplete";
@@ -97,7 +97,7 @@ function RadioRow({ active, label, onClick, testId }) {
       <span className="font-medium">{label}</span>
       {active && (
         <span className={sel.checkDot}>
-          <svg viewBox="0 0 20 20" className="w-3 h-3" fill="currentColor">
+          <svg aria-hidden="true" viewBox="0 0 20 20" className="w-3 h-3" fill="currentColor">
             <path d="M7.5 13l-3-3 1.4-1.4L7.5 10.2l6.6-6.6L15.5 5z" />
           </svg>
         </span>
@@ -212,6 +212,7 @@ export default function FiltersModal({
         <div className="sticky top-0 z-10 border-b border-sprout-border bg-sprout-bg/95 pt-safe backdrop-blur-xl">
           <div className="mx-auto flex max-w-md items-center justify-between px-safe py-3 sm:px-5 sm:py-4">
             <button
+              type="button"
               onClick={onClose}
               className="w-10 h-10 grid place-items-center rounded-full hover:bg-sprout-surface"
               data-testid="filters-close"
@@ -414,14 +415,15 @@ export default function FiltersModal({
           />
 
           <section>
-            <label className="flex items-center justify-between text-zinc-900">
+            <div className="flex items-center justify-between text-zinc-900">
               <span className="font-semibold">Only search in my country</span>
               <Switch
+                aria-label="Only search in my country"
                 checked={f.onlyMyCountry}
                 onCheckedChange={(v) => setF((s) => ({ ...s, onlyMyCountry: v }))}
                 data-testid="filters-only-my-country"
               />
-            </label>
+            </div>
           </section>
 
           {/* Only / hide companies */}
@@ -488,22 +490,24 @@ export default function FiltersModal({
           <section>
             <h3 className="font-display font-bold text-2xl mb-3">Additional Filters</h3>
             <div className="space-y-3">
-              <label className="flex items-center justify-between text-zinc-900">
+              <div className="flex items-center justify-between text-zinc-900">
                 <span>Include unknown location type</span>
                 <Switch
+                  aria-label="Include unknown location type"
                   checked={f.includeUnknownLocation}
                   onCheckedChange={(v) => setF((s) => ({ ...s, includeUnknownLocation: v }))}
                   data-testid="filters-unknown-location"
                 />
-              </label>
-              <label className="flex items-center justify-between text-zinc-900">
+              </div>
+              <div className="flex items-center justify-between text-zinc-900">
                 <span>Include unknown salary range</span>
                 <Switch
+                  aria-label="Include unknown salary range"
                   checked={f.includeUnknownSalary}
                   onCheckedChange={(v) => setF((s) => ({ ...s, includeUnknownSalary: v }))}
                   data-testid="filters-unknown-salary"
                 />
-              </label>
+              </div>
             </div>
           </section>
         </div>
@@ -524,6 +528,7 @@ export default function FiltersModal({
             </div>
             <div className="flex gap-3">
               <button
+                type="button"
                 onClick={() => {
                   setF(DEFAULT);
                   setLocationDraft("");
@@ -535,6 +540,7 @@ export default function FiltersModal({
                 Clear
               </button>
               <button
+                type="button"
                 onClick={() => {
                   if (hasGooglePlacesKey() && locationDraft && !f.locationData) {
                     toast.error("Select a location from the suggestions");

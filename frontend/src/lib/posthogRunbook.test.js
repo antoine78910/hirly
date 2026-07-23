@@ -1,7 +1,7 @@
-import fs from "fs";
-import os from "os";
-import path from "path";
-import { spawnSync } from "child_process";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { spawnSync } from "node:child_process";
 
 const runbook = fs.readFileSync(
   path.join(process.cwd(), "..", "docs", "operations", "posthog-parallel-rollout.md"),
@@ -70,7 +70,7 @@ describe("PostHog production-gate runbook contract", () => {
     expect(runbook).toContain("pagination_complete:true");
     expect(runbook).toContain("total_event_count");
     expect(runbook).toContain("final_cursor");
-    expect(runbook).toContain('response="$(run_stripe_page "${args[@]}")" || return $?');
+    expect(runbook).toContain(`response="$(run_stripe_page "\${args[@]}")" || return $?`);
   });
 
   it("keeps live rollout switches blocked behind fixed evidence thresholds", () => {

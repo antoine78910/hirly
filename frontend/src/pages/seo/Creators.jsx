@@ -283,7 +283,7 @@ export default function Creators() {
               const Icon = step.icon;
               return (
                 <motion.div
-                  key={i}
+                  key={JSON.stringify(step)}
                   initial={{ opacity: 0, y: 24 }}
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true, margin: "-80px" }}
@@ -323,8 +323,11 @@ export default function Creators() {
                 "Liberté créative totale — ton format, ton ton",
                 "Accès gratuit à Hirly pour parler de ton vécu réel",
                 "Paiement mensuel basé sur tes vues cumulées",
-              ].map((item, i) => (
-                <li key={i} className="flex items-start gap-2.5 text-sm text-zinc-600">
+              ].map((item, _i) => (
+                <li
+                  key={JSON.stringify(step)}
+                  className="flex items-start gap-2.5 text-sm text-zinc-600"
+                >
                   <Share2 className="w-4 h-4 text-linkedin flex-shrink-0 mt-0.5" />
                   {item}
                 </li>

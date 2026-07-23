@@ -15,7 +15,7 @@ export const ONBOARDING_SIGNUP_GOAL = "onboarding_signup";
 export const ONBOARDING_COMPLETED_GOAL = "onboarding_completed";
 export const ONBOARDING_CHECKOUT_STARTED_GOAL = "onboarding_checkout_started";
 
-const ONBOARDING_STEP_LABELS = {
+const _ONBOARDING_STEP_LABELS = {
   intro: "Intro slides",
   signup: "Sign up",
   jobSearch: "Job search status",
@@ -96,7 +96,7 @@ function sanitizeGoalParams(params = {}) {
   return out;
 }
 
-function paddedStepNumber(stepNumber) {
+function _paddedStepNumber(stepNumber) {
   return String(stepNumber).padStart(2, "0");
 }
 

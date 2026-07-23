@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import {
@@ -35,24 +35,27 @@ export default function Improve() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const load = async (refresh = false) => {
-    if (refresh) setRefreshing(true);
-    else setLoading(true);
-    try {
-      const { data } = await api.get(`/coach/improve${refresh ? "?refresh=true" : ""}`);
-      setData(data);
-    } catch (e) {
-      if (e?.response?.status === 400) navigate("/onboarding");
-      else toast.error(e?.response?.data?.detail || "Could not load analysis");
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
+  const load = useCallback(
+    async (refresh = false) => {
+      if (refresh) setRefreshing(true);
+      else setLoading(true);
+      try {
+        const { data } = await api.get(`/coach/improve${refresh ? "?refresh=true" : ""}`);
+        setData(data);
+      } catch (e) {
+        if (e?.response?.status === 400) navigate("/onboarding");
+        else toast.error(e?.response?.data?.detail || "Could not load analysis");
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    },
+    [navigate],
+  );
 
   useEffect(() => {
     load(false); /* eslint-disable-next-line react-hooks/exhaustive-deps */
-  }, []);
+  }, [load]);
 
   if (loading) {
     return (
@@ -76,6 +79,7 @@ export default function Improve() {
           <h1 className="font-display font-bold text-3xl tracking-tight">Improve</h1>
         </div>
         <button
+          type="button"
           onClick={() => load(true)}
           disabled={refreshing}
           className="text-sprout-mint text-sm font-semibold disabled:opacity-50"
@@ -140,9 +144,9 @@ export default function Improve() {
               Quick wins
             </h3>
             <ul className="space-y-2">
-              {data.tips.map((t, i) => (
+              {data.tips.map((t, _i) => (
                 <li
-                  key={i}
+                  key={JSON.stringify(t)}
                   className="flex gap-3 items-start p-3 rounded-xl bg-sprout-surface border border-sprout-border"
                 >
                   <Sparkles className="w-4 h-4 text-sprout-mint mt-0.5 shrink-0" />
@@ -162,7 +166,7 @@ export default function Improve() {
             <div className="space-y-3">
               {data.resume_tips.map((t, i) => (
                 <div
-                  key={i}
+                  key={JSON.stringify(t)}
                   className="p-4 rounded-2xl border border-sprout-border bg-sprout-surface"
                   data-testid={`resume-tip-${i}`}
                 >
@@ -186,7 +190,7 @@ export default function Improve() {
                   IMPACT_COLORS[(g.impact || "medium").toLowerCase()] || IMPACT_COLORS.medium;
                 return (
                   <div
-                    key={i}
+                    key={JSON.stringify(g)}
                     className="p-4 rounded-2xl border border-sprout-border bg-sprout-surface"
                     data-testid={`skill-gap-${i}`}
                   >
@@ -215,7 +219,8 @@ export default function Improve() {
             <div className="space-y-3">
               {data.certifications.map((c, i) => (
                 <button
-                  key={i}
+                  type="button"
+                  key={JSON.stringify(c)}
                   onClick={() => {
                     const url = `https://www.google.com/search?q=${encodeURIComponent(`${c.name} ${c.provider || ""}`)}`;
                     window.open(url, "_blank", "noopener");

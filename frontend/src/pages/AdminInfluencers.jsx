@@ -181,7 +181,7 @@ export default function AdminInfluencers() {
     } finally {
       setDemoInviteLoading(false);
     }
-  }, []);
+  }, [latestDemoInvite]);
 
   useEffect(() => {
     load();

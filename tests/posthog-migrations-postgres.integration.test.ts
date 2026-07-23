@@ -62,7 +62,7 @@ describePostgres("PostHog migrations on disposable PostgreSQL", () => {
   let sql: Database;
 
   beforeAll(async () => {
-    sql = createDatabase(databaseUrl!, { max: 1 });
+    sql = createDatabase(databaseUrl, { max: 1 });
     await sql.unsafe(fixtureSql);
     await sql.unsafe(warehouseUp);
     await sql.unsafe(ledgerUp);

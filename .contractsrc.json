@@ -1,0 +1,51 @@
+{
+  "$schema": "./node_modules/contractspec/contractsrc.schema.json",
+  "aiProvider": "claude",
+  "aiModel": "claude-sonnet-4-6",
+  "agentMode": "claude-code",
+  "outputDir": "./src",
+  "conventions": {
+    "operations": "contracts/operations",
+    "events": "contracts/events",
+    "presentations": "contracts/presentations",
+    "forms": "contracts/forms"
+  },
+  "defaultOwners": [
+    "@team"
+  ],
+  "defaultTags": [],
+  "formatter": {
+    "type": "biome"
+  },
+  "ci": {
+    "checks": [
+      "structure",
+      "integrity",
+      "deps",
+      "doctor",
+      "docs",
+      "policy"
+    ],
+    "failOnWarnings": false,
+    "uploadSarif": true
+  },
+  "versioning": {
+    "autoBump": false,
+    "bumpStrategy": "impact",
+    "changelogTiers": [
+      "spec",
+      "library",
+      "monorepo"
+    ],
+    "format": "keep-a-changelog",
+    "commitChanges": false,
+    "createTags": false,
+    "integrateWithChangesets": true
+  },
+  "hooks": {
+    "pre-commit": [
+      "contractspec validate **/*.operation.ts",
+      "contractspec integrity check"
+    ]
+  }
+}

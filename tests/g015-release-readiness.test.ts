@@ -30,6 +30,9 @@ import {
   verifyDeploymentDefaults,
 } from "../scripts/verify-job-supply-release.mjs";
 
+// biome-ignore lint/suspicious/noExplicitAny: Dynamic external contract boundaries are deliberately isolated behind this local alias.
+type UnsafeValue = any;
+
 const root = resolve(import.meta.dir, "..");
 const ACTIVATION_HMAC_KEY = "g015-test-only-activation-attestation-key-material";
 const SHADOW_EVIDENCE_HMAC_KEY = "g015-test-only-ats-shadow-evidence-key-material";
@@ -38,7 +41,7 @@ const ACTIVATION_WORKFLOW_ID = "job-supply-release";
 const ACTIVATION_WORKFLOW_RUN_ID = "20260721.1";
 let activationEvidenceSequence = 0;
 
-function evaluateProviderActivationPreflight(input: any) {
+function evaluateProviderActivationPreflight(input: UnsafeValue) {
   return evaluateProviderActivationPreflightRaw(input, {
     evidenceRoot: input.evidenceRoot,
     trustedAttestationKey: ACTIVATION_HMAC_KEY,
@@ -717,28 +720,28 @@ describe("G015 release verification contract", () => {
       failures: [],
     });
     for (const mutate of [
-      (value: any) => {
+      (value: UnsafeValue) => {
         value.releaseAttestation = null;
       },
-      (value: any) => {
+      (value: UnsafeValue) => {
         value.inventoryAccess.reviewExpiresAt = "2020-01-01T00:00:00.000Z";
       },
-      (value: any) => {
+      (value: UnsafeValue) => {
         value.killSwitches.providerArmed = false;
       },
-      (value: any) => {
+      (value: UnsafeValue) => {
         value.shadowScorecard.path = "../escape.json";
       },
-      (value: any) => {
+      (value: UnsafeValue) => {
         value.shadowScorecard.path = "missing.json";
       },
-      (value: any) => {
+      (value: UnsafeValue) => {
         value.writerOwnership.path = "missing.json";
       },
-      (value: any) => {
+      (value: UnsafeValue) => {
         value.rollback.exercised = false;
       },
-      (value: any) => {
+      (value: UnsafeValue) => {
         value.applicationAutomationEnabled = true;
       },
     ]) {
@@ -835,28 +838,28 @@ describe("G015 release verification contract", () => {
 
   test("validates exact shadow scorecard scope, reconciliation, run IDs, and inner digest", async () => {
     for (const mutate of [
-      (value: any) => {
+      (value: UnsafeValue) => {
         value.provider = "nicoka";
       },
-      (value: any) => {
+      (value: UnsafeValue) => {
         value.tenantId = "other";
       },
-      (value: any) => {
+      (value: UnsafeValue) => {
         value.countryCode = "US";
       },
-      (value: any) => {
+      (value: UnsafeValue) => {
         value.runIds[1] = value.runIds[0];
       },
-      (value: any) => {
+      (value: UnsafeValue) => {
         value.runs = value.runs.slice(0, 1);
       },
-      (value: any) => {
+      (value: UnsafeValue) => {
         value.reconciliation = [];
       },
-      (value: any) => {
+      (value: UnsafeValue) => {
         value.reconciliation[0].fromRunId = "wrong";
       },
-      (value: any) => {
+      (value: UnsafeValue) => {
         value.evidenceDigest = "0".repeat(64);
       },
     ]) {
@@ -874,13 +877,13 @@ describe("G015 release verification contract", () => {
 
   test("re-reads both sealed shadow runs and sealed writer ownership evidence", async () => {
     for (const mutate of [
-      async (root: string, input: any) => {
+      async (root: string, input: UnsafeValue) => {
         const scorecard = JSON.parse(
           await readFile(resolve(root, input.shadowScorecard.path), "utf8"),
         );
         await writeFile(resolve(root, scorecard.runs[0].path), "tampered\n");
       },
-      async (_root: string, input: any) => {
+      async (_root: string, input: UnsafeValue) => {
         input.writerOwnership.sha256 = "0".repeat(64);
       },
     ]) {
@@ -929,13 +932,13 @@ describe("G015 release verification contract", () => {
     }
 
     for (const [index, mutate] of [
-      (value: any) => {
+      (value: UnsafeValue) => {
         delete value.signature;
       },
-      (value: any) => {
+      (value: UnsafeValue) => {
         value.signature = "0".repeat(64);
       },
-      (value: any) => {
+      (value: UnsafeValue) => {
         value.jobs[0].externalId = "tampered-job";
       },
     ].entries()) {
@@ -978,13 +981,13 @@ describe("G015 release verification contract", () => {
 
   test("re-reads manifest and every exact discharge during provider preflight", async () => {
     for (const mutate of [
-      async (root: string, input: any) => {
+      async (root: string, input: UnsafeValue) => {
         const attestation = JSON.parse(
           await readFile(resolve(root, input.releaseAttestation.path), "utf8"),
         );
         await writeFile(resolve(root, attestation.selectedManifest.path), "tampered\n");
       },
-      async (root: string, input: any) => {
+      async (root: string, input: UnsafeValue) => {
         const attestation = JSON.parse(
           await readFile(resolve(root, input.releaseAttestation.path), "utf8"),
         );
@@ -995,7 +998,7 @@ describe("G015 release verification contract", () => {
           attestation,
         );
       },
-      async (root: string, input: any) => {
+      async (root: string, input: UnsafeValue) => {
         const attestation = JSON.parse(
           await readFile(resolve(root, input.releaseAttestation.path), "utf8"),
         );
@@ -1006,7 +1009,7 @@ describe("G015 release verification contract", () => {
           attestation,
         );
       },
-      async (root: string, input: any) => {
+      async (root: string, input: UnsafeValue) => {
         const attestation = JSON.parse(
           await readFile(resolve(root, input.releaseAttestation.path), "utf8"),
         );
@@ -1128,25 +1131,25 @@ describe("G015 release verification contract", () => {
     expect(evaluateProviderActivationPreflight(input).status).toBe("PASS");
 
     for (const mutate of [
-      (value: any) => {
+      (value: UnsafeValue) => {
         value.currentVerdict = "inventory_manual";
       },
-      (value: any) => {
+      (value: UnsafeValue) => {
         delete value.transitionEvidence.canary_receipt;
       },
-      (value: any) => {
+      (value: UnsafeValue) => {
         delete value.transitionEvidence.observation;
       },
-      (value: any) => {
+      (value: UnsafeValue) => {
         delete value.transitionEvidence.review;
       },
-      (value: any) => {
+      (value: UnsafeValue) => {
         delete value.transitionEvidence.ultraqa;
       },
-      (value: any) => {
+      (value: UnsafeValue) => {
         value.transitionEvidence.unreviewed = value.transitionEvidence.review;
       },
-      (value: any) => {
+      (value: UnsafeValue) => {
         value.transitionEvidence.review.sha256 = "0".repeat(64);
       },
     ]) {
@@ -1159,10 +1162,10 @@ describe("G015 release verification contract", () => {
 
   test("rejects forged, stale, future, replayed, or artifact-mismatched activation attestations", async () => {
     const mutations = [
-      async (_root: string, input: any) => {
+      async (_root: string, input: UnsafeValue) => {
         input.transitionEvidence.review.signature = "0".repeat(64);
       },
-      async (root: string, input: any) => {
+      async (root: string, input: UnsafeValue) => {
         const descriptor = input.transitionEvidence.review;
         const envelope = JSON.parse(await readFile(resolve(root, descriptor.path), "utf8"));
         envelope.review.security.verdict = "CLEAN";
@@ -1174,7 +1177,7 @@ describe("G015 release verification contract", () => {
           envelope,
         );
       },
-      async (root: string, input: any) => {
+      async (root: string, input: UnsafeValue) => {
         const descriptor = input.transitionEvidence.ultraqa;
         const envelope = JSON.parse(await readFile(resolve(root, descriptor.path), "utf8"));
         envelope.ultraqa.status = "failed";
@@ -1185,7 +1188,7 @@ describe("G015 release verification contract", () => {
           envelope,
         );
       },
-      async (root: string, input: any) => {
+      async (root: string, input: UnsafeValue) => {
         const descriptor = input.transitionEvidence.review;
         const envelope = JSON.parse(await readFile(resolve(root, descriptor.path), "utf8"));
         envelope.observedAt = "2026-07-22T00:00:00.000Z";
@@ -1196,7 +1199,7 @@ describe("G015 release verification contract", () => {
           envelope,
         );
       },
-      async (root: string, input: any) => {
+      async (root: string, input: UnsafeValue) => {
         const descriptor = input.transitionEvidence.review;
         const envelope = JSON.parse(await readFile(resolve(root, descriptor.path), "utf8"));
         envelope.observedAt = "2026-07-19T00:00:00.000Z";
@@ -1207,7 +1210,7 @@ describe("G015 release verification contract", () => {
           envelope,
         );
       },
-      async (root: string, input: any) => {
+      async (root: string, input: UnsafeValue) => {
         const review = JSON.parse(
           await readFile(resolve(root, input.transitionEvidence.review.path), "utf8"),
         );
@@ -1222,7 +1225,7 @@ describe("G015 release verification contract", () => {
           ultraqa,
         );
       },
-      async (root: string, input: any) => {
+      async (root: string, input: UnsafeValue) => {
         const scope = {
           provider: input.provider,
           tenantId: input.tenantId,

@@ -15,11 +15,12 @@ function ProgressBadge({ pct, lang, progressTick }) {
 
   return (
     <div
+      role="img"
       className="ml-0.5 hidden shrink-0 items-center gap-2.5 border-l border-zinc-200/90 pl-3.5 sm:flex"
       aria-label={`${label}: ${pct}%`}
     >
       <div className="relative flex h-9 w-9 items-center justify-center">
-        <svg className="absolute inset-0 h-9 w-9 -rotate-90" viewBox="0 0 24 24" aria-hidden>
+        <svg className="absolute inset-0 h-9 w-9 -rotate-90" viewBox="0 0 24 24" aria-hidden="true">
           <circle cx="12" cy="12" r={RING_R} fill="none" stroke="#ede9fe" strokeWidth="2.5" />
           <motion.circle
             key={`${progressTick}-${pct}`}

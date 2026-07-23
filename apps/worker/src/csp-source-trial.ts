@@ -556,10 +556,10 @@ function parseCspCsv(
   for (const row of rows) {
     if (row.length === 1 && row[0] === "") continue;
     parsedRows += 1;
-    const reference = cell(row, indexes["Référence"]);
+    const reference = cell(row, indexes.Référence);
     const title = cell(row, indexes["Intitulé du poste"]);
     const employer =
-      cell(row, indexes["Employeur"]) || cell(row, indexes["Organisme de rattachement"]);
+      cell(row, indexes.Employeur) || cell(row, indexes["Organisme de rattachement"]);
     const location =
       cell(row, indexes["Localisation du poste"]) || cell(row, indexes["Lieu d'affectation"]);
     const startsAt = parseFrenchDate(cell(row, indexes["Date de début de publication par défaut"]));
@@ -631,7 +631,7 @@ function* parseDelimitedRows(input: string, delimiter: string): Generator<string
   let field = "";
   let quoted = false;
   for (let index = 0; index < input.length; index += 1) {
-    const character = input[index]!;
+    const character = input[index];
     if (quoted) {
       if (character === '"' && input[index + 1] === '"') {
         field += '"';

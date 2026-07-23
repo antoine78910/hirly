@@ -68,9 +68,10 @@ export interface DueSchedule {
   databaseNow: Date;
 }
 
-export interface TaskHandler {
-  (task: ClaimedTask, signal: AbortSignal): Promise<TaskHandlerResult | void>;
-}
+export type TaskHandler = (
+  task: ClaimedTask,
+  signal: AbortSignal,
+) => Promise<TaskHandlerResult | undefined>;
 
 export interface TaskHandlerResult {
   taskCompleted: true;

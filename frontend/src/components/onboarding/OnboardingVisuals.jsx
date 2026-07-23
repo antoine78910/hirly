@@ -83,7 +83,7 @@ export function InterviewRateChart({ lang = "en" }) {
       <svg
         viewBox="0 0 320 160"
         className="w-full max-h-[22dvh] sm:max-h-[26dvh] h-auto"
-        aria-hidden
+        aria-hidden="true"
       >
         <defs>
           <linearGradient id="rateFillLight" x1="0" y1="0" x2="0" y2="1">
@@ -398,7 +398,7 @@ export function LongTermResultsChart({ lang = "en" }) {
       <svg
         viewBox="0 0 320 196"
         className="w-full max-h-[24dvh] sm:max-h-[28dvh] h-auto"
-        aria-hidden
+        aria-hidden="true"
       >
         <defs>
           <linearGradient id="ltFillLight" x1="0" y1="0" x2="0" y2="1">
@@ -575,7 +575,7 @@ export function InterviewTargetDashes({ count, max = 8 }) {
     <div className="flex gap-1.5 sm:gap-2 mt-3 sm:mt-4">
       {Array.from({ length: max }).map((_, i) => (
         <div
-          key={i}
+          key={JSON.stringify(x)}
           className={`h-1.5 sm:h-2 flex-1 rounded-full transition-colors ${i < count ? "gradient-linkedin" : "bg-zinc-200"}`}
         />
       ))}

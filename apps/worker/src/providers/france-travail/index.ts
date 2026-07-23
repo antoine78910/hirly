@@ -46,8 +46,7 @@ export const franceTravailRawJobSchema = z
 export type FranceTravailRawJob = z.output<typeof franceTravailRawJobSchema>;
 
 function applyUrls(raw: FranceTravailRawJob): string[] {
-  const detail =
-    `https://candidat.francetravail.fr/offres/recherche/detail/` + encodeURIComponent(raw.id);
+  const detail = `https://candidat.francetravail.fr/offres/recherche/detail/${encodeURIComponent(raw.id)}`;
   return [raw.contact.urlPostulation, raw.origineOffre.urlOrigine, detail].filter(
     (value): value is string => Boolean(value),
   );

@@ -50,7 +50,7 @@ export default function ProtectedRoute({ children, requireProfile = false }) {
     return () => {
       cancelled = true;
     };
-  }, [loading, user, requireProfile, isCreator, hasProfile, hasPreferences, profileReady]);
+  }, [loading, user, requireProfile, isCreator, hasProfile, profileReady]);
 
   useEffect(() => {
     if (devBypassAuth || loading || user) return;

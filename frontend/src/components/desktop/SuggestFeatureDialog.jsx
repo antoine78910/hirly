@@ -36,7 +36,9 @@ export default function SuggestFeatureDialog({ open, onClose, isDark = false, au
   useEffect(() => {
     if (open) return undefined;
     setFiles((current) => {
-      current.forEach((item) => URL.revokeObjectURL(item.preview));
+      current.forEach((item) => {
+        URL.revokeObjectURL(item.preview);
+      });
       return [];
     });
     setMessage("");
@@ -106,14 +108,18 @@ export default function SuggestFeatureDialog({ open, onClose, isDark = false, au
       form.append("message", text);
       form.append("category", category);
       form.append("audience", audience === "creator" || hasTrainingAccess ? "creator" : "user");
-      files.forEach(({ file }) => form.append("files", file));
+      files.forEach(({ file }) => {
+        form.append("files", file);
+      });
 
       await api.post("/feedback/suggest-feature", form, {
         headers: { "Content-Type": "multipart/form-data" },
       });
 
       toast.success(t("suggestFeature.success"));
-      files.forEach((item) => URL.revokeObjectURL(item.preview));
+      files.forEach((item) => {
+        URL.revokeObjectURL(item.preview);
+      });
       setFiles([]);
       setMessage("");
       setCategory("feature");

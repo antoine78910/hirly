@@ -225,7 +225,7 @@ describe("G016 paid cohort coverage PostgreSQL producer", () => {
   });
 
   runIntegration("persists once, replays idempotently, and never mutates jobs", async () => {
-    const database = createDatabase(databaseUrl!, { max: 2 });
+    const database = createDatabase(databaseUrl, { max: 2 });
     try {
       const store = new PostgresPaidCohortCoverageStore(database);
       const before = await psql(["-A", "-t", "-q", "-c", "SELECT count(*) FROM public.jobs"]);

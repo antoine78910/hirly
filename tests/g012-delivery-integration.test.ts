@@ -72,7 +72,7 @@ describe("G012 composed delivery", () => {
       sourcePolicyEligible: false,
     });
 
-    const cspOccurrence = csp.normalize(cspFixture.initialSnapshot[0]!, context(cspSource));
+    const cspOccurrence = csp.normalize(cspFixture.initialSnapshot[0], context(cspSource));
     const bpcePages = [];
     for await (const page of bpce.discover({
       source: bpceSource,
@@ -82,12 +82,12 @@ describe("G012 composed delivery", () => {
     })) {
       bpcePages.push(...page.items);
     }
-    const bpceOccurrence = bpce.normalize(bpcePages[0]!, context(bpceSource));
+    const bpceOccurrence = bpce.normalize(bpcePages[0], context(bpceSource));
     const occurrences = [
       cspOccurrence,
-      csp.normalize(cspFixture.initialSnapshot[0]!, context(cspSource)),
+      csp.normalize(cspFixture.initialSnapshot[0], context(cspSource)),
       bpceOccurrence,
-      bpce.normalize(bpcePages[0]!, context(bpceSource)),
+      bpce.normalize(bpcePages[0], context(bpceSource)),
     ];
     const deduplicated = new Map(
       occurrences.map((occurrence) => [
@@ -106,7 +106,7 @@ describe("G012 composed delivery", () => {
       expect(job.jobId).toBe(stableJobId(job.provider, job.externalId));
       expect(job.countryCode).toBe("FR");
     }
-    expect(() => csp.normalize(cspFixture.initialSnapshot[0]!, context(bpceSource))).toThrow(
+    expect(() => csp.normalize(cspFixture.initialSnapshot[0], context(bpceSource))).toThrow(
       "match the bound resource and policy",
     );
   });
@@ -131,7 +131,7 @@ describe("G012 composed delivery", () => {
     expect(evidence.every((item) => !item.productionEligible)).toBeTrue();
     expect(evidence.every((item) => item.qualificationStatus !== "approved")).toBeTrue();
 
-    const actualEvidence = evidence[0]!;
+    const actualEvidence = evidence[0];
     const qualification = qualifyDataGouvDataset({
       datasetId: actualEvidence.sourceKey,
       resourceId: "resource",

@@ -31,7 +31,7 @@ export default function PostHogLifecycle() {
 
   useEffect(() => {
     capturePostHogPageview(pathname);
-  }, [pathname, user?.analytics_user_id]);
+  }, [pathname]);
 
   useEffect(() => {
     syncPostHogReplay();

@@ -69,13 +69,13 @@ describe("G016 source-policy result persistence", () => {
 
   test("refuses to treat a public page as permission", () => {
     const result = evidenceResult();
-    result.evidence[0]!.kind = "dataset_page" as "written_permission";
+    result.evidence[0].kind = "dataset_page" as "written_permission";
     expect(() => finalizeSourcePolicyResult(result)).toThrow("kind_is_not_rights_evidence");
   });
 
   test("refuses evidence that does not cover every required right", () => {
     const result = evidenceResult();
-    result.evidence[0]!.supports = ["access_method"];
+    result.evidence[0].supports = ["access_method"];
     expect(() => finalizeSourcePolicyResult(result)).toThrow(
       "rights_evidence_incomplete:commercial_use,redisplay,retention",
     );

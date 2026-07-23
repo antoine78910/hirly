@@ -269,6 +269,7 @@ export function transformLegacyAnalyticsRow(row: LegacyAnalyticsRow): BackfillDi
   ) {
     return exclude("noncanonical_timestamp_quality");
   }
+  if (!occurrence) return quarantine("invalid_exact_business_timestamp");
   if (Object.keys(row.properties).some((key) => denylistedProperty.test(key))) {
     return quarantine("denylisted_property");
   }
@@ -284,7 +285,7 @@ export function transformLegacyAnalyticsRow(row: LegacyAnalyticsRow): BackfillDi
   const payload: TransformedPostHogEvent = {
     event: canonicalEventName,
     distinct_id: resolvedIdentity.distinctId,
-    timestamp: occurrence!,
+    timestamp: occurrence,
     properties: {
       ...sanitized.properties,
       historical_migration: true,

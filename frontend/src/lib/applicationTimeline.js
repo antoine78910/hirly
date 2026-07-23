@@ -54,7 +54,7 @@ function hasGeneratedPackage(application) {
 }
 
 /** Rich timeline events for application detail (newest first). */
-export function buildApplicationTimeline(application, emails = [], t, lang = "en") {
+export function buildApplicationTimeline(application, emails = [], t, _lang = "en") {
   if (!application) return [];
 
   const linkedEmails = emails.filter((row) => matchesApplicationEmail(row, application));

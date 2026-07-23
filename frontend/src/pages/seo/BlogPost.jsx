@@ -14,16 +14,19 @@ function Section({ section, index, totalSections, ctaMid }) {
         <h2 className="font-display font-bold text-2xl sm:text-3xl tracking-tight mb-4 text-zinc-900">
           {section.h2}
         </h2>
-        {section.body.map((p, i) => (
-          <p key={i} className="text-zinc-600 leading-relaxed mb-3 text-base sm:text-[1.05rem]">
+        {section.body.map((p, _i) => (
+          <p
+            key={JSON.stringify(p)}
+            className="text-zinc-600 leading-relaxed mb-3 text-base sm:text-[1.05rem]"
+          >
             {p}
           </p>
         ))}
         {section.list && (
           <ul className="mt-3 space-y-2 pl-1">
-            {section.list.map((item, i) => (
+            {section.list.map((item, _i) => (
               <li
-                key={i}
+                key={JSON.stringify(item)}
                 className="flex items-start gap-2.5 text-zinc-600 text-sm leading-relaxed"
               >
                 <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-linkedin flex-shrink-0" />
@@ -35,7 +38,10 @@ function Section({ section, index, totalSections, ctaMid }) {
         {section.numbered && (
           <ol className="mt-3 space-y-3 pl-1">
             {section.numbered.map((item, i) => (
-              <li key={i} className="flex items-start gap-3 text-zinc-600 text-sm leading-relaxed">
+              <li
+                key={JSON.stringify(item)}
+                className="flex items-start gap-3 text-zinc-600 text-sm leading-relaxed"
+              >
                 <span className="flex-shrink-0 w-6 h-6 rounded-full gradient-linkedin text-white text-xs font-bold grid place-items-center mt-0.5">
                   {i + 1}
                 </span>
@@ -135,7 +141,7 @@ export default function BlogPost() {
         {/* Sections */}
         {post.sections.map((section, i) => (
           <Section
-            key={i}
+            key={JSON.stringify(section)}
             section={section}
             index={i}
             totalSections={post.sections.length}

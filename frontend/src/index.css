@@ -1,7 +1,10 @@
 @import url("https://api.fontshare.com/v2/css?f[]=cabinet-grotesk@400,500,700,800,900&f[]=manrope@400,500,600,700&display=swap");
 
+/* biome-ignore lint/suspicious/noUnknownAtRules: Tailwind directives are compiled by PostCSS. */
 @tailwind base;
+/* biome-ignore lint/suspicious/noUnknownAtRules: Tailwind directives are compiled by PostCSS. */
 @tailwind components;
+/* biome-ignore lint/suspicious/noUnknownAtRules: Tailwind directives are compiled by PostCSS. */
 @tailwind utilities;
 
 html {
@@ -342,12 +345,14 @@ h4,
   .selection-chip-on {
     @apply border border-violet-400/70 bg-gradient-to-br from-violet-50 via-fuchsia-50/75 to-violet-50 text-violet-800 shadow-[0_1px_2px_rgba(124,58,237,0.08)] ring-1 ring-violet-300/50 transition-all duration-200 ease-out;
   }
+  /* biome-ignore lint/style/noDescendingSpecificity: Dark-mode overrides intentionally precede this shared base style. */
   .selection-chip-off {
     @apply bg-white text-zinc-600 border border-zinc-200 hover:border-violet-300/55 hover:bg-violet-50/55 hover:text-violet-700 transition-all duration-200 ease-out;
   }
   .selection-option-on {
     @apply border border-violet-400/65 bg-gradient-to-br from-violet-50 via-fuchsia-50/65 to-violet-50 text-violet-900 shadow-[0_1px_3px_rgba(124,58,237,0.1)] ring-1 ring-violet-300/45 transition-all duration-200 ease-out;
   }
+  /* biome-ignore lint/style/noDescendingSpecificity: Dark-mode overrides intentionally precede this shared base style. */
   .selection-option-off {
     @apply border border-zinc-200 bg-white text-zinc-700 hover:border-violet-200 hover:bg-violet-50/45 hover:shadow-sm transition-all duration-200 ease-out;
   }
@@ -660,16 +665,16 @@ html.app-shell-locked .App {
 
 body.training-page [data-testid="bottom-nav"],
 body[data-training-page="true"] [data-testid="bottom-nav"] {
-  display: none !important;
+  display: none;
 }
 
 /* Training: always allow native wheel / trackpad scroll on the document. */
 html.training-page-active,
 body.training-page {
-  height: auto !important;
+  height: auto;
   min-height: 100dvh;
-  overflow-x: hidden !important;
-  overflow-y: auto !important;
+  overflow-x: hidden;
+  overflow-y: auto;
   overscroll-behavior-y: auto;
   -webkit-overflow-scrolling: touch;
 }
@@ -678,14 +683,14 @@ html.training-page-active #root,
 html.training-page-active .App,
 body.training-page #root,
 body.training-page .App {
-  height: auto !important;
+  height: auto;
   min-height: 100dvh;
-  overflow: visible !important;
+  overflow: visible;
 }
 
 /* Training chrome — portaled to <body>, fixed to the viewport. */
 .training-topbar {
-  position: fixed !important;
+  position: fixed;
   top: 0;
   left: 0;
   right: 0;
@@ -717,7 +722,7 @@ body.training-page .App {
 }
 
 .training-sidebar-rail {
-  position: fixed !important;
+  position: fixed;
   top: 3.5rem;
   left: 0;
   z-index: 40;
@@ -750,7 +755,7 @@ body.training-page .App {
 
 @media (min-width: 1024px) {
   .training-sidebar-rail {
-    display: block !important;
+    display: block;
   }
 
   .training-main-with-sidebar {
@@ -762,7 +767,7 @@ body.training-page .App {
 
 @media (max-width: 1023px) {
   .training-sidebar-rail {
-    display: none !important;
+    display: none;
   }
 }
 
@@ -837,6 +842,7 @@ body.training-page .App {
   }
 }
 
+/* biome-ignore lint/style/noDescendingSpecificity: Training layout overrides intentionally precede this shared base style. */
 .training-sidebar-sticky {
   position: sticky;
   top: 3.5rem;
@@ -853,10 +859,10 @@ body.training-page .App {
 /* Record tools: same native document scroll as training. */
 html.record-tools-page-active,
 body.record-tools-page {
-  height: auto !important;
+  height: auto;
   min-height: 100dvh;
-  overflow-x: hidden !important;
-  overflow-y: auto !important;
+  overflow-x: hidden;
+  overflow-y: auto;
   overscroll-behavior-y: auto;
   -webkit-overflow-scrolling: touch;
 }
@@ -865,9 +871,9 @@ html.record-tools-page-active #root,
 html.record-tools-page-active .App,
 body.record-tools-page #root,
 body.record-tools-page .App {
-  height: auto !important;
+  height: auto;
   min-height: 100dvh;
-  overflow: visible !important;
+  overflow: visible;
 }
 
 /* Marketing + training: native document scroll (mouse wheel / trackpad). */
@@ -891,8 +897,8 @@ html.document-scroll.app-shell-locked,
 body.document-scroll.app-shell-locked,
 html.document-scroll.app-shell-locked #root,
 html.document-scroll.app-shell-locked .App {
-  overflow-y: auto !important;
-  height: auto !important;
+  overflow-y: auto;
+  height: auto;
 }
 
 .pb-safe {

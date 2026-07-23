@@ -45,7 +45,7 @@ export default function CompanyLogo({
   useEffect(() => {
     setUrlIndex(0);
     setFailed(false);
-  }, [resolved, resolvedLogoUrl]);
+  }, []);
 
   const styles = SIZE_STYLES[size] || SIZE_STYLES.md;
   const round = ROUNDED[rounded] || ROUNDED["2xl"];

@@ -5,11 +5,11 @@ import {
   type ProviderTransport,
   IngestionError,
 } from "@hirly/ingestion";
-import {
-  type AuthorizationStatus,
-  type Provider,
-  type ProviderSearchRequest,
-  type RateLimitConfig,
+import type {
+  AuthorizationStatus,
+  Provider,
+  ProviderSearchRequest,
+  RateLimitConfig,
 } from "@hirly/contracts";
 import { z } from "zod";
 

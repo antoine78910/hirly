@@ -619,7 +619,7 @@ export default function ProfilePersonalInfoTab({ profile, userEmail, onSaved }) 
               <ul className="space-y-2">
                 {demographics.citizenship.map((entry, index) => (
                   <li
-                    key={`${entry.country}-${entry.status}-${index}`}
+                    key={JSON.stringify(entry)}
                     className="shell-inset flex items-center justify-between gap-3 rounded-md px-4 py-3 text-sm"
                   >
                     <span className="shell-title font-medium">{entry.country}</span>

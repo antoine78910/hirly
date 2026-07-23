@@ -23,6 +23,7 @@ export function DemoAccountAvatarIndicator({ className = "", size = "md" }) {
 
   return (
     <span
+      role="img"
       className={`absolute -bottom-0.5 -right-0.5 z-10 grid ${s.wrap} place-items-center rounded-full ${s.border} border-white bg-amber-500 text-white shadow-sm dark:border-zinc-900 ${className}`}
       title={t("demo.badge")}
       aria-label={t("demo.badge")}

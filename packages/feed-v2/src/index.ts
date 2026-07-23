@@ -223,7 +223,7 @@ export class FeedV2ReadService {
 
     if (snapshot.profileReady) {
       for (let index = 0; index < snapshot.candidates.length; index += 1) {
-        const candidate = snapshot.candidates[index]!;
+        const candidate = snapshot.candidates[index];
         lastScanned = candidate;
         summary.evaluated += 1;
         if (candidate.actionExcluded) {

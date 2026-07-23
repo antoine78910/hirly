@@ -74,8 +74,8 @@ const document = {
   salary_min: null,
   salary_max: null,
   currency: null,
-  posted_at: source.publishedAt!,
-  last_seen_at: source.lastSeenAt!,
+  posted_at: source.publishedAt,
+  last_seen_at: source.lastSeenAt,
   expires_at: null,
   validation_status: "valid",
   applyability_tier: "B",
@@ -121,7 +121,11 @@ describe("job projection consumer", () => {
     const completed: unknown[][] = [];
     let claimed = false;
     const store: JobProjectionStore = {
-      claim: async () => (claimed ? [] : ((claimed = true), [lease])),
+      claim: async () => {
+        if (claimed) return [];
+        claimed = true;
+        return [lease];
+      },
       heartbeat: async () => true,
       loadSource: async () => source,
       completeUpsert: async (...args) => {
@@ -157,7 +161,11 @@ describe("job projection consumer", () => {
     let claimed = false;
     const finished: Array<Record<string, unknown> | undefined> = [];
     const store: JobProjectionStore = {
-      claim: async () => (claimed ? [] : ((claimed = true), [lease])),
+      claim: async () => {
+        if (claimed) return [];
+        claimed = true;
+        return [lease];
+      },
       heartbeat: async () => true,
       loadSource: async () => source,
       completeUpsert: async () => true,
@@ -184,7 +192,11 @@ describe("job projection consumer", () => {
   test("returns at the shutdown deadline when an operation ignores abort", async () => {
     let claimed = false;
     const store: JobProjectionStore = {
-      claim: async () => (claimed ? [] : ((claimed = true), [lease])),
+      claim: async () => {
+        if (claimed) return [];
+        claimed = true;
+        return [lease];
+      },
       heartbeat: async () => true,
       loadSource: async () => source,
       completeUpsert: async () => new Promise<boolean>(() => {}),

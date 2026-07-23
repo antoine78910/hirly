@@ -48,8 +48,7 @@ function DocumentEmptyState({
 
 function AdditionalDocumentRow({ doc, onView, onDelete, deleting, lang, t }) {
   return (
-    <div
-      role="listitem"
+    <li
       className="shell-surface-sm flex flex-wrap items-center gap-4 rounded-md p-4"
       data-testid={`profile-document-${doc.id}`}
     >
@@ -83,7 +82,7 @@ function AdditionalDocumentRow({ doc, onView, onDelete, deleting, lang, t }) {
           <Trash2 className="h-4 w-4" />
         </Button>
       </div>
-    </div>
+    </li>
   );
 }
 
@@ -215,7 +214,7 @@ export default function ProfileDocumentsTab({ profile, onUploadResume, onDocumen
                 {uploading ? t("common.loading") : t("profile.documents.uploadDocument")}
               </Button>
             </div>
-            <div role="list" className="flex flex-col gap-4">
+            <ul className="flex flex-col gap-4">
               {additionalDocuments.map((doc) => (
                 <AdditionalDocumentRow
                   key={doc.id}
@@ -227,7 +226,7 @@ export default function ProfileDocumentsTab({ profile, onUploadResume, onDocumen
                   t={t}
                 />
               ))}
-            </div>
+            </ul>
           </div>
         ) : (
           <DocumentEmptyState

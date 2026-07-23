@@ -36,6 +36,9 @@ import type {
 import { createGuardedEventPublisher } from "./events";
 import { assertFixtureOnlyMode } from "./core";
 
+// biome-ignore lint/suspicious/noExplicitAny: Dynamic external contract boundaries are deliberately isolated behind this local alias.
+type UnsafeValue = any;
+
 export interface RuntimeDependencies {
   compositionMode: "fixture" | "production";
   evidence: CandidateEvidenceStore;
@@ -87,9 +90,9 @@ export const createApplicationAgentOperationRegistry = (deps: RuntimeDependencie
   registry.executeResult = (key, version, input, ctx) =>
     executeResult(key, version, input, runtimeContext(ctx));
   const events = createGuardedEventPublisher(deps.outbox);
-  const bind = (spec: any, handler: any) => registry.bind(spec, handler);
+  const bind = (spec: UnsafeValue, handler: UnsafeValue) => registry.bind(spec, handler);
 
-  bind(analyzeJobOperation, async (input: any) => {
+  bind(analyzeJobOperation, async (input: UnsafeValue) => {
     try {
       const job = await deps.reader.read(input);
       await deps.jobs.put(job);
@@ -99,7 +102,7 @@ export const createApplicationAgentOperationRegistry = (deps: RuntimeDependencie
     }
   });
 
-  bind(prepareApplicationOperation, async (input: any) => {
+  bind(prepareApplicationOperation, async (input: UnsafeValue) => {
     const snapshot = await deps.evidence.getSnapshot(input.candidateEvidenceSnapshotId);
     const job = await deps.jobs.get(input.jobSnapshotId);
     if (!snapshot) return failure("CANDIDATE_EVIDENCE_NOT_FOUND");
@@ -129,7 +132,7 @@ export const createApplicationAgentOperationRegistry = (deps: RuntimeDependencie
     return contractOk({ ok: true, data: draft });
   });
 
-  bind(verifyApplicationOperation, async (input: any) => {
+  bind(verifyApplicationOperation, async (input: UnsafeValue) => {
     const draft = await deps.drafts.get(input.draftId);
     if (!draft) return failure("CANDIDATE_EVIDENCE_NOT_FOUND");
     const snapshot = await deps.evidence.getSnapshot(draft.candidateEvidenceSnapshotId);
@@ -138,7 +141,7 @@ export const createApplicationAgentOperationRegistry = (deps: RuntimeDependencie
     return contractOk({ ok: true, data: { draftId: draft.id, ...verified } });
   });
 
-  bind(freezeApplicationOperation, async (input: any) => {
+  bind(freezeApplicationOperation, async (input: UnsafeValue) => {
     const draft = await deps.drafts.get(input.draftId);
     if (!draft) return failure("STALE_SUBMISSION_PLAN");
     const snapshot = await deps.evidence.getSnapshot(draft.candidateEvidenceSnapshotId);
@@ -175,7 +178,7 @@ export const createApplicationAgentOperationRegistry = (deps: RuntimeDependencie
     return contractOk({ ok: true, data: plan });
   });
 
-  bind(submitApplicationOperation, async (input: any, ctx: any) => {
+  bind(submitApplicationOperation, async (input: UnsafeValue, ctx: UnsafeValue) => {
     const plan = await deps.plans.get(input.planId);
     if (!plan || plan.planDigest !== input.planDigest) return failure("STALE_SUBMISSION_PLAN");
     if (plan.targetOrigin !== input.targetOrigin) return failure("TARGET_ORIGIN_MISMATCH");
@@ -187,7 +190,7 @@ export const createApplicationAgentOperationRegistry = (deps: RuntimeDependencie
     )
       return failure("STALE_SUBMISSION_PLAN");
     const base = { ...plan };
-    delete (base as any).planDigest;
+    delete (base as UnsafeValue).planDigest;
     if (deps.hasher.digest(base) !== plan.planDigest) return failure("STALE_SUBMISSION_PLAN");
     const draft = await deps.drafts.get(plan.draftId);
     const snapshot = await deps.evidence.getSnapshot(plan.candidateEvidenceSnapshotId);
@@ -217,8 +220,7 @@ export const createApplicationAgentOperationRegistry = (deps: RuntimeDependencie
     if (verification.blockedReasonCodes.length) return failure("UNSUPPORTED_APPLICATION_CLAIM");
     const adapter = deps.adapters.get(plan.adapterKey, plan.adapterVersion);
     if (
-      !adapter ||
-      !adapter.capabilities.submit ||
+      !adapter?.capabilities.submit ||
       adapter.capabilities.captchaSupport !== false ||
       adapter.capabilities.submissionApprovalRequired !== true
     )

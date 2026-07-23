@@ -18,7 +18,7 @@ describe("Swipe Feed v2 adoption boundary", () => {
     expect(swipeSource).toContain("feedRequestFenceRef.current.next()");
     expect(swipeSource).toContain("requestFence.isCurrent()");
     expect(
-      swipeSource.match(/loadFeed\(true, mergedFilters, \"initial_navigation\"\)/g),
+      swipeSource.match(/loadFeed\(true, mergedFilters, "initial_navigation"\)/g),
     ).toHaveLength(2);
   });
 
@@ -82,6 +82,6 @@ describe("Swipe Feed v2 adoption boundary", () => {
   it("uses the rollout flag only as a frontend observation", () => {
     expect(swipeSource).toContain("useFeedV2RolloutObservation(user?.analytics_user_id)");
     expect(swipeSource).toContain('data-feed-v2-rollout={feedV2RolloutObserved ? "on" : "off"}');
-    expect(swipeSource).toContain("let requestUrl = `/jobs/feed?${params.toString()}`");
+    expect(swipeSource).toContain(`let requestUrl = \`/jobs/feed?\${params.toString()}\``);
   });
 });

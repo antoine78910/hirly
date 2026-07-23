@@ -40,8 +40,7 @@ export const createApprovalPort = (deps: {
     };
     const now = deps.clock.now().toISOString();
     if (
-      !review ||
-      review.status !== "approved" ||
+      review?.status !== "approved" ||
       review.issuedAt > now ||
       review.expiresAt <= now ||
       review.issuedAt >= review.expiresAt ||

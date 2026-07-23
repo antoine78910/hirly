@@ -225,7 +225,10 @@ export function getJobBadgeItems(job, { lang = "en" } = {}) {
 
   const jobType = job?.job_type || job?.employment_type || job?.contract_type;
   if (jobType) {
-    if (Array.isArray(jobType)) jobType.forEach((value) => add(value, "contract"));
+    if (Array.isArray(jobType))
+      jobType.forEach((value) => {
+        add(value, "contract");
+      });
     else add(jobType, "contract");
   } else if (!items.some((item) => /seasonal|full time|part time|contract/i.test(item.label))) {
     add(isFrench(lang) ? "Temps plein" : "Full Time", "contract");

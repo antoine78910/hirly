@@ -412,7 +412,7 @@ export async function producePaidCohortCoverage(
   }
   const contributions = [...trialGroups.values()]
     .map(({ candidate, affected }) => ({
-      sourceId: candidate.sourceId!,
+      sourceId: candidate.sourceId,
       canonicalGroupId: candidate.canonicalGroupDigest,
       affectedPaidUsers: affected.size,
       incremental: !currentGroups.has(candidate.canonicalGroupDigest),

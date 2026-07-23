@@ -24,7 +24,7 @@ export default function PersonalInfoSheet({ open, profile, userEmail, onClose, o
       toast.success("Saved");
       onSaved?.();
       onClose();
-    } catch (e) {
+    } catch (_e) {
       toast.error("Could not save");
     } finally {
       setSaving(false);
@@ -48,9 +48,9 @@ export default function PersonalInfoSheet({ open, profile, userEmail, onClose, o
           testId="pi-name"
         />
         <div className="space-y-1.5">
-          <label className="text-sm font-semibold text-zinc-200">
+          <p className="text-sm font-semibold text-zinc-200">
             Email <span className="text-sprout-dim text-xs">(from your Google account)</span>
-          </label>
+          </p>
           <div
             className="h-11 rounded-xl bg-sprout-surface border border-sprout-border px-4 flex items-center text-zinc-300"
             data-testid="pi-email-readonly"

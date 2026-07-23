@@ -1,0 +1,681 @@
+{
+  "version": 1,
+  "generatedAt": "2026-07-23T15:44:58.262Z",
+  "entries": [
+    {
+      "id": "ui.design-system",
+      "source": "contractspec",
+      "packageRef": "@lssm-tech/lib.design-system",
+      "family": "ui",
+      "packageKind": "primitive",
+      "title": "@lssm-tech/lib.design-system",
+      "description": "Higher-level ContractSpec design system for composed UI surfaces.",
+      "capabilityTags": [
+        "ui",
+        "design-system",
+        "layout",
+        "forms",
+        "marketing"
+      ],
+      "preferredUseCases": [
+        "app surfaces",
+        "shared composed controls",
+        "web and native theming"
+      ],
+      "avoidWhen": [
+        "Need a lower-level platform leaf primitive only."
+      ],
+      "platforms": [
+        "web",
+        "native"
+      ],
+      "replacementImportHints": [
+        {
+          "from": "@lssm-tech/lib.ui-kit-web/ui/button",
+          "to": "@lssm-tech/lib.design-system",
+          "note": "Prefer the composed design-system control in app code."
+        }
+      ],
+      "resolutionPriority": 100
+    },
+    {
+      "id": "contracts.spec",
+      "source": "contractspec",
+      "packageRef": "@lssm-tech/lib.contracts-spec",
+      "family": "contracts",
+      "packageKind": "primitive",
+      "title": "@lssm-tech/lib.contracts-spec",
+      "description": "Core ContractSpec contract declarations, registries, policy, workflow, and shared spec types.",
+      "capabilityTags": [
+        "contracts",
+        "specs",
+        "operations",
+        "events",
+        "policies"
+      ],
+      "preferredUseCases": [
+        "new contracts",
+        "spec-first APIs",
+        "shared contract registries"
+      ],
+      "resolutionPriority": 100
+    },
+    {
+      "id": "integrations.contracts",
+      "source": "contractspec",
+      "packageRef": "@lssm-tech/lib.contracts-integrations",
+      "family": "integrations",
+      "packageKind": "primitive",
+      "title": "@lssm-tech/lib.contracts-integrations",
+      "description": "Integration definitions for providers, capabilities, connection models, and runtime metadata.",
+      "capabilityTags": [
+        "integrations",
+        "providers",
+        "capabilities",
+        "connections"
+      ],
+      "preferredUseCases": [
+        "provider contracts",
+        "integration metadata",
+        "runtime capability definitions"
+      ],
+      "resolutionPriority": 100
+    },
+    {
+      "id": "runtime.react-client",
+      "source": "contractspec",
+      "packageRef": "@lssm-tech/lib.contracts-runtime-client-react",
+      "family": "runtime",
+      "packageKind": "adapter",
+      "title": "@lssm-tech/lib.contracts-runtime-client-react",
+      "description": "React runtime adapters for ContractSpec forms and feature rendering.",
+      "capabilityTags": [
+        "runtime",
+        "react",
+        "forms",
+        "rendering"
+      ],
+      "preferredUseCases": [
+        "react client adapters",
+        "form rendering",
+        "feature rendering"
+      ],
+      "platforms": [
+        "web"
+      ],
+      "resolutionPriority": 100
+    },
+    {
+      "id": "shared.logger",
+      "source": "contractspec",
+      "packageRef": "@lssm-tech/lib.logger",
+      "family": "sharedLibs",
+      "packageKind": "primitive",
+      "title": "@lssm-tech/lib.logger",
+      "description": "Structured logger used across ContractSpec runtimes and apps.",
+      "capabilityTags": [
+        "shared",
+        "logger",
+        "observability"
+      ],
+      "preferredUseCases": [
+        "structured logging",
+        "app and service logging"
+      ],
+      "resolutionPriority": 100
+    },
+    {
+      "id": "runtime.rest",
+      "source": "contractspec",
+      "packageRef": "@lssm-tech/lib.contracts-runtime-server-rest",
+      "family": "runtime",
+      "packageKind": "adapter",
+      "title": "@lssm-tech/lib.contracts-runtime-server-rest",
+      "description": "REST server adapters for Next, Express, Elysia, and generic server code.",
+      "capabilityTags": [
+        "runtime",
+        "rest",
+        "server",
+        "http"
+      ],
+      "preferredUseCases": [
+        "REST handlers",
+        "HTTP adapters",
+        "server endpoints"
+      ],
+      "resolutionPriority": 95,
+      "runtimes": [
+        "node"
+      ]
+    },
+    {
+      "id": "runtime.graphql",
+      "source": "contractspec",
+      "packageRef": "@lssm-tech/lib.contracts-runtime-server-graphql",
+      "family": "runtime",
+      "packageKind": "adapter",
+      "title": "@lssm-tech/lib.contracts-runtime-server-graphql",
+      "description": "GraphQL runtime adapter for Pothos-based servers.",
+      "capabilityTags": [
+        "runtime",
+        "graphql",
+        "pothos",
+        "server"
+      ],
+      "preferredUseCases": [
+        "GraphQL adapters",
+        "typed GraphQL contract exposure"
+      ],
+      "resolutionPriority": 95,
+      "runtimes": [
+        "node"
+      ]
+    },
+    {
+      "id": "runtime.mcp",
+      "source": "contractspec",
+      "packageRef": "@lssm-tech/lib.contracts-runtime-server-mcp",
+      "family": "runtime",
+      "packageKind": "adapter",
+      "title": "@lssm-tech/lib.contracts-runtime-server-mcp",
+      "description": "MCP runtime adapter for ContractSpec-backed tools, resources, and prompts.",
+      "capabilityTags": [
+        "runtime",
+        "mcp",
+        "tools",
+        "resources",
+        "prompts"
+      ],
+      "preferredUseCases": [
+        "MCP servers",
+        "tool/resource registration"
+      ],
+      "resolutionPriority": 95,
+      "runtimes": [
+        "node"
+      ]
+    },
+    {
+      "id": "contracts.schema",
+      "source": "contractspec",
+      "packageRef": "@lssm-tech/lib.schema",
+      "family": "contracts",
+      "packageKind": "primitive",
+      "title": "@lssm-tech/lib.schema",
+      "description": "Schema definitions for ContractSpec multi-surface consistency.",
+      "capabilityTags": [
+        "schema",
+        "validation",
+        "io-models",
+        "json-schema"
+      ],
+      "preferredUseCases": [
+        "shared schema models",
+        "multi-surface I/O definitions"
+      ],
+      "resolutionPriority": 90
+    },
+    {
+      "id": "integrations.providers-impls",
+      "source": "contractspec",
+      "packageRef": "@lssm-tech/integration.providers-impls",
+      "family": "integrations",
+      "packageKind": "adapter",
+      "title": "@lssm-tech/integration.providers-impls",
+      "description": "Concrete provider implementations layered over ContractSpec integration contracts.",
+      "capabilityTags": [
+        "integrations",
+        "providers",
+        "implementations",
+        "sdk-bridges"
+      ],
+      "preferredUseCases": [
+        "provider implementations",
+        "existing vendor bridges"
+      ],
+      "resolutionPriority": 90
+    },
+    {
+      "id": "shared.files",
+      "source": "contractspec",
+      "packageRef": "@lssm-tech/lib.files",
+      "family": "sharedLibs",
+      "packageKind": "primitive",
+      "title": "@lssm-tech/lib.files",
+      "description": "File and artifact helpers for reusable storage-facing workflows.",
+      "capabilityTags": [
+        "shared",
+        "files",
+        "artifacts",
+        "storage"
+      ],
+      "preferredUseCases": [
+        "file abstractions",
+        "artifact handling"
+      ],
+      "resolutionPriority": 90
+    },
+    {
+      "id": "shared.testing",
+      "source": "contractspec",
+      "packageRef": "@lssm-tech/lib.testing",
+      "family": "sharedLibs",
+      "packageKind": "primitive",
+      "title": "@lssm-tech/lib.testing",
+      "description": "Testing helpers for proof-oriented and golden regression workflows.",
+      "capabilityTags": [
+        "shared",
+        "testing",
+        "golden-tests",
+        "verification"
+      ],
+      "preferredUseCases": [
+        "golden tests",
+        "safe regeneration verification"
+      ],
+      "resolutionPriority": 90
+    },
+    {
+      "id": "runtime.presentation-react",
+      "source": "contractspec",
+      "packageRef": "@lssm-tech/lib.presentation-runtime-react",
+      "family": "runtime",
+      "packageKind": "primitive",
+      "title": "@lssm-tech/lib.presentation-runtime-react",
+      "description": "React presentation runtime helpers for ContractSpec-driven UI rendering.",
+      "capabilityTags": [
+        "runtime",
+        "presentation",
+        "react",
+        "tables"
+      ],
+      "preferredUseCases": [
+        "React presentation rendering",
+        "contract-backed view helpers"
+      ],
+      "resolutionPriority": 85
+    },
+    {
+      "id": "shared.observability",
+      "source": "contractspec",
+      "packageRef": "@lssm-tech/lib.observability",
+      "family": "sharedLibs",
+      "packageKind": "primitive",
+      "title": "@lssm-tech/lib.observability",
+      "description": "Tracing, metrics, and structured logging helpers.",
+      "capabilityTags": [
+        "shared",
+        "observability",
+        "metrics",
+        "tracing"
+      ],
+      "preferredUseCases": [
+        "structured tracing",
+        "metrics",
+        "telemetry"
+      ],
+      "resolutionPriority": 85
+    },
+    {
+      "id": "ui.ui-kit-web",
+      "source": "contractspec",
+      "packageRef": "@lssm-tech/lib.ui-kit-web",
+      "family": "ui",
+      "packageKind": "primitive",
+      "title": "@lssm-tech/lib.ui-kit-web",
+      "description": "Web-first ContractSpec UI kit for React and Next.js surfaces.",
+      "capabilityTags": [
+        "ui",
+        "web",
+        "radix",
+        "next",
+        "components"
+      ],
+      "preferredUseCases": [
+        "web-only primitives",
+        "lower-level browser controls"
+      ],
+      "platforms": [
+        "web"
+      ],
+      "resolutionPriority": 80
+    },
+    {
+      "id": "ui.ui-kit-native",
+      "source": "contractspec",
+      "packageRef": "@lssm-tech/lib.ui-kit",
+      "family": "ui",
+      "packageKind": "primitive",
+      "title": "@lssm-tech/lib.ui-kit",
+      "description": "Native-first ContractSpec UI kit for Expo and React Native.",
+      "capabilityTags": [
+        "ui",
+        "native",
+        "expo",
+        "react-native",
+        "components"
+      ],
+      "preferredUseCases": [
+        "native primitives",
+        "expo components",
+        "react-native controls"
+      ],
+      "platforms": [
+        "native"
+      ],
+      "resolutionPriority": 80
+    },
+    {
+      "id": "integrations.runtime",
+      "source": "contractspec",
+      "packageRef": "@lssm-tech/integration.runtime",
+      "family": "integrations",
+      "packageKind": "adapter",
+      "title": "@lssm-tech/integration.runtime",
+      "description": "Runtime composition helpers for integration execution.",
+      "capabilityTags": [
+        "runtime",
+        "integrations",
+        "managed",
+        "local",
+        "hybrid"
+      ],
+      "preferredUseCases": [
+        "runtime composition",
+        "integration execution",
+        "provider orchestration"
+      ],
+      "resolutionPriority": 80
+    },
+    {
+      "id": "runtime.presentation-core",
+      "source": "contractspec",
+      "packageRef": "@lssm-tech/lib.presentation-runtime-core",
+      "family": "runtime",
+      "packageKind": "primitive",
+      "title": "@lssm-tech/lib.presentation-runtime-core",
+      "description": "Platform-agnostic presentation transform engine.",
+      "capabilityTags": [
+        "runtime",
+        "presentation",
+        "transform",
+        "core"
+      ],
+      "preferredUseCases": [
+        "platform-agnostic presentation rendering",
+        "transform pipelines"
+      ],
+      "resolutionPriority": 80
+    },
+    {
+      "id": "shared.identity",
+      "source": "contractspec",
+      "packageRef": "@lssm-tech/lib.identity-rbac",
+      "family": "sharedLibs",
+      "packageKind": "primitive",
+      "title": "@lssm-tech/lib.identity-rbac",
+      "description": "Identity and RBAC helpers for policy-aware systems.",
+      "capabilityTags": [
+        "shared",
+        "identity",
+        "rbac",
+        "authz"
+      ],
+      "preferredUseCases": [
+        "identity and RBAC helpers",
+        "authorization models"
+      ],
+      "resolutionPriority": 80
+    },
+    {
+      "id": "runtime.harness",
+      "source": "contractspec",
+      "packageRef": "@lssm-tech/lib.harness",
+      "family": "runtime",
+      "packageKind": "primitive",
+      "title": "@lssm-tech/lib.harness",
+      "description": "Harness orchestration, evidence, policy, replay, and evaluation runtime.",
+      "capabilityTags": [
+        "runtime",
+        "harness",
+        "replay",
+        "evaluation"
+      ],
+      "preferredUseCases": [
+        "proof-backed verification",
+        "evaluation workflows",
+        "replay"
+      ],
+      "resolutionPriority": 75
+    },
+    {
+      "id": "shared.accessibility",
+      "source": "contractspec",
+      "packageRef": "@lssm-tech/lib.accessibility",
+      "family": "sharedLibs",
+      "packageKind": "primitive",
+      "title": "@lssm-tech/lib.accessibility",
+      "description": "Accessibility helpers layered on top of ContractSpec UI surfaces.",
+      "capabilityTags": [
+        "shared",
+        "accessibility",
+        "ui",
+        "a11y"
+      ],
+      "preferredUseCases": [
+        "accessibility primitives",
+        "cross-surface a11y helpers"
+      ],
+      "resolutionPriority": 75
+    },
+    {
+      "id": "runtime.harness-runtime",
+      "source": "contractspec",
+      "packageRef": "@lssm-tech/integration.harness-runtime",
+      "family": "runtime",
+      "packageKind": "adapter",
+      "title": "@lssm-tech/integration.harness-runtime",
+      "description": "Runtime adapters for browser, sandbox, artifact, and MCP-backed harness targets.",
+      "capabilityTags": [
+        "runtime",
+        "harness",
+        "browser",
+        "sandbox",
+        "mcp"
+      ],
+      "preferredUseCases": [
+        "browser and sandbox-backed harness targets"
+      ],
+      "resolutionPriority": 70
+    },
+    {
+      "id": "shared.ai-agent",
+      "source": "contractspec",
+      "packageRef": "@lssm-tech/lib.ai-agent",
+      "family": "sharedLibs",
+      "packageKind": "primitive",
+      "title": "@lssm-tech/lib.ai-agent",
+      "description": "AI agent orchestration with contract governance.",
+      "capabilityTags": [
+        "shared",
+        "ai",
+        "agent",
+        "mcp"
+      ],
+      "preferredUseCases": [
+        "tool-aware agent orchestration",
+        "approval-backed agent workflows"
+      ],
+      "resolutionPriority": 70
+    },
+    {
+      "id": "shared.knowledge",
+      "source": "contractspec",
+      "packageRef": "@lssm-tech/lib.knowledge",
+      "family": "sharedLibs",
+      "packageKind": "primitive",
+      "title": "@lssm-tech/lib.knowledge",
+      "description": "Knowledge spaces, bindings, ingestion, and governed retrieval helpers.",
+      "capabilityTags": [
+        "shared",
+        "knowledge",
+        "retrieval",
+        "ingestion",
+        "spaces"
+      ],
+      "preferredUseCases": [
+        "knowledge spaces",
+        "retrieval flows",
+        "ingestion pipelines"
+      ],
+      "resolutionPriority": 68
+    },
+    {
+      "id": "shared.ai-providers",
+      "source": "contractspec",
+      "packageRef": "@lssm-tech/lib.ai-providers",
+      "family": "sharedLibs",
+      "packageKind": "primitive",
+      "title": "@lssm-tech/lib.ai-providers",
+      "description": "Shared AI provider abstractions and model metadata.",
+      "capabilityTags": [
+        "shared",
+        "ai",
+        "providers",
+        "models"
+      ],
+      "preferredUseCases": [
+        "provider resolution",
+        "model catalogs",
+        "AI integrations"
+      ],
+      "resolutionPriority": 65
+    },
+    {
+      "id": "solutions.ai-chat",
+      "source": "contractspec",
+      "packageRef": "@lssm-tech/module.ai-chat",
+      "family": "solutions",
+      "packageKind": "module",
+      "title": "@lssm-tech/module.ai-chat",
+      "description": "Reusably packaged AI chat system.",
+      "capabilityTags": [
+        "solutions",
+        "module",
+        "chat",
+        "agent-ui"
+      ],
+      "preferredUseCases": [
+        "feature-complete AI chat surfaces",
+        "reusable chat modules"
+      ],
+      "resolutionPriority": 60
+    },
+    {
+      "id": "solutions.learning-journey",
+      "source": "contractspec",
+      "packageRef": "@lssm-tech/module.learning-journey",
+      "family": "solutions",
+      "packageKind": "module",
+      "title": "@lssm-tech/module.learning-journey",
+      "description": "Adaptive learning-journey runtime for onboarding, coaching, drills, and progression.",
+      "capabilityTags": [
+        "solutions",
+        "module",
+        "learning",
+        "journey",
+        "onboarding"
+      ],
+      "preferredUseCases": [
+        "guided onboarding tracks",
+        "adaptive learning flows"
+      ],
+      "resolutionPriority": 58
+    },
+    {
+      "id": "solutions.provider-ranking",
+      "source": "contractspec",
+      "packageRef": "@lssm-tech/module.provider-ranking",
+      "family": "solutions",
+      "packageKind": "module",
+      "title": "@lssm-tech/module.provider-ranking",
+      "description": "Provider ranking pipelines, storage, and orchestration.",
+      "capabilityTags": [
+        "solutions",
+        "module",
+        "provider-ranking",
+        "benchmarks"
+      ],
+      "preferredUseCases": [
+        "ranking pipelines",
+        "provider benchmark workflows"
+      ],
+      "resolutionPriority": 55
+    },
+    {
+      "id": "solutions.bundle-workspace",
+      "source": "contractspec",
+      "packageRef": "@lssm-tech/bundle.workspace",
+      "family": "solutions",
+      "packageKind": "bundle",
+      "title": "@lssm-tech/bundle.workspace",
+      "description": "Workspace bundle powering CLI, validation, generation, and setup flows.",
+      "capabilityTags": [
+        "solutions",
+        "bundle",
+        "workspace",
+        "automation"
+      ],
+      "preferredUseCases": [
+        "workspace services",
+        "setup",
+        "doctor",
+        "connect"
+      ],
+      "resolutionPriority": 50
+    },
+    {
+      "id": "solutions.bundle-library",
+      "source": "contractspec",
+      "packageRef": "@lssm-tech/bundle.library",
+      "family": "solutions",
+      "packageKind": "bundle",
+      "title": "@lssm-tech/bundle.library",
+      "description": "Library bundle for docs, templates, and MCP-facing product surfaces.",
+      "capabilityTags": [
+        "solutions",
+        "bundle",
+        "docs",
+        "mcp",
+        "templates"
+      ],
+      "preferredUseCases": [
+        "docs surfaces",
+        "MCP handlers",
+        "library-style composed product surfaces"
+      ],
+      "resolutionPriority": 45
+    },
+    {
+      "id": "solutions.example-minimal",
+      "source": "contractspec",
+      "packageRef": "@lssm-tech/example.minimal",
+      "family": "solutions",
+      "packageKind": "example",
+      "title": "@lssm-tech/example.minimal",
+      "description": "Minimal example showing baseline ContractSpec usage.",
+      "capabilityTags": [
+        "solutions",
+        "example",
+        "starter",
+        "minimal"
+      ],
+      "preferredUseCases": [
+        "reference implementations",
+        "scaffolding references",
+        "how-to examples"
+      ],
+      "resolutionPriority": 30
+    }
+  ]
+}

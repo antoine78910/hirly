@@ -122,10 +122,12 @@ function writeSessionCookie(token) {
     typeof window !== "undefined" && window.location.protocol === "https:" ? "; Secure" : "";
   const domainPart = domain ? `; Domain=${domain}` : "";
   if (!token) {
+    // biome-ignore lint/suspicious/noDocumentCookie: Cookie Store is asynchronous and unavailable on supported browsers.
     document.cookie = `${TOKEN_COOKIE}=; Max-Age=0; Path=/; SameSite=Lax${domainPart}${secure}`;
     return;
   }
   const maxAge = 60 * 60 * 24 * 30;
+  // biome-ignore lint/suspicious/noDocumentCookie: Cookie Store is asynchronous and unavailable on supported browsers.
   document.cookie = `${TOKEN_COOKIE}=${encodeURIComponent(token)}; Max-Age=${maxAge}; Path=/; SameSite=Lax${domainPart}${secure}`;
 }
 
