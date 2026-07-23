@@ -1114,7 +1114,10 @@ export default function Onboarding() {
     }
   };
 
-  const finishOnboarding = async (checkoutReturnSearch = "") => {
+  // Checkout-return effects are declared above this handler. Keep it as a
+  // function declaration so dependency arrays can safely reference it during
+  // render without triggering a temporal-dead-zone error in production.
+  async function finishOnboarding(checkoutReturnSearch = "") {
     if (!user) {
       await startGoogleLogin("/onboarding?step=showcasePricing");
       return;
@@ -1174,7 +1177,7 @@ export default function Onboarding() {
     } finally {
       setSaving(false);
     }
-  };
+  }
 
   const startOnboardingCheckout = async () => {
     trackOnboardingContinue("showcasePricing", { plan: selectedPlan });
