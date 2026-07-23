@@ -128,4 +128,5 @@ export const INTRODUCE_HIRLY_RESOURCES_EN = [
       ],
     ],
   },
+  ...HIRLY_EXAMPLE_VIDEOS_FR,
 ];

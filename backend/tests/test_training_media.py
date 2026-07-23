@@ -18,6 +18,11 @@ from training_media import (
     training_video_storage_path,
     validate_video_upload,
 )
+from training_module_content import (
+    CREATING_CONTENT_SECTIONS_EN,
+    CREATING_CONTENT_SECTIONS_FR,
+    INTRODUCE_HIRLY_VIDEO_EXAMPLES,
+)
 from training_service import (
     SEED_COURSE_ID,
     SEED_CREATOR_ID,
@@ -103,6 +108,22 @@ def test_seeded_training_content_has_complete_english_and_french_packs():
         assert [section["section_id"] for section in packs["en"]["sections"]] == [
             section["section_id"] for section in packs["fr"]["sections"]
         ]
+
+
+def test_hirly_video_examples_are_identical_in_english_and_french_content():
+    english = next(section for section in CREATING_CONTENT_SECTIONS_EN if section["section_id"] == "sec_cc_hirly")
+    french = next(section for section in CREATING_CONTENT_SECTIONS_FR if section["section_id"] == "sec_cc_hirly")
+
+    assert english["resources"][-3:] == INTRODUCE_HIRLY_VIDEO_EXAMPLES
+    assert french["resources"][-3:] == INTRODUCE_HIRLY_VIDEO_EXAMPLES
+    accordion = INTRODUCE_HIRLY_VIDEO_EXAMPLES[-1]
+    assert accordion["type"] == "accordion"
+    assert [item["title"] for item in accordion["items"]] == [
+        "Swipe",
+        "Historique",
+        "CV & lettre IA",
+        "Formats de tournage",
+    ]
 
 
 def test_validate_video_upload_accepts_mp4():

@@ -1,5 +1,7 @@
 """Structured doc content for training modules (Notion-style blocks)."""
 
+from copy import deepcopy
+
 POSTING_HOURS_EN = [
     {"type": "heading", "level": 2, "text": "Best Posting (US)"},
     {"type": "paragraph", "text": "Post only during:"},
@@ -558,6 +560,10 @@ INTRODUCE_HIRLY_RESOURCES_FR = [
     },
 ]
 
+# The example videos currently have French source narration, so they are shared
+# across training languages to keep the lesson structure identical.
+INTRODUCE_HIRLY_VIDEO_EXAMPLES = INTRODUCE_HIRLY_RESOURCES_FR[-3:]
+
 INTRODUCE_HIRLY_RESOURCES_EN = [
     {"type": "heading", "level": 4, "text": "Main features + script"},
     {
@@ -610,6 +616,7 @@ INTRODUCE_HIRLY_RESOURCES_EN = [
             ],
         ],
     },
+    *deepcopy(INTRODUCE_HIRLY_VIDEO_EXAMPLES),
 ]
 
 CREATING_CONTENT_FILMING_VIDEO_URL = (

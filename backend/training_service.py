@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 SEED_CREATOR_ID = "creator_swiipr_official"
 SEED_COURSE_ID = "course_job_search_mastery"
-SEED_MODULES_VERSION = 11
+SEED_MODULES_VERSION = 12
 
 SUBMIT_DRAFTS_VIDEO_URL = (
     "https://player.mediadelivery.net/play/689678/9cdda64d-b68e-4e87-b5c9-d076bb620aec"
