@@ -122,7 +122,7 @@ Configure a protected GitHub environment named `production` with:
 - secrets: `SUPABASE_DB_URL`, `RAILWAY_TOKEN`, `VERCEL_TOKEN`;
 - variables: `RAILWAY_PROJECT_ID`, `RAILWAY_SERVICE`,
   `RAILWAY_BACKEND_URL`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`,
-  `VERCEL_FRONTEND_URL`.
+  `VERCEL_FRONTEND_URL`
 
 Disable Railway and Vercel Git-integration auto-promotion for `main`; otherwise
 those integrations create a second deployment owner that can race past the
