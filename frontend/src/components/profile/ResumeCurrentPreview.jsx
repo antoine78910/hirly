@@ -126,6 +126,7 @@ export default function ResumeCurrentPreview({
     profile?.cv_mime,
     profile?.cv_text,
     staticPreviewUrl,
+    profile,
   ]);
 
   if (!hasResume) return null;

@@ -166,8 +166,8 @@ export default function AutoApplyRunConsole({ report, embedded = false }) {
           {timeline.length ? (
             <Section title="Run timeline">
               <div className="space-y-2">
-                {timeline.map((entry, index) => (
-                  <div key={`${entry.stage}-${index}`} className="flex items-start gap-3">
+                {timeline.map((entry, _index) => (
+                  <div key={JSON.stringify(entry)} className="flex items-start gap-3">
                     <span
                       className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${TIMELINE_DOT[entry.status] || "bg-zinc-600"}`}
                     />
@@ -262,7 +262,7 @@ export default function AutoApplyRunConsole({ report, embedded = false }) {
           {planSteps.length ? (
             <Section title={`Planned steps (${planSteps.length})`}>
               {planSteps.map((step, index) => (
-                <LogLine key={`${step.action}-${index}`} level="info">
+                <LogLine key={JSON.stringify(step)} level="info">
                   [{index + 1}] {step.action}
                   {" → "}
                   {step.locators?.[0] || "(no locator)"}
@@ -276,7 +276,7 @@ export default function AutoApplyRunConsole({ report, embedded = false }) {
             <Section title={`Browser execution log (${stepLog.length})`}>
               {stepLog.map((entry, index) => (
                 <LogLine
-                  key={`${entry.action}-${index}`}
+                  key={JSON.stringify(entry)}
                   level={
                     entry.status === "ok" ? "ok" : entry.status === "not_found" ? "warn" : "error"
                   }

@@ -67,8 +67,8 @@ export default function ForProfile() {
       {/* Stats */}
       <section className="border-b border-zinc-100">
         <div className="max-w-4xl mx-auto px-6 py-10 grid grid-cols-3 gap-6">
-          {page.stats.map((stat, i) => (
-            <div key={i} className="text-center">
+          {page.stats.map((stat, _i) => (
+            <div key={JSON.stringify(stat)} className="text-center">
               <p className="font-display font-black text-3xl sm:text-4xl text-swiipr-gradient mb-1">
                 {stat.value}
               </p>
@@ -89,9 +89,9 @@ export default function ForProfile() {
               Les obstacles que vous rencontrez
             </h2>
             <ul className="space-y-3">
-              {page.challenges.map((c, i) => (
+              {page.challenges.map((c, _i) => (
                 <li
-                  key={i}
+                  key={JSON.stringify(c)}
                   className="flex items-start gap-3 text-zinc-600 text-sm leading-relaxed"
                 >
                   <span className="mt-1 w-1.5 h-1.5 rounded-full bg-zinc-300 flex-shrink-0" />
@@ -108,8 +108,8 @@ export default function ForProfile() {
               Ce que Hirly fait pour vous
             </h2>
             <ul className="space-y-3">
-              {page.solutions.map((s, i) => (
-                <li key={i} className="flex items-start gap-3">
+              {page.solutions.map((s, _i) => (
+                <li key={JSON.stringify(s)} className="flex items-start gap-3">
                   <CheckCircle className="w-4 h-4 text-linkedin flex-shrink-0 mt-0.5" />
                   <div>
                     <p className="text-sm font-semibold text-zinc-900 mb-0.5">{s.title}</p>

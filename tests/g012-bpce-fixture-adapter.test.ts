@@ -95,8 +95,8 @@ describe("G012 BPCE disabled fixture adapter", () => {
   test("normalizes stable identity, France, direct apply route, and provenance", async () => {
     const adapter = createBpceFixtureSourceAdapter(await fixture(), fixturePolicyId);
     const [raw] = await rows(adapter);
-    const first = adapter.normalize(raw!, context());
-    const repeated = adapter.normalize(raw!, context());
+    const first = adapter.normalize(raw, context());
+    const repeated = adapter.normalize(raw, context());
     const externalId =
       "groupe-bpce-offres-emploi-publiques:bpce-resource-fixture-v1:bpce-fixture-001";
 
@@ -174,7 +174,7 @@ describe("G012 BPCE disabled fixture adapter", () => {
     for await (const page of adapter.discover({
       source: source(),
       mode: "full",
-      cursor: first.value!.nextCursor,
+      cursor: first.value?.nextCursor,
       signal: new AbortController().signal,
     })) {
       replayed.push(page);
@@ -190,22 +190,22 @@ describe("G012 BPCE disabled fixture adapter", () => {
   test("exposes attribution and conservative lifecycle evidence", async () => {
     const adapter = createBpceFixtureSourceAdapter(await fixture(), fixturePolicyId);
     const discovered = await rows(adapter);
-    expect(adapter.attribution(discovered[0]!)).toEqual({
+    expect(adapter.attribution(discovered[0])).toEqual({
       policyId: fixturePolicyId,
       licenceName: "Licence Ouverte 2.0",
       attributionText:
         "Groupe BPCE — data.gouv.fr; production attribution wording remains subject to source-specific legal review.",
       sourceUrl: BPCE_DATASET_URL,
     });
-    expect(adapter.validateActive(discovered[0]!, context().fetchedAt)).toMatchObject({
+    expect(adapter.validateActive(discovered[0], context().fetchedAt)).toMatchObject({
       state: "active",
       reason: expect.stringContaining("complete successful resource scope"),
     });
-    expect(adapter.validateActive(discovered[1]!, context().fetchedAt)).toMatchObject({
+    expect(adapter.validateActive(discovered[1], context().fetchedAt)).toMatchObject({
       state: "expired",
       reason: expect.stringContaining("explicit"),
     });
-    expect(adapter.validateActive(discovered[0]!, context().fetchedAt).state).not.toBe("removed");
+    expect(adapter.validateActive(discovered[0], context().fetchedAt).state).not.toBe("removed");
   });
 
   test("rejects malformed URLs and source identity collisions", async () => {

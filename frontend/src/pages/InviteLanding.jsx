@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { GraduationCap, Loader2, MonitorPlay, Sparkles } from "lucide-react";
 import { toast } from "sonner";
@@ -62,7 +62,7 @@ export default function InviteLanding() {
     setAutoRedeemSettled(false);
     setRedeemFailed(false);
     autoRedeemStarted.current = false;
-  }, [normalized]);
+  }, []);
 
   useEffect(() => {
     if (invalid) {
@@ -82,23 +82,26 @@ export default function InviteLanding() {
         setChecking(false);
       }
     })();
-  }, [code, normalized, invalid]);
+  }, [normalized, invalid]);
 
-  const finishRedeemAndNavigate = async (sessionUser, redeemData) => {
-    applyRedeemToAuth(redeemData, sessionUser, {
-      setUser,
-      setHasTrainingAccess,
-      setDemoAccountFromUser,
-      setHasProfile,
-      setHasPreferences,
-    });
-    try {
-      await checkAuth?.();
-    } catch {
-      /* local auth state already updated */
-    }
-    goToInviteDestination(redeemData, inviteMeta);
-  };
+  const finishRedeemAndNavigate = useCallback(
+    async (sessionUser, redeemData) => {
+      applyRedeemToAuth(redeemData, sessionUser, {
+        setUser,
+        setHasTrainingAccess,
+        setDemoAccountFromUser,
+        setHasProfile,
+        setHasPreferences,
+      });
+      try {
+        await checkAuth?.();
+      } catch {
+        /* local auth state already updated */
+      }
+      goToInviteDestination(redeemData, inviteMeta);
+    },
+    [checkAuth, inviteMeta, setHasPreferences, setHasProfile, setHasTrainingAccess, setUser],
+  );
 
   // Demo invite + existing demo account → go straight to the app (skip onboarding resume).
   useEffect(() => {
@@ -141,11 +144,11 @@ export default function InviteLanding() {
     checking,
     user,
     normalized,
-    invalid,
     isValid,
     redeeming,
     redeemFailed,
     inviteMeta,
+    finishRedeemAndNavigate,
   ]);
 
   const onEmailSubmit = async (event) => {

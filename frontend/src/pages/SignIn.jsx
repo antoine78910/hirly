@@ -197,11 +197,12 @@ export default function SignIn() {
             </div>
 
             <form className="space-y-3" onSubmit={onEmailSubmit}>
-              <label className="block">
+              <label className="block" htmlFor="signin-email">
                 <span className="sr-only">{copy.email}</span>
                 <div className="relative">
                   <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
                   <Input
+                    id="signin-email"
                     type="email"
                     value={email}
                     onChange={(event) => setEmail(event.target.value)}
@@ -213,11 +214,12 @@ export default function SignIn() {
                 </div>
               </label>
 
-              <label className="block">
+              <label className="block" htmlFor="signin-password">
                 <span className="sr-only">{copy.password}</span>
                 <div className="relative">
                   <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
                   <Input
+                    id="signin-password"
                     type="password"
                     value={password}
                     onChange={(event) => setPassword(event.target.value)}

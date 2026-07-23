@@ -26,11 +26,7 @@ import {
   runJobSupplyObservabilityQueries,
 } from "../src/queries";
 import { readFileSync } from "node:fs";
-import {
-  buildFranceTravailCensusManifest,
-  summarizePaidUserCoverage,
-  type FranceTravailPartitionEvidence,
-} from "../src/observability";
+import { buildFranceTravailCensusManifest } from "../src/observability";
 
 const partitions = JSON.parse(
   readFileSync(new URL("../fixtures/pagination-golden.json", import.meta.url), "utf8"),
@@ -151,7 +147,7 @@ describe("job-ingestion audit invariants", () => {
       partition.id.endsWith("permanent-page-failure"),
     );
     expect(permanentFailure).toBeDefined();
-    expect(evaluatePartition(permanentFailure!)).toContain("permanent_page_failure");
+    expect(evaluatePartition(permanentFailure)).toContain("permanent_page_failure");
   });
 
   test("expands every coverage combination to exactly one terminal rule", () => {
@@ -360,9 +356,9 @@ describe("job-ingestion audit invariants", () => {
     const manifest = freezeFranceTravailCensusManifest({
       ...franceTravailManifestInput,
       partitions: [
-        franceTravailManifestInput.partitions[0]!,
+        franceTravailManifestInput.partitions[0],
         {
-          ...franceTravailManifestInput.partitions[1]!,
+          ...franceTravailManifestInput.partitions[1],
           publishedAfter: "2026-07-12T00:00:00.000Z",
         },
       ],
@@ -481,14 +477,14 @@ describe("job-ingestion audit invariants", () => {
     const manifest = freezeFranceTravailCensusManifest({
       ...franceTravailManifestInput,
       capRules: { pageSize: 2, maxRecordsPerPartition: 10, maxRetries: 1 },
-      partitions: [franceTravailManifestInput.partitions[0]!],
+      partitions: [franceTravailManifestInput.partitions[0]],
     });
     const ranges: string[] = [];
     const result = await runFranceTravailLiveCensus(manifest, {
       accessToken: "secret-token",
       fetcher: async (input) => {
         const url = new URL(String(input));
-        const range = url.searchParams.get("range")!;
+        const range = url.searchParams.get("range");
         ranges.push(range);
         return range === "0-1"
           ? Response.json(
@@ -522,7 +518,7 @@ describe("job-ingestion audit invariants", () => {
     const manifest = freezeFranceTravailCensusManifest({
       ...franceTravailManifestInput,
       capRules: { pageSize: 2, maxRecordsPerPartition: 2, maxRetries: 1 },
-      partitions: [franceTravailManifestInput.partitions[0]!],
+      partitions: [franceTravailManifestInput.partitions[0]],
     });
     let calls = 0;
     const result = await runFranceTravailLiveCensus(manifest, {

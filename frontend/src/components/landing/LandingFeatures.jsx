@@ -187,10 +187,10 @@ function TrackingMarquee({ cards }) {
         className="pain-marquee-left flex w-max flex-nowrap gap-3"
         style={{ animationDuration: "42s" }}
       >
-        {Array.from({ length: copies }, (_, copy) => (
-          <div key={copy} className="flex gap-3 pr-3" aria-hidden={copy > 0 || undefined}>
+        {Array.from({ length: copies }, (_, copy) => `copy-${copy}`).map((copyId, copy) => (
+          <div key={copyId} className="flex gap-3 pr-3" aria-hidden={copy > 0 || undefined}>
             {cards.map((card) => (
-              <TrackerCard key={`${card.company}-${copy}`} {...card} />
+              <TrackerCard key={`${card.company}-${copyId}`} {...card} />
             ))}
           </div>
         ))}

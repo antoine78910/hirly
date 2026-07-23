@@ -43,7 +43,7 @@ export default function DomainRouter({ children }) {
     if (isMarketingHost() && isAppPath(pathname)) {
       window.location.replace(appUrl(pathname, search, hash));
     }
-  }, [location.pathname, location.search, location.hash, navigate]);
+  }, [location.pathname, location.search, location.hash, navigate, location]);
 
   return children;
 }

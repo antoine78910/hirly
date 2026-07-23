@@ -29,7 +29,10 @@ export function planFacts(value: unknown): {
   let sharedHitBlocks = 0;
   let sharedReadBlocks = 0;
   const visit = (node: unknown): void => {
-    if (Array.isArray(node)) return node.forEach(visit);
+    if (Array.isArray(node)) {
+      node.forEach(visit);
+      return;
+    }
     if (!node || typeof node !== "object") return;
     for (const [key, child] of Object.entries(node)) {
       if (key === "Node Type" && typeof child === "string") nodeTypes.add(child);

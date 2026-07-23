@@ -9,7 +9,6 @@ import {
   FileText,
   FolderOpen,
   Settings as SettingsIcon,
-  Pencil,
   Plus,
   Users,
   X,
@@ -465,7 +464,7 @@ function ApplicationDefaultsSheet({ open, profile, onClose, onSaved }) {
             </SelectContent>
           </Select>
         </div>
-        <label className="flex items-center justify-between gap-4 rounded-xl border border-sprout-border bg-sprout-surface-2 p-4">
+        <div className="flex items-center justify-between gap-4 rounded-xl border border-sprout-border bg-sprout-surface-2 p-4">
           <span>
             <span className="block text-sm font-semibold text-zinc-200">
               {t("profileSections.preferNotToSayDemographics")}
@@ -475,11 +474,12 @@ function ApplicationDefaultsSheet({ open, profile, onClose, onSaved }) {
             </span>
           </span>
           <Switch
+            aria-label={t("profileSections.preferNotToSayDemographics")}
             checked={Boolean(defaults.prefer_not_to_say_demographics)}
             onCheckedChange={(checked) => update("prefer_not_to_say_demographics", checked)}
             data-testid="app-defaults-prefer-not-demographics"
           />
-        </label>
+        </div>
         <div className="space-y-1.5">
           <Label className="text-sm font-semibold text-zinc-200">
             {t("profileSections.formerEmployerRestriction")}

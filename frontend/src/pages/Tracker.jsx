@@ -26,7 +26,6 @@ import { APP_CONTENT_WIDTH } from "../lib/desktopLayout";
 import CompanyLogo from "../components/CompanyLogo";
 import ResumeSheet from "../components/ResumeSheet";
 import { Dialog, DialogContent } from "../components/ui/dialog";
-import { Button } from "../components/ui/button";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
 import ApplicationDetailPanel from "../components/tracker/ApplicationDetailPanel";
@@ -220,7 +219,7 @@ const isApplicationPrepared = (application) => {
   );
 };
 
-const applicationProgress = (application, t) => {
+const _applicationProgress = (application, t) => {
   const status = resolveDisplayStatus(application);
   const prepared = isApplicationPrepared(application);
   return [
@@ -249,7 +248,7 @@ const applicationProgress = (application, t) => {
   ];
 };
 
-const atsLabel = (application, t) => {
+const _atsLabel = (application, t) => {
   const provider =
     application.job?.ats_provider || application.ats_provider || application.job?.source;
   if (!provider) return t("tracker.atsUnknown");
@@ -258,7 +257,7 @@ const atsLabel = (application, t) => {
     .replace(/\b\w/g, (char) => char.toUpperCase());
 };
 
-const workModeLabel = (application, t) => {
+const _workModeLabel = (application, t) => {
   const job = application.job || {};
   const raw = job.work_location || job.work_mode || job.workplace_type || job.location_type;
   if (raw)
@@ -283,13 +282,13 @@ const internalSubmitEmails = envEmailSet(
   process.env.REACT_APP_REAL_SUBMIT_ALLOWED_EMAILS || process.env.REACT_APP_ADMIN_EMAILS,
 );
 
-const fmtDate = (iso) => {
+const _fmtDate = (iso) => {
   if (!iso) return "";
   const d = new Date(iso);
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 };
 
-const relativeDate = (iso, t) => {
+const _relativeDate = (iso, t) => {
   if (!iso) return "";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
@@ -346,7 +345,7 @@ const applicationStatusMessage = (status, t) => {
 
 export default function Tracker() {
   const navigate = useNavigate();
-  const location = useLocation();
+  const _location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const { t, lang } = useAppLocale();
   const activeTab = searchParams.get("tab") === "passed" ? "passed" : "applications";
@@ -387,7 +386,7 @@ export default function Tracker() {
     setSearchParams({}, { replace: true });
   };
 
-  const loadPassed = async () => {
+  const loadPassed = useCallback(async () => {
     setPassedLoading(true);
     try {
       const rows = await fetchDemoSwipeHistory(api, "left", { limit: 100 });
@@ -397,7 +396,7 @@ export default function Tracker() {
     } finally {
       setPassedLoading(false);
     }
-  };
+  }, [t]);
 
   const applyPassedJob = async (jobId) => {
     setApplyingPassedId(jobId);
@@ -428,26 +427,45 @@ export default function Tracker() {
     }
   }, []);
 
-  const load = async ({ silent = false } = {}) => {
-    if (!silent) setLoading(true);
-    try {
-      const [{ applications, profile }] = await Promise.all([
-        fetchTrackerPageData(api),
-        loadAutoApplyQueue(),
-      ]);
-      setApps(applications);
-      setProfile(profile);
-      return applications;
-    } catch {
-      if (!silent) {
-        setApps([]);
-        setProfile(null);
+  const load = useCallback(
+    async ({ silent = false } = {}) => {
+      if (!silent) setLoading(true);
+      try {
+        const [{ applications, profile }] = await Promise.all([
+          fetchTrackerPageData(api),
+          loadAutoApplyQueue(),
+        ]);
+        setApps(applications);
+        setProfile(profile);
+        return applications;
+      } catch {
+        if (!silent) {
+          setApps([]);
+          setProfile(null);
+        }
+        return [];
+      } finally {
+        if (!silent) setLoading(false);
       }
-      return [];
-    } finally {
-      if (!silent) setLoading(false);
+    },
+    [loadAutoApplyQueue],
+  );
+
+  const openApplication = useCallback(async (app) => {
+    setSelected(app);
+    setDetailTab(hasApplicationDocuments(app) ? "documents" : "application");
+    setOpen(true);
+    try {
+      const { data } = await api.get(`/applications/${app.application_id}`);
+      setSelected(data);
+      setDetailTab(hasApplicationDocuments(data) ? "documents" : "application");
+      setApps((prev) =>
+        prev.map((item) => (item.application_id === data.application_id ? data : item)),
+      );
+    } catch {
+      // Keep the list record visible if refresh fails.
     }
-  };
+  }, []);
 
   const refreshApplications = useCallback(async () => {
     try {
@@ -460,11 +478,11 @@ export default function Tracker() {
     } catch {
       // Ignore background refresh errors.
     }
-  }, []);
+  }, [load]);
   useEffect(() => {
     trackEvent("tracker_view");
     load();
-  }, [location.pathname, location.search]);
+  }, [load]);
 
   useEffect(() => {
     if (activeTab !== "applications") return undefined;
@@ -474,7 +492,7 @@ export default function Tracker() {
       void load({ silent: true });
     }, 8000);
     return () => window.clearInterval(id);
-  }, [activeTab, autoApplyQueue.active_count, loadAutoApplyQueue]);
+  }, [activeTab, autoApplyQueue.active_count, loadAutoApplyQueue, load]);
 
   useEffect(() => {
     const applicationId = searchParams.get("application_id");
@@ -487,7 +505,7 @@ export default function Tracker() {
     if (resolveDisplayStatus(match) === "expired") {
       setStatusFilter("expired");
     }
-  }, [apps, loading, searchParams]);
+  }, [apps, loading, searchParams, openApplication]);
 
   useEffect(() => {
     const refresh = () => load();
@@ -497,11 +515,11 @@ export default function Tracker() {
       window.removeEventListener(FINANCE_DEMO_CHANGED, refresh);
       window.removeEventListener(DEMO_ACCOUNT_CHANGED, refresh);
     };
-  }, []);
+  }, [load]);
 
   useEffect(() => {
     if (activeTab === "passed") loadPassed();
-  }, [activeTab]);
+  }, [activeTab, loadPassed]);
 
   useEffect(() => {
     if (!selected) return;
@@ -548,20 +566,6 @@ export default function Tracker() {
         letter.template || (letter.subject ? "french_formal" : profile?.template_style || "modern"),
     });
     toast.success(t("tracker.coverDownloaded"));
-  };
-
-  const openApplication = async (app) => {
-    setSelected(app);
-    setDetailTab(hasApplicationDocuments(app) ? "documents" : "application");
-    setOpen(true);
-    try {
-      const { data } = await api.get(`/applications/${app.application_id}`);
-      setSelected(data);
-      setDetailTab(hasApplicationDocuments(data) ? "documents" : "application");
-      setApps((prev) => prev.map((a) => (a.application_id === data.application_id ? data : a)));
-    } catch {
-      // Keep the list record visible if refresh fails.
-    }
   };
 
   const resolveMissingInfo = async () => {

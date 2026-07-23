@@ -246,7 +246,7 @@ describe("G003 least-privilege runtime repository", () => {
 
   runIntegration("discovers only due enabled schedules through the worker function", async () => {
     await seedRuntimeFixtures();
-    const sql = createDatabase(databaseUrl!, { max: 1 });
+    const sql = createDatabase(databaseUrl, { max: 1 });
     try {
       await sql`SET ROLE hirly_inventory_worker`;
       const repository = new WorkerRepository(sql);
@@ -270,18 +270,18 @@ describe("G003 least-privilege runtime repository", () => {
     "enqueues one persisted occurrence and rejects stale schedule replay",
     async () => {
       await seedRuntimeFixtures();
-      const sql = createDatabase(databaseUrl!, { max: 1 });
+      const sql = createDatabase(databaseUrl, { max: 1 });
       try {
         await sql`SET ROLE hirly_inventory_worker`;
         const repository = new WorkerRepository(sql);
         const [schedule] = await repository.listDueSchedules(10);
         expect(schedule).toBeDefined();
-        const successor = new Date(schedule!.nextDueAt);
+        const successor = new Date(schedule?.nextDueAt);
         successor.setUTCSeconds(0, 0);
         successor.setUTCMinutes(successor.getUTCMinutes() + 1);
 
-        const first = await repository.enqueueDueSchedule(schedule!.id, successor);
-        await expect(repository.enqueueDueSchedule(schedule!.id, successor)).rejects.toThrow(
+        const first = await repository.enqueueDueSchedule(schedule?.id, successor);
+        await expect(repository.enqueueDueSchedule(schedule?.id, successor)).rejects.toThrow(
           "next due time must advance",
         );
 
@@ -313,7 +313,7 @@ describe("G003 least-privilege runtime repository", () => {
         )
         WHERE id = '${runId}'::uuid;
       `);
-    const sql = createDatabase(databaseUrl!, { max: 1 });
+    const sql = createDatabase(databaseUrl, { max: 1 });
     try {
       await sql`SET ROLE hirly_inventory_worker`;
       const repository = new WorkerRepository(sql);

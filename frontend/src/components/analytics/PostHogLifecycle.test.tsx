@@ -97,7 +97,7 @@ describe("PostHogLifecycle", () => {
     });
     expect(mockResetPostHog).toHaveBeenCalled();
     expect(mockResetPostHog.mock.invocationCallOrder[0]).toBeLessThan(
-      mockCapturePostHogPageview.mock.invocationCallOrder.at(-1)!,
+      mockCapturePostHogPageview.mock.invocationCallOrder.at(-1),
     );
   });
 });

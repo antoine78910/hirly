@@ -74,7 +74,7 @@ function context(entry: SourceRegistryEntry): SourceContext {
   };
 }
 
-async function pages<RawJob>(
+async function pages<_RawJob>(
   adapter: {
     discover(input: {
       source: SourceRegistryEntry;
@@ -184,7 +184,7 @@ describe("G011 disabled ATS fixture connectors", () => {
     const restarted = adapter.discover({
       source: entry,
       mode: "full",
-      cursor: firstPage.value!.nextCursor,
+      cursor: firstPage.value?.nextCursor,
       signal: new AbortController().signal,
     });
     const remaining = [];

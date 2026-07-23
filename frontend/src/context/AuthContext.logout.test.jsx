@@ -33,7 +33,11 @@ jest.mock("../lib/posthogClient", () => ({ resetPostHog: jest.fn() }));
 
 function LogoutProbe() {
   const { logout } = useAuth();
-  return <button onClick={logout}>Log out</button>;
+  return (
+    <button type="button" onClick={logout}>
+      Log out
+    </button>
+  );
 }
 
 describe("AuthProvider logout navigation", () => {

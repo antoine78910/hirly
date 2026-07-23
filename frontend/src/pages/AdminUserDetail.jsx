@@ -706,14 +706,14 @@ export default function AdminUserDetail() {
       )}
 
       {docModal ? (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-          onClick={() => setDocModal(null)}
-        >
-          <div
-            className="max-h-[80vh] w-full max-w-2xl overflow-hidden rounded-xl bg-white shadow-xl"
-            onClick={(event) => event.stopPropagation()}
-          >
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <button
+            type="button"
+            aria-label="Close document"
+            className="absolute inset-0 cursor-default"
+            onClick={() => setDocModal(null)}
+          />
+          <div className="relative max-h-[80vh] w-full max-w-2xl overflow-hidden rounded-xl bg-white shadow-xl">
             <div className="flex items-center justify-between border-b border-zinc-200 px-5 py-3.5">
               <h3 className="font-display text-base font-bold text-zinc-900">{docModal.title}</h3>
               <button

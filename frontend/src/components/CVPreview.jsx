@@ -169,8 +169,8 @@ function ProfessionalColumns({ contact, resume, accentColor }) {
             style={{ marginTop: resume.summary ? undefined : 0 }}
           >
             <ul className="space-y-4">
-              {resume.education.map((entry, index) => (
-                <li key={`${entry.degree}-${index}`}>
+              {resume.education.map((entry, _index) => (
+                <li key={JSON.stringify(entry)}>
                   <div className="flex items-baseline justify-between gap-3">
                     <p className="font-semibold text-zinc-900">{entry.degree}</p>
                     <p className="shrink-0 text-[11px] text-zinc-500">{entry.year}</p>
@@ -185,8 +185,8 @@ function ProfessionalColumns({ contact, resume, accentColor }) {
         {resume.experience?.length ? (
           <ProSection label="Employment history" accentColor={accentColor}>
             <ul className="space-y-5">
-              {resume.experience.map((entry, index) => (
-                <li key={`${entry.role}-${index}`}>
+              {resume.experience.map((entry, _index) => (
+                <li key={JSON.stringify(entry)}>
                   <div className="flex items-baseline justify-between gap-3">
                     <p className="font-semibold text-zinc-900">{entry.role}</p>
                     <p className="shrink-0 text-[11px] text-zinc-500">{entry.duration}</p>
@@ -196,8 +196,8 @@ function ProfessionalColumns({ contact, resume, accentColor }) {
                   </p>
                   {entry.highlights?.length ? (
                     <ul className="mt-2 space-y-1.5">
-                      {entry.highlights.map((highlight, hi) => (
-                        <li key={hi} className="flex gap-2">
+                      {entry.highlights.map((highlight, _hi) => (
+                        <li key={JSON.stringify(highlight)} className="flex gap-2">
                           <span className="text-zinc-400">•</span>
                           <span>{highlight}</span>
                         </li>
@@ -213,8 +213,8 @@ function ProfessionalColumns({ contact, resume, accentColor }) {
         {resume.highlights?.length ? (
           <ProSection label="Extracurricular" accentColor={accentColor}>
             <ul className="space-y-1.5">
-              {resume.highlights.map((item, index) => (
-                <li key={index} className="flex gap-2">
+              {resume.highlights.map((item, _index) => (
+                <li key={JSON.stringify(item)} className="flex gap-2">
                   <span className="text-zinc-400">•</span>
                   <span>{item}</span>
                 </li>
@@ -375,8 +375,8 @@ function HirlyDefaultCVPreview({ contact, resume, job }) {
       {resume.experience?.length > 0 && (
         <HirlySection label="Experience">
           <ul className="space-y-4">
-            {resume.experience.map((entry, index) => (
-              <li key={index}>
+            {resume.experience.map((entry, _index) => (
+              <li key={JSON.stringify(entry)}>
                 <div className="flex items-baseline justify-between gap-3">
                   <p className="font-semibold text-[13px] text-zinc-900">{entry.role}</p>
                   <p className="shrink-0 text-[11px] text-zinc-500">{entry.duration}</p>
@@ -386,8 +386,11 @@ function HirlyDefaultCVPreview({ contact, resume, job }) {
                 </p>
                 {entry.highlights?.length > 0 && (
                   <ul className="mt-1.5 space-y-1">
-                    {entry.highlights.map((highlight, hi) => (
-                      <li key={hi} className="flex gap-2 text-[12px] leading-relaxed text-zinc-700">
+                    {entry.highlights.map((highlight, _hi) => (
+                      <li
+                        key={JSON.stringify(highlight)}
+                        className="flex gap-2 text-[12px] leading-relaxed text-zinc-700"
+                      >
                         <span className="text-zinc-400">•</span>
                         <span>{highlight}</span>
                       </li>
@@ -403,8 +406,8 @@ function HirlyDefaultCVPreview({ contact, resume, job }) {
       {resume.education?.length > 0 && (
         <HirlySection label="Education">
           <ul className="space-y-3">
-            {resume.education.map((entry, index) => (
-              <li key={index}>
+            {resume.education.map((entry, _index) => (
+              <li key={JSON.stringify(entry)}>
                 <div className="flex items-baseline justify-between gap-3">
                   <p className="font-semibold text-[13px] text-zinc-900">{entry.degree}</p>
                   <p className="shrink-0 text-[11px] text-zinc-500">{entry.year}</p>
@@ -419,8 +422,8 @@ function HirlyDefaultCVPreview({ contact, resume, job }) {
       {languages.length > 0 && (
         <HirlySection label="Languages">
           <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-[12px]">
-            {languageColumns.map((column, colIndex) => (
-              <div key={colIndex} className="space-y-1.5">
+            {languageColumns.map((column, _colIndex) => (
+              <div key={JSON.stringify(column)} className="space-y-1.5">
                 {column.map((lang) => (
                   <p key={lang.name}>
                     <span className="font-semibold text-zinc-900">{lang.name}</span>
@@ -537,8 +540,11 @@ export default function CVPreview({
             theme={palette}
           >
             <ul className="space-y-1.5">
-              {resume.highlights.map((item, index) => (
-                <li key={index} className={`text-sm leading-relaxed flex gap-2 ${palette.body}`}>
+              {resume.highlights.map((item, _index) => (
+                <li
+                  key={JSON.stringify(item)}
+                  className={`text-sm leading-relaxed flex gap-2 ${palette.body}`}
+                >
                   <span className={palette.bullet}>•</span>
                   <span>{item}</span>
                 </li>
@@ -550,8 +556,8 @@ export default function CVPreview({
         {resume.experience?.length > 0 && (
           <Section label="Experience" theme={palette}>
             <ul className="space-y-4">
-              {resume.experience.map((e, i) => (
-                <li key={i}>
+              {resume.experience.map((e, _i) => (
+                <li key={JSON.stringify(e)}>
                   <div className="flex items-baseline justify-between gap-3">
                     <p className={`font-semibold text-[15px] ${palette.role}`}>{e.role}</p>
                     <p className={`text-xs shrink-0 ${palette.muted}`}>{e.duration}</p>
@@ -561,9 +567,9 @@ export default function CVPreview({
                   </p>
                   {e.highlights?.length > 0 && (
                     <ul className="mt-2 space-y-1.5">
-                      {e.highlights.map((h, j) => (
+                      {e.highlights.map((h, _j) => (
                         <li
-                          key={j}
+                          key={JSON.stringify(h)}
                           className={`text-sm leading-relaxed flex gap-2 ${palette.body}`}
                         >
                           <span className={palette.bullet}>•</span> <span>{h}</span>
@@ -580,8 +586,8 @@ export default function CVPreview({
         {resume.education?.length > 0 && (
           <Section label="Education" theme={palette}>
             <ul className="space-y-2">
-              {resume.education.map((e, i) => (
-                <li key={i} className="flex items-baseline justify-between gap-3">
+              {resume.education.map((e, _i) => (
+                <li key={JSON.stringify(e)} className="flex items-baseline justify-between gap-3">
                   <div>
                     <p className={`font-semibold text-sm ${palette.role}`}>{e.degree}</p>
                     <p className={`text-xs ${palette.muted}`}>{e.school}</p>

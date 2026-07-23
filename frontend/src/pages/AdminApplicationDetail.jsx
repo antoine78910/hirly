@@ -495,8 +495,8 @@ export default function AdminApplicationDetail() {
                 <h3 className="text-sm font-bold">Missing questions</h3>
                 <ul className="mt-2 space-y-2 text-sm text-zinc-700">
                   {missing.length ? (
-                    missing.map((item, index) => (
-                      <li key={index} className="rounded-md bg-zinc-50 p-2">
+                    missing.map((item, _index) => (
+                      <li key={JSON.stringify(item)} className="rounded-md bg-zinc-50 p-2">
                         {summarizeQuestion(item)}
                       </li>
                     ))
@@ -509,8 +509,8 @@ export default function AdminApplicationDetail() {
                 <h3 className="text-sm font-bold">Required questions</h3>
                 <ul className="mt-2 space-y-2 text-sm text-zinc-700">
                   {questions.length ? (
-                    questions.map((item, index) => (
-                      <li key={index} className="rounded-md bg-zinc-50 p-2">
+                    questions.map((item, _index) => (
+                      <li key={JSON.stringify(item)} className="rounded-md bg-zinc-50 p-2">
                         {summarizeQuestion(item)}
                       </li>
                     ))

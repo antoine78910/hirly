@@ -122,7 +122,7 @@ describe("Feed v2 runtime adapters", () => {
 
     const tampered = {
       ...explicitAssertion,
-      effectiveQuery: { ...explicitAssertion.effectiveQuery!, radiusKm: 53 },
+      effectiveQuery: { ...explicitAssertion.effectiveQuery, radiusKm: 53 },
     };
     const encoded = Buffer.from(JSON.stringify(tampered), "utf8").toString("base64url");
     const signature = createHmac("sha256", secret).update(encoded).digest("hex");

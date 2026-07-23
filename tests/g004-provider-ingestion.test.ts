@@ -679,7 +679,9 @@ describe("G004 rate control", () => {
     queuedController.abort(new Error("cancelled"));
     await expect(queued).rejects.toThrow("cancelled");
 
-    releases.splice(0).forEach((release) => release());
+    releases.splice(0).forEach((release) => {
+      release();
+    });
     await Promise.all([first, second]);
     expect(queuedStarted).toBeFalse();
     expect(maxActive).toBe(2);

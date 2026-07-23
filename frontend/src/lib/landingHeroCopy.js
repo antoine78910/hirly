@@ -223,7 +223,7 @@ export function getLandingHeroHighlightWidthCh(lang) {
   return maxLen + 0.75;
 }
 
-export function getLandingHeroHeadline(lang, contractType) {
+export function getLandingHeroHeadline(lang, _contractType) {
   return LANDING_HERO_COPY[resolveLandingLocale(lang)].headline;
 }
 

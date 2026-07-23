@@ -20,7 +20,7 @@ afterEach(() => {
 
 describe("Sprout durable auth session", () => {
   test("encrypts sessions and rejects an altered ciphertext", () => {
-    const cipher = SproutSessionCipher.fromEnvironment(Buffer.alloc(32, 7).toString("base64"))!;
+    const cipher = SproutSessionCipher.fromEnvironment(Buffer.alloc(32, 7).toString("base64"));
     const encrypted = cipher.encrypt({ accessToken: "access", refreshToken: "refresh" });
     expect(encrypted).not.toContain("access");
     expect(cipher.decrypt(encrypted)).toEqual({ accessToken: "access", refreshToken: "refresh" });
@@ -85,7 +85,7 @@ test("recovers the persisted winner when another worker consumed the refresh tok
   process.env.SPROUT_FRANCE_API_TOKEN = "stale-access";
   process.env.SPROUT_FRANCE_REFRESH_TOKEN = "stale-refresh";
   process.env.SPROUT_SUPABASE_ANON_KEY = "public-key";
-  const cipher = SproutSessionCipher.fromEnvironment(process.env.SPROUT_SESSION_ENCRYPTION_KEY)!;
+  const cipher = SproutSessionCipher.fromEnvironment(process.env.SPROUT_SESSION_ENCRYPTION_KEY);
   const persisted = {
     version: 2n,
     ciphertext: cipher.encrypt({ accessToken: "winner-access", refreshToken: "winner-refresh" }),

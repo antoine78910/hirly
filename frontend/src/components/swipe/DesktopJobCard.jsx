@@ -89,8 +89,8 @@ function DetailSection({ title, bullets, body, theme, expanded = false, t }) {
       ) : null}
       {bullets?.length ? (
         <ul className={`space-y-2 text-sm ${theme.cardAboutBody}`}>
-          {bullets.map((bullet, index) => (
-            <li key={`${title}-${index}`} className="flex items-start gap-2">
+          {bullets.map((bullet, _index) => (
+            <li key={JSON.stringify(bullet)} className="flex items-start gap-2">
               <span className="mt-1.5 text-[8px] text-violet-600 dark:text-violet-400">●</span>
               <span className={expanded ? "" : "line-clamp-2"}>{bullet}</span>
             </li>

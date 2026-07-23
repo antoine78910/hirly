@@ -16,7 +16,6 @@ import { cvPhotoDataUrl, resolveCvDisplayTemplate, withContactPhoto } from "../.
 export default function ApplicationDocumentsView({
   application,
   profile,
-  userPicture,
   t,
   onDownloadCV,
   onDownloadCoverLetter,

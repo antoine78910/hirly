@@ -33,7 +33,7 @@ describe("application-agent contracts", () => {
   test("fixture job remains schema-valid", () =>
     expect(fixtureJobSnapshot.origin).toBe("https://jobs.fixture.example"));
   test("draft claims retain only an evidence identifier, never classified statement content", () => {
-    const evidence = fixtureEvidenceItems[0]!;
+    const evidence = fixtureEvidenceItems[0];
     const claim = {
       id: "claim_fixture-a",
       evidenceId: evidence.id,

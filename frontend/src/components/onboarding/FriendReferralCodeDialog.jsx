@@ -27,12 +27,16 @@ function referralCodeChars(code) {
   return normalized.padEnd(REFERRAL_CODE_LENGTH, " ").slice(0, REFERRAL_CODE_LENGTH).split("");
 }
 
+function referralCodeEntries(code) {
+  return referralCodeChars(code).map((char, index) => ({ char, id: `${char}-${index}` }));
+}
+
 function SpacedReferralCode({ code, testId }) {
   return (
     <div className="flex items-center justify-center gap-1.5 sm:gap-2" data-testid={testId}>
-      {referralCodeChars(code).map((char, index) => (
+      {referralCodeEntries(code).map(({ char, id }) => (
         <span
-          key={`${char}-${index}`}
+          key={id}
           className="min-w-[1ch] text-center font-display text-xl font-black tabular-nums tracking-wide text-swiipr-gradient sm:text-2xl"
         >
           {char.trim() || "—"}

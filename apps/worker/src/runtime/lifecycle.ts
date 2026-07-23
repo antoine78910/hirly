@@ -35,17 +35,20 @@ export function createWorkerRuntime(input: {
       input.health.ready = true;
     },
     stop() {
-      return (stopping ??= (async () => {
-        input.health.ready = false;
-        input.consumer.stopClaiming();
-        input.projectionConsumer?.stopClaiming();
-        await Promise.all([input.server.stop(false), input.scheduler.stop()]);
-        await Promise.all([
-          input.consumer.stop(input.shutdownMs),
-          input.projectionConsumer?.stop(input.shutdownMs),
-        ]);
-        await input.repository.close();
-      })());
+      if (!stopping) {
+        stopping = (async () => {
+          input.health.ready = false;
+          input.consumer.stopClaiming();
+          input.projectionConsumer?.stopClaiming();
+          await Promise.all([input.server.stop(false), input.scheduler.stop()]);
+          await Promise.all([
+            input.consumer.stop(input.shutdownMs),
+            input.projectionConsumer?.stop(input.shutdownMs),
+          ]);
+          await input.repository.close();
+        })();
+      }
+      return stopping;
     },
   };
 }

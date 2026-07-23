@@ -38,12 +38,12 @@ describe("PR0 deterministic online matching oracle", () => {
 
   test("is input-order invariant and uses canonical group as a stable tie breaker", () => {
     const duplicateScore = {
-      ...jobs[0]!,
+      ...jobs[0],
       canonicalGroupId: "group-alpha",
       preferredJobId: "job-alpha",
     };
-    const forward = new MatchingOracle([jobs[0]!, duplicateScore]).match(profile, [], { now });
-    const reverse = new MatchingOracle([duplicateScore, jobs[0]!]).match(profile, [], { now });
+    const forward = new MatchingOracle([jobs[0], duplicateScore]).match(profile, [], { now });
+    const reverse = new MatchingOracle([duplicateScore, jobs[0]]).match(profile, [], { now });
     expect(reverse).toEqual(forward);
     expect(forward.results.map((result) => result.canonicalGroupId)).toEqual([
       "group-alpha",
@@ -53,19 +53,19 @@ describe("PR0 deterministic online matching oracle", () => {
 
   test("applies hard constraints before the coarse bound", () => {
     const wrongCountry = Array.from({ length: 1_001 }, (_, index) => ({
-      ...jobs[0]!,
+      ...jobs[0],
       canonicalGroupId: `a-wrong-${String(index).padStart(4, "0")}`,
       preferredJobId: `wrong-${index}`,
       countryCode: "US",
     }));
-    const result = new MatchingOracle([...wrongCountry, jobs[0]!]).match(profile, [], { now });
+    const result = new MatchingOracle([...wrongCountry, jobs[0]]).match(profile, [], { now });
     expect(result.results[0]?.canonicalGroupId).toBe("group-best");
     expect(result.coarseCandidateCount).toBe(1);
   });
 
   test("enforces the explicit Paris 52km radius and fails closed for unknown coordinates", () => {
     const unknownLocation = {
-      ...jobs[0]!,
+      ...jobs[0],
       canonicalGroupId: "group-unknown-location",
       preferredJobId: "job-unknown-location",
       latitude: undefined,
@@ -77,11 +77,11 @@ describe("PR0 deterministic online matching oracle", () => {
   });
 
   test("rejects duplicate canonical groups and unbounded configurations", () => {
-    expect(() => new MatchingOracle([jobs[0]!, jobs[0]!])).toThrow("duplicate canonical group");
-    expect(() => new MatchingOracle([{ ...jobs[0]!, publishedAt: "not-a-date" }])).toThrow(
+    expect(() => new MatchingOracle([jobs[0], jobs[0]])).toThrow("duplicate canonical group");
+    expect(() => new MatchingOracle([{ ...jobs[0], publishedAt: "not-a-date" }])).toThrow(
       "invalid publishedAt",
     );
-    expect(() => new MatchingOracle([{ ...jobs[0]!, qualityScore: 101 }])).toThrow(
+    expect(() => new MatchingOracle([{ ...jobs[0], qualityScore: 101 }])).toThrow(
       "invalid qualityScore",
     );
     expect(() =>

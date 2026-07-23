@@ -94,9 +94,10 @@ export function TrainingAuthForm({
       </div>
 
       <form className="space-y-4" onSubmit={onSubmit}>
-        <label className="block">
+        <label className="block" htmlFor="training-auth-email">
           <span className="mb-1.5 block text-sm font-medium text-zinc-700">E-mail</span>
           <Input
+            id="training-auth-email"
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
@@ -108,9 +109,10 @@ export function TrainingAuthForm({
           />
         </label>
 
-        <label className="block">
+        <label className="block" htmlFor="training-auth-password">
           <span className="mb-1.5 block text-sm font-medium text-zinc-700">Mot de passe</span>
           <Input
+            id="training-auth-password"
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}

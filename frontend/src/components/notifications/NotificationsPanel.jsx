@@ -117,7 +117,7 @@ export default function NotificationsPanel({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [onUnreadCountChange]);
 
   const handleItemClick = async (notification) => {
     if (!notification.read) {
@@ -153,7 +153,12 @@ export default function NotificationsPanel({
     if (!open) return null;
     return (
       <>
-        <div className="fixed inset-0 z-[75]" onClick={onClose} />
+        <button
+          type="button"
+          className="fixed inset-0 z-[75]"
+          aria-label={t("notifications.close")}
+          onClick={onClose}
+        />
         <div
           className="absolute right-0 top-full z-[76] mt-2 max-h-[26rem] w-80 rounded-2xl border border-zinc-800 bg-zinc-950 p-3 shadow-2xl"
           data-testid="notifications-dropdown"

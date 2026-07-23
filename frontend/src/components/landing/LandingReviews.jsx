@@ -50,8 +50,8 @@ function VerticalReviewMarquee({ reviews, reverse = false, duration = 52 }) {
         className={`flex flex-col ${reverse ? "reviews-marquee-down" : "reviews-marquee-up"}`}
         style={{ animationDuration: `${duration}s` }}
       >
-        {Array.from({ length: MARQUEE_COPIES }, (_, copy) => (
-          <ReviewTrack key={copy} reviews={reviews} suffix={`c${copy}`} hidden={copy > 0} />
+        {Array.from({ length: MARQUEE_COPIES }, (_, copy) => `c${copy}`).map((suffix) => (
+          <ReviewTrack key={suffix} reviews={reviews} suffix={suffix} hidden={suffix !== "c0"} />
         ))}
       </div>
     </div>
@@ -80,12 +80,12 @@ function MobileHorizontalReviewRow({ reviews, reverse = false, duration = 52 }) 
         className={`flex w-max flex-nowrap items-stretch ${reverse ? "pain-marquee-right" : "pain-marquee-left"}`}
         style={{ animationDuration: `${duration}s` }}
       >
-        {Array.from({ length: MARQUEE_COPIES }, (_, copy) => (
+        {Array.from({ length: MARQUEE_COPIES }, (_, copy) => `m${copy}`).map((suffix) => (
           <HorizontalReviewTrack
-            key={copy}
+            key={suffix}
             reviews={reviews}
-            suffix={`m${copy}`}
-            hidden={copy > 0}
+            suffix={suffix}
+            hidden={suffix !== "m0"}
           />
         ))}
       </div>

@@ -51,7 +51,6 @@ const SIZE_STYLES = {
 
 export default function ModuleGalleryCard({
   module,
-  index,
   active,
   locked,
   onSelect,

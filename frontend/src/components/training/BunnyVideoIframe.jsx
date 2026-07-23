@@ -67,7 +67,7 @@ export default function BunnyVideoIframe({ embedUrl, title, onVideoEnded }) {
         /* ignore */
       }
     };
-  }, [embedUrl, onVideoEnded]);
+  }, [onVideoEnded]);
 
   return (
     <div className="overflow-hidden rounded-lg bg-zinc-900 shadow-lg ring-1 ring-zinc-700/50">

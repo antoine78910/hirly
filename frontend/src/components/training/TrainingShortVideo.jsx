@@ -31,6 +31,7 @@ export default function TrainingShortVideo({ block, lang = "fr" }) {
         className="mx-auto w-full max-w-[280px] overflow-hidden rounded-2xl bg-zinc-900 shadow-lg ring-1 ring-zinc-200"
         data-testid={`short-video-${block.upload_slot || "inline"}`}
       >
+        {/* biome-ignore lint/a11y/useMediaCaption: Captions are controlled by the externally uploaded training video. */}
         <video
           key={playbackUrl}
           src={playbackUrl}

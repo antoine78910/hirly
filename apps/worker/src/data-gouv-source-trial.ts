@@ -9,7 +9,7 @@ import {
   type SourceTrialManifest,
   type SourceTrialResult,
 } from "@hirly/contracts";
-import { FixtureOnlyDataGouvSourceAdapter, type DataGouvRawJob } from "@hirly/ingestion/data-gouv";
+import { FixtureOnlyDataGouvSourceAdapter } from "@hirly/ingestion/data-gouv";
 import { sanitizeSourceDocument, toCanonicalJob, type SourceContext } from "@hirly/ingestion";
 import {
   AtsTrialTransportError,

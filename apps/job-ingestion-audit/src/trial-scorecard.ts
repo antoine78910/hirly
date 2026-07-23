@@ -237,7 +237,7 @@ function percentile(values: number[], fraction: number): number {
   const position = (sorted.length - 1) * fraction;
   const lower = Math.floor(position);
   const upper = Math.ceil(position);
-  return round(sorted[lower]! + (sorted[upper]! - sorted[lower]!) * (position - lower));
+  return round(sorted[lower] + (sorted[upper] - sorted[lower]) * (position - lower));
 }
 
 function identityKeys(job: TrialJob): string[] {
@@ -357,8 +357,10 @@ export function buildTrialScorecard(
       if (duplicate) {
         accumulator.duplicates += 1;
       } else {
-        keys.forEach((candidate) => claimed.add(candidate));
-        identitySet.add(keys[0]!);
+        keys.forEach((candidate) => {
+          claimed.add(candidate);
+        });
+        identitySet.add(keys[0]);
         if (eligible(job)) {
           accumulator.eligibleUnique += 1;
           allUniqueEligible += 1;
@@ -406,7 +408,7 @@ export function buildTrialScorecard(
     .sort((a, b) => a.provider.localeCompare(b.provider) || a.tenant.localeCompare(b.tenant));
 
   const reconciliation = runIdentitySets.slice(1).map((current, index): SnapshotReconciliation => {
-    const previous = runIdentitySets[index]!;
+    const previous = runIdentitySets[index];
     return {
       fromSnapshotId: previous.id,
       toSnapshotId: current.id,

@@ -81,8 +81,8 @@ export default function CoverLetterPreview({ contact = {}, letter = {}, job, the
           </p>
           {normalized.greeting ? <p className="mt-5">{normalized.greeting}</p> : null}
           <div className="mt-3 space-y-3">
-            {(normalized.paragraphs || []).map((p, i) => (
-              <p key={i}>{p}</p>
+            {(normalized.paragraphs || []).map((p) => (
+              <p key={p}>{p}</p>
             ))}
           </div>
           {normalized.sign_off ? <p className="mt-5">{normalized.sign_off}</p> : null}
@@ -124,8 +124,8 @@ export default function CoverLetterPreview({ contact = {}, letter = {}, job, the
           <p className="mt-5">{normalized.greeting || `Dear ${company || "Hiring"} team,`}</p>
         ) : null}
         <div className="mt-3 space-y-3">
-          {(normalized.paragraphs || []).map((p, i) => (
-            <p key={i}>{p}</p>
+          {(normalized.paragraphs || []).map((p) => (
+            <p key={p}>{p}</p>
           ))}
         </div>
         {normalized.sign_off ? <p className="mt-5">{normalized.sign_off}</p> : null}

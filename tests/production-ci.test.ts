@@ -39,7 +39,7 @@ describe("main production release workflow", () => {
   test("blocks Railway on migration success and verifies the deployed commit", () => {
     expect(workflow).toContain('supabase db push --db-url "$SUPABASE_DB_URL"');
     expect(workflow).toContain('[ "$deployed_sha" = "$EXPECTED_SHA" ]');
-    expect(workflow).toContain('"${RAILWAY_BACKEND_URL%/}/api/health"');
+    expect(workflow).toContain(`"\${RAILWAY_BACKEND_URL%/}/api/health"`);
   });
 
   test("stages Vercel before promotion", () => {
@@ -68,9 +68,9 @@ describe("main production release workflow", () => {
   test("keeps production credentials in GitHub secrets", () => {
     const productionRelease = workflow.slice(workflow.indexOf("  production-migrations:"));
 
-    expect(workflow).toContain("SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}");
-    expect(workflow).toContain("RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}");
-    expect(workflow).toContain("VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}");
+    expect(workflow).toContain(`SUPABASE_DB_URL: \${{ secrets.SUPABASE_DB_URL }}`);
+    expect(workflow).toContain(`RAILWAY_TOKEN: \${{ secrets.RAILWAY_TOKEN }}`);
+    expect(workflow).toContain(`VERCEL_TOKEN: \${{ secrets.VERCEL_TOKEN }}`);
     expect(productionRelease).not.toMatch(/postgres(?:ql)?:\/\/[^$\s]+/);
   });
 
@@ -83,7 +83,7 @@ describe("main production release workflow", () => {
       workflow.indexOf("  legacy-frontend:"),
       workflow.indexOf("  stack-policy:"),
     );
-    const secretMapping = "CONTRACTSPEC_NPM_TOKEN: ${{ secrets.CONTRACTSPEC_NPM_TOKEN }}";
+    const secretMapping = `CONTRACTSPEC_NPM_TOKEN: \${{ secrets.CONTRACTSPEC_NPM_TOKEN }}`;
 
     expect(bunWorkspaces).toContain(secretMapping);
     expect(legacyFrontend).toContain(secretMapping);

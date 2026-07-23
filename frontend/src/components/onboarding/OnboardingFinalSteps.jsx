@@ -9,7 +9,6 @@ import { ob } from "./onboardingTheme";
 import { useAppLocale } from "../../context/AppLocaleContext";
 import {
   getOnboardingPricingPlans,
-  ONBOARDING_PRICING_PLANS,
   ONBOARDING_SHOWCASE_SCREENS,
   PROFILE_SETUP_PHASES,
   PROFILE_SETUP_PHASES_FR,
@@ -174,11 +173,11 @@ function PainTagPill({ point }) {
 
 const PAIN_MARQUEE_COPIES = 4;
 
-function PainTagTrack({ tags, suffix, hidden = false }) {
+function PainTagTrack({ tags, hidden = false }) {
   return (
     <div className="flex shrink-0 items-center gap-2 pr-2" aria-hidden={hidden || undefined}>
-      {tags.map((point, index) => (
-        <PainTagPill key={`${point.id}-${suffix}-${index}`} point={point} />
+      {tags.map((point, _index) => (
+        <PainTagPill key={JSON.stringify(point)} point={point} />
       ))}
     </div>
   );
@@ -199,7 +198,12 @@ function ScrollingPainTagRow({ tags, reverse = false, duration = 30, delayOffset
         }}
       >
         {Array.from({ length: PAIN_MARQUEE_COPIES }, (_, copy) => (
-          <PainTagTrack key={copy} tags={tags} suffix={`c${copy}`} hidden={copy > 0} />
+          <PainTagTrack
+            key={JSON.stringify(point)}
+            tags={tags}
+            suffix={`c${copy}`}
+            hidden={copy > 0}
+          />
         ))}
       </div>
     </div>
@@ -322,9 +326,9 @@ export function ShowcaseAllInOneStep() {
           className="relative left-1/2 w-screen max-w-none shrink-0 -translate-x-1/2 space-y-1.5 sm:space-y-2"
           aria-hidden
         >
-          {painRows.map((row, index) => (
+          {painRows.map((row, _index) => (
             <ScrollingPainTagRow
-              key={index}
+              key={JSON.stringify(row)}
               tags={row.tags}
               reverse={row.reverse}
               duration={row.duration}

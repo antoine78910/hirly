@@ -225,8 +225,8 @@ function percentile(values: number[], fraction: number): number | null {
   const position = (sorted.length - 1) * fraction;
   const lower = Math.floor(position);
   const upper = Math.ceil(position);
-  const lowerValue = sorted[lower]!;
-  const upperValue = sorted[upper]!;
+  const lowerValue = sorted[lower];
+  const upperValue = sorted[upper];
   return lowerValue + (upperValue - lowerValue) * (position - lower);
 }
 
@@ -373,8 +373,8 @@ export function validateFranceTravailCensusManifest(
       (left, right) => Date.parse(left.publishedAfter) - Date.parse(right.publishedAfter),
     );
     for (let index = 1; index < sorted.length; index += 1) {
-      const previous = sorted[index - 1]!;
-      const current = sorted[index]!;
+      const previous = sorted[index - 1];
+      const current = sorted[index];
       if (Date.parse(current.publishedAfter) < Date.parse(previous.publishedBefore)) {
         failures.push(`overlapping_partition_windows:${previous.id}:${current.id}`);
       }

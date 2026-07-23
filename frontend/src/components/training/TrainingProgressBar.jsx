@@ -54,6 +54,7 @@ export default function TrainingProgressBar({
           return (
             <span key={m.module_id} className="contents">
               <span
+                role="img"
                 title={m.title}
                 className={[
                   "relative flex h-5 w-5 shrink-0 cursor-default items-center justify-center rounded-full text-[9px] font-bold tabular-nums leading-none transition-all duration-300",

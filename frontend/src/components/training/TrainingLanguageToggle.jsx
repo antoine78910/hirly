@@ -12,9 +12,8 @@ export default function TrainingLanguageToggle({ className = "" }) {
   };
 
   return (
-    <div
+    <fieldset
       className={`inline-flex rounded-lg border border-zinc-200 bg-zinc-50 p-0.5 text-xs font-bold ${className}`}
-      role="group"
       aria-label="Language"
     >
       {["en", "fr"].map((code) => (
@@ -29,6 +28,6 @@ export default function TrainingLanguageToggle({ className = "" }) {
           {code}
         </button>
       ))}
-    </div>
+    </fieldset>
   );
 }

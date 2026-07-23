@@ -218,11 +218,11 @@ export default function UseCases() {
           Pour qui est Hirly ?
         </h2>
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
-          {profiles.map((p, i) => {
+          {profiles.map((p, _i) => {
             const Icon = p.icon;
             return (
               <Link
-                key={i}
+                key={JSON.stringify(p)}
                 to={p.slug !== "for" ? `/for/${p.slug}` : "/for/developpeurs"}
                 className="group rounded-2xl border border-zinc-200 bg-white p-6 hover:border-linkedin/40 hover:shadow-sm transition-all duration-200"
               >
@@ -247,8 +247,11 @@ export default function UseCases() {
             Fonctionnalités complètes
           </h2>
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {features.map((f, i) => (
-              <div key={i} className="rounded-xl border border-zinc-200 bg-white p-5">
+            {features.map((f, _i) => (
+              <div
+                key={JSON.stringify(f)}
+                className="rounded-xl border border-zinc-200 bg-white p-5"
+              >
                 <p className="font-semibold text-sm text-zinc-900 mb-1.5">{f.title}</p>
                 <p className="text-xs text-zinc-500 leading-relaxed">{f.desc}</p>
               </div>
@@ -265,7 +268,7 @@ export default function UseCases() {
         <div className="overflow-hidden rounded-2xl border border-zinc-200">
           {integrations.map((intg, i) => (
             <div
-              key={i}
+              key={JSON.stringify(intg)}
               className={`grid grid-cols-3 px-6 py-4 border-b border-zinc-100 last:border-0 items-center ${i % 2 === 0 ? "bg-white" : "bg-zinc-50/50"}`}
             >
               <p className="font-semibold text-sm">{intg.name}</p>
@@ -285,9 +288,9 @@ export default function UseCases() {
             Secteurs couverts
           </h2>
           <div className="flex flex-wrap gap-2">
-            {sectors.map((s, i) => (
+            {sectors.map((s, _i) => (
               <span
-                key={i}
+                key={JSON.stringify(s)}
                 className="text-sm font-medium px-3 py-1.5 rounded-full border border-zinc-200 bg-white text-zinc-600"
               >
                 {s}

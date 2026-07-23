@@ -1,6 +1,6 @@
 // craco.config.js
-const path = require("path");
-const { execFileSync } = require("child_process");
+const path = require("node:path");
+const { execFileSync } = require("node:child_process");
 const webpack = require("webpack");
 require("dotenv").config();
 
@@ -39,7 +39,7 @@ if (config.enableHealthCheck) {
   healthPluginInstance = new WebpackHealthPlugin();
 }
 
-let webpackConfig = {
+const webpackConfig = {
   eslint: {
     configure: {
       extends: ["plugin:react-hooks/recommended"],

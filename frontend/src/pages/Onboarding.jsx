@@ -21,7 +21,7 @@ import {
 import { useAuth } from "../context/AuthContext";
 import { useAppLocale } from "../context/AppLocaleContext";
 import { Slider } from "../components/ui/slider";
-import { Upload, FileText, Loader2, CheckCircle2, Plus } from "lucide-react";
+import { FileText, Loader2, CheckCircle2, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 import PlacesAutocomplete from "../components/PlacesAutocomplete";
@@ -171,7 +171,7 @@ const introSlideMotion = {
 };
 
 export default function Onboarding() {
-  const navigate = useNavigate();
+  const _navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const {
     user,
@@ -537,74 +537,78 @@ export default function Onboarding() {
       void persistOnboardingProgress("referralCode", STEP_ORDER.indexOf("referralCode"));
     }, 500);
     return () => window.clearTimeout(timer);
-  }, [referralCode, step, user, bootstrapping, persistOnboardingProgress]);
+  }, [step, user, bootstrapping, persistOnboardingProgress]);
 
-  useEffect(() => {
-    const preview = searchParams.get("preview");
-    const stepParam = searchParams.get("step");
-    const checkoutStatus = searchParams.get("checkout");
+  useEffect(
+    () => {
+      const preview = searchParams.get("preview");
+      const stepParam = searchParams.get("step");
+      const checkoutStatus = searchParams.get("checkout");
 
-    if (checkoutStatus) {
-      const checkoutSessionId = searchParams.get("session_id");
-      try {
-        restoreCheckoutState(
-          JSON.parse(sessionStorage.getItem(ONBOARDING_CHECKOUT_STATE_KEY) || "null"),
-        );
-      } catch (_) {
-        /* ignore corrupt checkout state */
-      }
-      if (checkoutStatus === "success") {
-        setSearchParams({}, { replace: true });
-        setPendingCheckoutSuccess(true);
-        if (checkoutSessionId) {
-          sessionStorage.setItem("hirly.onboarding.checkoutSessionId", checkoutSessionId);
-          stashCheckoutSessionId(checkoutSessionId);
+      if (checkoutStatus) {
+        const checkoutSessionId = searchParams.get("session_id");
+        try {
+          restoreCheckoutState(
+            JSON.parse(sessionStorage.getItem(ONBOARDING_CHECKOUT_STATE_KEY) || "null"),
+          );
+        } catch (_) {
+          /* ignore corrupt checkout state */
+        }
+        if (checkoutStatus === "success") {
+          setSearchParams({}, { replace: true });
+          setPendingCheckoutSuccess(true);
+          if (checkoutSessionId) {
+            sessionStorage.setItem("hirly.onboarding.checkoutSessionId", checkoutSessionId);
+            stashCheckoutSessionId(checkoutSessionId);
+          }
+          resumeAppliedRef.current = true;
+          setBootstrapping(false);
+        } else {
+          // Stripe back/cancel: skip paywall and enter the app (onboarding already reached pricing).
+          setSearchParams({}, { replace: true });
+          setPendingEnterAppFromPaywall("finish");
         }
         resumeAppliedRef.current = true;
         setBootstrapping(false);
-      } else {
-        // Stripe back/cancel: skip paywall and enter the app (onboarding already reached pricing).
-        setSearchParams({}, { replace: true });
-        setPendingEnterAppFromPaywall("finish");
+        return;
       }
-      resumeAppliedRef.current = true;
-      setBootstrapping(false);
-      return;
-    }
 
-    if (preview) {
-      const boot = readOnboardingPreviewBoot(STEP_ORDER);
-      if (boot) {
-        setStepIndex(boot.stepIndex);
-        if (boot.state) {
-          setCategories(boot.state.categories);
-          setSelectedRoles(boot.state.selectedRoles);
-          setExperience(boot.state.experience);
-          setSalaryMin(boot.state.salaryMin);
-          setSalaryMax(boot.state.salaryMax);
-          setInterviewsPerWeek(boot.state.interviewsPerWeek);
-          setJobTimeline(boot.state.jobTimeline);
-          setJobBlocker(boot.state.jobBlocker);
-          setJobAccomplish(boot.state.jobAccomplish);
-          setJobGoal(boot.state.jobGoal);
-          setJobSearchStatus(boot.state.jobSearchStatus);
-          setOnboardingLocation(boot.state.onboardingLocation);
-          setOnboardingLocationData(boot.state.onboardingLocationData);
-          setContractType(boot.state.contractType);
-          setTriedOtherApps(boot.state.triedOtherApps);
-          setAttribution(boot.state.attribution);
-          setSuggestedCategories(boot.state.suggestedCategories);
-          if (boot.state.selectedPlan) setSelectedPlan(boot.state.selectedPlan);
+      if (preview) {
+        const boot = readOnboardingPreviewBoot(STEP_ORDER);
+        if (boot) {
+          setStepIndex(boot.stepIndex);
+          if (boot.state) {
+            setCategories(boot.state.categories);
+            setSelectedRoles(boot.state.selectedRoles);
+            setExperience(boot.state.experience);
+            setSalaryMin(boot.state.salaryMin);
+            setSalaryMax(boot.state.salaryMax);
+            setInterviewsPerWeek(boot.state.interviewsPerWeek);
+            setJobTimeline(boot.state.jobTimeline);
+            setJobBlocker(boot.state.jobBlocker);
+            setJobAccomplish(boot.state.jobAccomplish);
+            setJobGoal(boot.state.jobGoal);
+            setJobSearchStatus(boot.state.jobSearchStatus);
+            setOnboardingLocation(boot.state.onboardingLocation);
+            setOnboardingLocationData(boot.state.onboardingLocationData);
+            setContractType(boot.state.contractType);
+            setTriedOtherApps(boot.state.triedOtherApps);
+            setAttribution(boot.state.attribution);
+            setSuggestedCategories(boot.state.suggestedCategories);
+            if (boot.state.selectedPlan) setSelectedPlan(boot.state.selectedPlan);
+          }
         }
+        resumeAppliedRef.current = true;
+        setBootstrapping(false);
+        if (!devBypassAuth && stepParam && stepParam !== "intro") {
+          setSearchParams({}, { replace: true });
+        }
+        return;
       }
-      resumeAppliedRef.current = true;
-      setBootstrapping(false);
-      if (!devBypassAuth && stepParam && stepParam !== "intro") {
-        setSearchParams({}, { replace: true });
-      }
-      return;
-    }
-  }, [searchParams, setSearchParams, lang]);
+    },
+    // biome-ignore lint/correctness/useExhaustiveDependencies: Checkout restore is intentionally keyed to the URL state.
+    [searchParams, setSearchParams, restoreCheckoutState],
+  );
 
   useEffect(() => {
     if (authLoading || resumeAppliedRef.current) return;
@@ -729,8 +733,8 @@ export default function Onboarding() {
     hasPreferences,
     searchParams,
     setSearchParams,
-    setProfile,
-    navigate,
+    // biome-ignore lint/correctness/useExhaustiveDependencies: Bootstrap deliberately follows the URL restore lifecycle.
+    restoreCheckoutState,
   ]);
 
   useEffect(() => {
@@ -742,57 +746,67 @@ export default function Onboarding() {
   // ?checkout=success. Once the auth state is ready (user resolved) we confirm
   // billing server-side, then finish onboarding and navigate to the app with
   // checkout params so the app subdomain can sync credits too if needed.
-  useEffect(() => {
-    if (!pendingCheckoutSuccess) return;
-    if (!user) return; // wait until auth resolves
-    setPendingCheckoutSuccess(false);
-    setCheckoutLoading(true);
-    const sessionId = sessionStorage.getItem("hirly.onboarding.checkoutSessionId") || undefined;
-    let cancelled = false;
+  useEffect(
+    () => {
+      if (!pendingCheckoutSuccess) return;
+      if (!user) return; // wait until auth resolves
+      setPendingCheckoutSuccess(false);
+      setCheckoutLoading(true);
+      const sessionId = sessionStorage.getItem("hirly.onboarding.checkoutSessionId") || undefined;
+      let cancelled = false;
 
-    (async () => {
-      try {
-        await syncBillingAfterCheckout({ sessionId, maxAttempts: 15, delayMs: 1500 });
-      } catch (_) {
-        /* polling fallback already handled in syncBillingAfterCheckout */
-      } finally {
-        sessionStorage.removeItem("hirly.onboarding.checkoutSessionId");
-      }
-      if (cancelled) return;
-      const checkoutSearch = sessionId
-        ? `?upgrade=success&session_id=${encodeURIComponent(sessionId)}`
-        : "?upgrade=success";
-      await finishOnboarding(checkoutSearch);
-      if (!cancelled) setCheckoutLoading(false);
-    })();
+      (async () => {
+        try {
+          await syncBillingAfterCheckout({ sessionId, maxAttempts: 15, delayMs: 1500 });
+        } catch (_) {
+          /* polling fallback already handled in syncBillingAfterCheckout */
+        } finally {
+          sessionStorage.removeItem("hirly.onboarding.checkoutSessionId");
+        }
+        if (cancelled) return;
+        const checkoutSearch = sessionId
+          ? `?upgrade=success&session_id=${encodeURIComponent(sessionId)}`
+          : "?upgrade=success";
+        await finishOnboarding(checkoutSearch);
+        if (!cancelled) setCheckoutLoading(false);
+      })();
 
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingCheckoutSuccess, user]);
+      return () => {
+        cancelled = true;
+      };
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    },
+    // biome-ignore lint/correctness/noInvalidUseBeforeDeclaration: The callback is initialized before effects run after render.
+    // biome-ignore lint/correctness/useExhaustiveDependencies: Checkout completion deliberately follows redirect state.
+    [pendingCheckoutSuccess, user, finishOnboarding],
+  );
 
   // Stripe cancel/back or reload after reaching the paywall → enter app.
-  useEffect(() => {
-    if (!pendingEnterAppFromPaywall) return;
-    if (!user) return;
-    const mode = pendingEnterAppFromPaywall;
-    setPendingEnterAppFromPaywall(null);
-    setEnteringAppFromPaywall(true);
-    let cancelled = false;
-    (async () => {
-      if (mode === "navigate" && hasProfile && hasPreferences) {
-        goToApp("/swipe");
-      } else {
-        await finishOnboarding();
-      }
-      if (!cancelled) setEnteringAppFromPaywall(false);
-    })();
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingEnterAppFromPaywall, user, hasProfile, hasPreferences]);
+  useEffect(
+    () => {
+      if (!pendingEnterAppFromPaywall) return;
+      if (!user) return;
+      const mode = pendingEnterAppFromPaywall;
+      setPendingEnterAppFromPaywall(null);
+      setEnteringAppFromPaywall(true);
+      let cancelled = false;
+      (async () => {
+        if (mode === "navigate" && hasProfile && hasPreferences) {
+          goToApp("/swipe");
+        } else {
+          await finishOnboarding();
+        }
+        if (!cancelled) setEnteringAppFromPaywall(false);
+      })();
+      return () => {
+        cancelled = true;
+      };
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    },
+    // biome-ignore lint/correctness/noInvalidUseBeforeDeclaration: The callback is initialized before effects run after render.
+    // biome-ignore lint/correctness/useExhaustiveDependencies: Paywall exit deliberately follows redirect state.
+    [pendingEnterAppFromPaywall, user, hasProfile, hasPreferences, finishOnboarding],
+  );
 
   useEffect(() => {
     if (step !== "categories" || !contractType) return;
@@ -1527,6 +1541,7 @@ export default function Onboarding() {
         >
           {step !== "signup" && (
             <button
+              type="button"
               onClick={() => setLang(lang === "fr" ? "en" : "fr")}
               className="fixed top-3 right-3 z-50 text-xs font-semibold px-3 py-1.5 rounded-full border border-zinc-200 bg-white/90 text-zinc-600 hover:border-linkedin hover:text-linkedin transition-colors shadow-sm backdrop-blur-sm"
               aria-label="Switch language"
@@ -1569,7 +1584,7 @@ export default function Onboarding() {
                 <div className={ob.introDots} aria-hidden>
                   {slides.map((_, i) => (
                     <motion.div
-                      key={i}
+                      key={JSON.stringify(_)}
                       layout
                       transition={{ type: "spring", stiffness: 420, damping: 32 }}
                       className={`h-2 rounded-full ${i === introIndex ? "gradient-linkedin" : "bg-zinc-200"}`}

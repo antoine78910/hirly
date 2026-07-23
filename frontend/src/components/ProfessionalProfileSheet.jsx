@@ -111,6 +111,7 @@ function EntryEditor({ open, sectionKey, entry, onClose, onSave, t }) {
               { id: "details", label: t("professionalProfile.tabDetails") },
             ].map((tabItem) => (
               <button
+                type="button"
                 key={tabItem.id}
                 onClick={() => setTab(tabItem.id)}
                 className={`flex-1 h-10 rounded-full text-sm font-semibold transition-colors ${
@@ -160,6 +161,7 @@ function EntryEditor({ open, sectionKey, entry, onClose, onSave, t }) {
         </div>
 
         <button
+          type="button"
           onClick={handleSave}
           className="mt-8 w-full h-12 rounded-full bg-sprout-mint text-white font-semibold hover:opacity-90"
           data-testid="entry-save-btn"
@@ -208,6 +210,7 @@ function SectionDetail({ open, sectionKey, items, label, onClose, onChange, t })
         >
           <span className="text-white font-medium">{item}</span>
           <button
+            type="button"
             onClick={() => handleDelete(item)}
             className="text-rose-400 text-sm"
             data-testid={`section-delete-${i}`}
@@ -230,6 +233,7 @@ function SectionDetail({ open, sectionKey, items, label, onClose, onChange, t })
       item.duration;
     return (
       <button
+        type="button"
         key={item._id || i}
         onClick={() => !isAiBacked && setEditing(item)}
         className="w-full text-left p-4 rounded-2xl border border-sprout-border bg-sprout-surface hover:bg-sprout-surface-2 transition-colors"
@@ -245,8 +249,8 @@ function SectionDetail({ open, sectionKey, items, label, onClose, onChange, t })
         )}
         {Array.isArray(item.highlights) && (
           <ul className="mt-1 text-sm text-zinc-300 space-y-0.5">
-            {item.highlights.slice(0, 2).map((h, j) => (
-              <li key={j}>— {h}</li>
+            {item.highlights.slice(0, 2).map((h, _j) => (
+              <li key={JSON.stringify(f)}>— {h}</li>
             ))}
           </ul>
         )}
@@ -266,6 +270,7 @@ function SectionDetail({ open, sectionKey, items, label, onClose, onChange, t })
           <h2 className="font-display font-black text-2xl tracking-tight">{label}</h2>
           {!isAiBacked && (
             <button
+              type="button"
               onClick={() => setEditing("new")}
               className="w-9 h-9 rounded-full grid place-items-center text-sprout-mint hover:bg-sprout-mint-soft"
               data-testid={`section-add-${sectionKey}`}
@@ -291,6 +296,7 @@ function SectionDetail({ open, sectionKey, items, label, onClose, onChange, t })
             </p>
             {!isAiBacked && (
               <button
+                type="button"
                 onClick={() => setEditing("new")}
                 className="mt-6 inline-flex items-center gap-1.5 h-12 px-6 rounded-full bg-sprout-mint text-white font-semibold"
                 data-testid={`section-empty-add-${sectionKey}`}
@@ -305,6 +311,7 @@ function SectionDetail({ open, sectionKey, items, label, onClose, onChange, t })
             {items.map(renderItem)}
             {!isAiBacked && (
               <button
+                type="button"
                 onClick={() => setEditing("new")}
                 className="w-full h-12 rounded-full bg-sprout-mint-soft border border-sprout-mint/40 text-sprout-mint font-semibold flex items-center justify-center gap-1.5"
                 data-testid={`section-add-more-${sectionKey}`}
@@ -369,7 +376,7 @@ export default function ProfessionalProfileSheet({ open, profile, onClose, onCha
       const next = { ...(profile?.extras || {}), ...patch };
       await api.patch("/profile/extras", next);
       onChange?.();
-    } catch (e) {
+    } catch (_e) {
       toast.error(t("professionalProfile.saveError"));
     } finally {
       setSaving(false);
@@ -394,6 +401,7 @@ export default function ProfessionalProfileSheet({ open, profile, onClose, onCha
       <div className="space-y-7">
         {/* Professional Overview top card */}
         <button
+          type="button"
           onClick={() => setOverviewOpen(true)}
           className="w-full flex items-start gap-4 p-5 rounded-2xl border border-sprout-border bg-sprout-surface hover:bg-sprout-surface-2 transition-colors text-left"
           data-testid="prof-overview-card"
@@ -429,6 +437,7 @@ export default function ProfessionalProfileSheet({ open, profile, onClose, onCha
                 const count = items.length;
                 return (
                   <button
+                    type="button"
                     key={key}
                     onClick={() => setActive(key)}
                     className="w-full flex items-center gap-4 p-4 rounded-2xl border border-sprout-border bg-sprout-surface hover:bg-sprout-surface-2 transition-colors text-left"

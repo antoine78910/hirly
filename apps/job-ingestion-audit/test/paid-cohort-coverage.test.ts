@@ -70,7 +70,7 @@ class FakeStore implements PaidCohortCoverageStore {
     return [
       {
         canonicalGroupDigest: trialGroup,
-        sourceId: input.trialSources[0]!.sourceId,
+        sourceId: input.trialSources[0]?.sourceId,
         provider: "greenhouse",
         tenantKey: "acme",
         titleTokens: ["platform", "engineer"],
@@ -161,7 +161,7 @@ describe("G016 paid cohort coverage producer", () => {
           ...input,
           cohort: [
             {
-              ...input.cohort[0]!,
+              ...input.cohort[0],
               cohortDimensions: { user_id: "unsafe" },
             },
           ],
@@ -172,7 +172,7 @@ describe("G016 paid cohort coverage producer", () => {
     const escaped = new FakeStore();
     escaped.loadTrialCandidates = async () => [
       {
-        ...(await new FakeStore().loadTrialCandidates())[0]!,
+        ...(await new FakeStore().loadTrialCandidates())[0],
         provider: "lever",
       },
     ];
@@ -182,7 +182,7 @@ describe("G016 paid cohort coverage producer", () => {
     const staleCurrent = new FakeStore();
     staleCurrent.loadCurrentCandidates = async () => [
       {
-        ...(await new FakeStore().loadCurrentCandidates())[0]!,
+        ...(await new FakeStore().loadCurrentCandidates())[0],
         freshAt: "2026-06-01T00:00:00.000Z",
       },
     ];

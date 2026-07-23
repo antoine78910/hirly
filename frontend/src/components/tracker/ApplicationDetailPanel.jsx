@@ -98,7 +98,7 @@ function TimelineEventRow({ event, isLast, lang, t, onViewEmail }) {
   );
 }
 
-function ApplicationEmailRow({ message, onOpen, t, lang }) {
+function ApplicationEmailRow({ message, onOpen, lang }) {
   return (
     <button
       type="button"
@@ -157,7 +157,7 @@ export default function ApplicationDetailPanel({
   const [emails, setEmails] = useState([]);
   const [loadingEmails, setLoadingEmails] = useState(false);
   const [viewingEmail, setViewingEmail] = useState(null);
-  const [timelineRevision, setTimelineRevision] = useState(0);
+  const [_timelineRevision, setTimelineRevision] = useState(0);
 
   useEffect(() => {
     const bumpTimeline = () => setTimelineRevision((value) => value + 1);
@@ -190,7 +190,7 @@ export default function ApplicationDetailPanel({
 
   const timeline = useMemo(
     () => buildApplicationTimeline(application, emails, t, lang),
-    [application, emails, t, lang, timelineRevision],
+    [application, emails, t, lang],
   );
   const appEmails = useMemo(
     () => filterApplicationEmails(emails, application),
@@ -524,6 +524,7 @@ export default function ApplicationDetailPanel({
                         return (
                           <label
                             key={`${item.field_name}-${item.reason}`}
+                            htmlFor={`application-answer-${item.field_name}`}
                             className="block text-zinc-900"
                           >
                             <span className="mb-1 block text-xs font-semibold text-zinc-800">
@@ -531,6 +532,7 @@ export default function ApplicationDetailPanel({
                             </span>
                             {options.length > 0 ? (
                               <select
+                                id={`application-answer-${item.field_name}`}
                                 value={value}
                                 onChange={(e) =>
                                   setMissingAnswers((prev) => ({
@@ -603,8 +605,11 @@ export default function ApplicationDetailPanel({
                   {t("tracker.whyFit")}
                 </p>
                 <ul className="space-y-1.5">
-                  {application.match_reasons.map((reason, index) => (
-                    <li key={index} className="flex gap-2 text-sm leading-snug text-zinc-800">
+                  {application.match_reasons.map((reason, _index) => (
+                    <li
+                      key={JSON.stringify(reason)}
+                      className="flex gap-2 text-sm leading-snug text-zinc-800"
+                    >
                       <span className="text-linkedin">→</span>
                       <span>{reason}</span>
                     </li>
@@ -619,9 +624,9 @@ export default function ApplicationDetailPanel({
                   {t("interviews.likelyQuestions")}
                 </p>
                 <ul className="mt-3 space-y-2">
-                  {application.interview_prep.map((question, index) => (
+                  {application.interview_prep.map((question, _index) => (
                     <li
-                      key={index}
+                      key={JSON.stringify(question)}
                       className="rounded-xl border border-zinc-200 bg-zinc-50 p-3 text-sm text-zinc-800"
                     >
                       {question}

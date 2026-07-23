@@ -98,7 +98,7 @@ describe("G016 aggregate net-new inventory measurement", () => {
     expect(() =>
       buildNetNewMeasurement({
         ...input,
-        sources: [{ ...input.sources[0]!, incrementalNetNew: 9 }],
+        sources: [{ ...input.sources[0], incrementalNetNew: 9 }],
       }),
     ).toThrow("layered dedup accounting does not reconcile");
     expect(() =>
@@ -122,7 +122,7 @@ describe("G016 aggregate net-new inventory measurement", () => {
     expect(() =>
       buildNetNewMeasurement({
         ...input,
-        sources: [input.sources[0]!, input.sources[0]!],
+        sources: [input.sources[0], input.sources[0]],
       }),
     ).toThrow("duplicate provider/tenant aggregates");
   });

@@ -115,6 +115,7 @@ export default function ResumeSheet({ open, profile, onClose, onUploaded }) {
             </p>
           ) : null}
 
+          {/* biome-ignore lint/a11y/useSemanticElements: The file drop zone needs flow content and drag interactions that cannot be nested in a button. */}
           <div
             role="button"
             tabIndex={0}

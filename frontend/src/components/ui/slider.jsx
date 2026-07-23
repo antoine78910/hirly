@@ -17,7 +17,7 @@ const Slider = React.forwardRef(({ className, value, defaultValue, ...props }, r
       <SliderPrimitive.Track className="relative h-1.5 w-full grow overflow-hidden rounded-full bg-violet-100 dark:bg-zinc-700">
         <SliderPrimitive.Range className="absolute h-full gradient-linkedin" />
       </SliderPrimitive.Track>
-      {Array.from({ length: thumbCount }).map((_, index) => (
+      {Array.from({ length: thumbCount }, (_, index) => index).map((index) => (
         <SliderPrimitive.Thumb
           key={index}
           className="block h-4 w-4 rounded-full border-2 border-violet-400 bg-white shadow transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/40 disabled:pointer-events-none disabled:opacity-50 dark:border-violet-300 dark:bg-zinc-900"

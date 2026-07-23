@@ -115,7 +115,7 @@ function replenishFeedJobs() {
 }
 
 /** Build /jobs/feed payload for the finance Paris demo (local, no backend). */
-export function getFinanceDemoFeedData({ filters = null, searchRole = "", limit = 5 } = {}) {
+export function getFinanceDemoFeedData({ filters = null, limit = 5 } = {}) {
   if (!isFinanceDemoEnabled()) return null;
   replenishFeedJobs();
   const mergedFilters = clearMenuFilters(mergeFilters(filters));

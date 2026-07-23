@@ -9,8 +9,8 @@ import {
   onboardingSkipGoalName,
   onboardingStepNumber,
 } from "./datafast";
-import fs from "fs";
-import path from "path";
+import fs from "node:fs";
+import path from "node:path";
 
 describe("datafast onboarding funnel", () => {
   it("maps step ids to stable step numbers for goal params", () => {

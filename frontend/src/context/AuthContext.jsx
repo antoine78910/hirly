@@ -46,13 +46,13 @@ export const AuthProvider = ({ children }) => {
       setHasTrainingAccess(Boolean(data.has_training_access));
       setIsAdmin(Boolean(data.is_admin));
       // Only sync billing after a Stripe checkout redirect — not on every login.
-      const isRealUser = data.user && !data.user.demo_account && !Boolean(data.is_admin);
+      const isRealUser = data.user && !data.user.demo_account && !data.is_admin;
       if (isRealUser && peekCheckoutSessionId()) {
         resumePendingCheckoutSync({ maxAttempts: 15, delayMs: 1500 }).catch(() =>
           syncBillingStatus().catch(() => {}),
         );
       }
-    } catch (e) {
+    } catch (_e) {
       setUser(null);
       setIsTrainingCreator(false);
       setHasTrainingAccess(false);

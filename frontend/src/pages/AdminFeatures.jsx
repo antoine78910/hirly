@@ -239,7 +239,7 @@ export default function AdminFeatures() {
   const [accessDenied, setAccessDenied] = useState(false);
   const [featureRows, setFeatureRows] = useState([]);
   const [trainingRows, setTrainingRows] = useState([]);
-  const [selectedId, setSelectedId] = useState(null);
+  const [_selectedId, setSelectedId] = useState(null);
   const [selectedDetail, setSelectedDetail] = useState(null);
   const [recovering, setRecovering] = useState(false);
 

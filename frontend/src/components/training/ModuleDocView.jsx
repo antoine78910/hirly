@@ -13,11 +13,9 @@ function RichText({ text, className = "" }) {
 
   const parts = [];
   let lastIndex = 0;
-  let match;
-
   const combined = new RegExp(`${MARKDOWN_LINK_PATTERN.source}|${URL_PATTERN.source}`, "g");
-
-  while ((match = combined.exec(text)) !== null) {
+  let match = combined.exec(text);
+  while (match !== null) {
     if (match.index > lastIndex) {
       parts.push(text.slice(lastIndex, match.index));
     }
@@ -49,6 +47,7 @@ function RichText({ text, className = "" }) {
     }
 
     lastIndex = match.index + match[0].length;
+    match = combined.exec(text);
   }
 
   if (lastIndex < text.length) {
@@ -59,7 +58,7 @@ function RichText({ text, className = "" }) {
     return (
       <span className={className}>
         {text.split("\n").map((line, i, arr) => (
-          <span key={i}>
+          <span key={line}>
             {line}
             {i < arr.length - 1 ? <br /> : null}
           </span>
@@ -70,10 +69,10 @@ function RichText({ text, className = "" }) {
 
   return (
     <span className={className}>
-      {parts.map((part, i) =>
+      {parts.map((part, _i) =>
         typeof part === "string"
           ? part.split("\n").map((line, j, arr) => (
-              <span key={`${i}-${j}`}>
+              <span key={JSON.stringify(part)}>
                 {line}
                 {j < arr.length - 1 ? <br /> : null}
               </span>
@@ -218,8 +217,8 @@ export default function ModuleDocView({ blocks, lang = "en" }) {
 
   return (
     <article className="space-y-4">
-      {blocks.map((block, index) => (
-        <DocBlock key={`${block.type}-${index}`} block={block} lang={lang} />
+      {blocks.map((block, _index) => (
+        <DocBlock key={JSON.stringify(block)} block={block} lang={lang} />
       ))}
     </article>
   );

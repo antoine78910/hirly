@@ -115,9 +115,9 @@ describe("G008 PR6 shadow and canary foundation", () => {
   test("freezes a stable order-independent online-v2 domain parity digest", () => {
     const reordered = [
       {
-        ...domain[0]!,
-        statusReasons: [...domain[0]!.statusReasons].reverse(),
-        explanationCodes: [...domain[0]!.explanationCodes].reverse(),
+        ...domain[0],
+        statusReasons: [...domain[0].statusReasons].reverse(),
+        explanationCodes: [...domain[0].explanationCodes].reverse(),
         componentScores: { role: 1, skills: 0.5 },
       },
     ];

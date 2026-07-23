@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -8,7 +8,6 @@ import {
   Trophy,
   Target,
   Sparkles,
-  ChevronRight,
   Play,
   Loader2,
   X,
@@ -120,6 +119,7 @@ function MockInterview({ open, questions, onClose, onFinished }) {
       >
         <header className="px-5 pt-6 pb-3 flex items-center gap-3 border-b border-sprout-border">
           <button
+            type="button"
             onClick={onClose}
             className="w-10 h-10 grid place-items-center rounded-full hover:bg-sprout-surface"
             data-testid="mock-close-btn"
@@ -140,10 +140,10 @@ function MockInterview({ open, questions, onClose, onFinished }) {
           <div className="flex-1 overflow-y-auto px-5 pb-44 pt-5 max-w-md mx-auto w-full">
             {/* Progress */}
             <div className="flex gap-1.5 mb-6">
-              {Array.from({ length: n }).map((_, i) => (
+              {Array.from({ length: n }, (_, index) => index).map((index) => (
                 <div
-                  key={i}
-                  className={`flex-1 h-1.5 rounded-full ${i <= step ? "bg-sprout-mint" : "bg-sprout-surface-2"}`}
+                  key={index}
+                  className={`flex-1 h-1.5 rounded-full ${index <= step ? "bg-sprout-mint" : "bg-sprout-surface-2"}`}
                 />
               ))}
             </div>
@@ -223,7 +223,7 @@ function MockInterview({ open, questions, onClose, onFinished }) {
                 <ul className="space-y-2">
                   {result.strengths.map((s, i) => (
                     <li
-                      key={i}
+                      key={JSON.stringify(s)}
                       className="flex gap-3 items-start text-zinc-200 text-[15px]"
                       data-testid={`mock-strength-${i}`}
                     >
@@ -243,7 +243,7 @@ function MockInterview({ open, questions, onClose, onFinished }) {
                 <ul className="space-y-2">
                   {result.improvements.map((s, i) => (
                     <li
-                      key={i}
+                      key={JSON.stringify(s)}
                       className="flex gap-3 items-start text-zinc-200 text-[15px]"
                       data-testid={`mock-improvement-${i}`}
                     >
@@ -265,6 +265,7 @@ function MockInterview({ open, questions, onClose, onFinished }) {
           <div className="max-w-md mx-auto px-5">
             {onResult ? (
               <button
+                type="button"
                 onClick={onClose}
                 className="w-full h-12 rounded-full bg-sprout-mint text-white font-semibold flex items-center justify-center gap-2"
                 data-testid="mock-done-btn"
@@ -273,6 +274,7 @@ function MockInterview({ open, questions, onClose, onFinished }) {
               </button>
             ) : (
               <button
+                type="button"
                 onClick={next}
                 disabled={scoring}
                 className="w-full h-12 rounded-full bg-sprout-mint text-white font-semibold flex items-center justify-center gap-2 disabled:opacity-60"
@@ -299,28 +301,31 @@ export default function Interviews() {
   const [refreshing, setRefreshing] = useState(false);
   const [open, setOpen] = useState(false);
 
-  const load = async (refresh = false) => {
-    if (refresh) setRefreshing(true);
-    else setLoading(true);
-    try {
-      const [prep, st] = await Promise.all([
-        api.get(`/coach/interview${refresh ? "?refresh=true" : ""}`),
-        api.get("/coach/streak"),
-      ]);
-      setData(prep.data);
-      setStreak(st.data);
-    } catch (e) {
-      if (e?.response?.status === 400) navigate("/onboarding");
-      else toast.error(e?.response?.data?.detail || t("interviews.loadError"));
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
+  const load = useCallback(
+    async (refresh = false) => {
+      if (refresh) setRefreshing(true);
+      else setLoading(true);
+      try {
+        const [prep, st] = await Promise.all([
+          api.get(`/coach/interview${refresh ? "?refresh=true" : ""}`),
+          api.get("/coach/streak"),
+        ]);
+        setData(prep.data);
+        setStreak(st.data);
+      } catch (e) {
+        if (e?.response?.status === 400) navigate("/onboarding");
+        else toast.error(e?.response?.data?.detail || t("interviews.loadError"));
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    },
+    [navigate, t],
+  );
 
   useEffect(() => {
     load(false); /* eslint-disable-next-line react-hooks/exhaustive-deps */
-  }, []);
+  }, [load]);
 
   if (loading) {
     return (
@@ -343,6 +348,7 @@ export default function Interviews() {
           </h1>
         </div>
         <button
+          type="button"
           onClick={() => load(true)}
           disabled={refreshing}
           className="text-sprout-mint text-sm font-semibold disabled:opacity-50"
@@ -393,6 +399,7 @@ export default function Interviews() {
 
         {/* Start mock card */}
         <button
+          type="button"
           onClick={() => setOpen(true)}
           className="mt-6 w-full text-left rounded-3xl p-6 bg-swiipr-gradient relative overflow-hidden"
           data-testid="start-mock-btn"
@@ -417,9 +424,9 @@ export default function Interviews() {
               {t("interviews.coachTips")}
             </h3>
             <ul className="space-y-2">
-              {data.tips.map((tip, i) => (
+              {data.tips.map((tip, _i) => (
                 <li
-                  key={i}
+                  key={JSON.stringify(tip)}
                   className="flex gap-3 items-start p-3 rounded-xl bg-sprout-surface border border-sprout-border"
                 >
                   <Sparkles className="w-4 h-4 text-sprout-mint mt-0.5 shrink-0" />
@@ -440,8 +447,8 @@ export default function Interviews() {
               <span className="text-xs text-sprout-dim">{data.likely_questions.length}</span>
             </div>
             <div className="space-y-3">
-              {data.likely_questions.map((q, i) => (
-                <QuestionPill key={i} q={q} />
+              {data.likely_questions.map((q, _i) => (
+                <QuestionPill key={JSON.stringify(q)} q={q} />
               ))}
             </div>
           </section>
