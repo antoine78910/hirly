@@ -211,6 +211,21 @@ async def main() -> int:
     videos, skipped = discover_legacy_training_videos(source_root)
     for reason in skipped:
         print(f"SKIP {reason}", file=sys.stderr)
+    if args.apply and skipped:
+        summary = {
+            "discovered": len(videos),
+            "migrated": 0,
+            "planned": 0,
+            "failed": [{
+                "source": str(source_root),
+                "error": "--apply refused because discovery reported skipped files",
+            }],
+            "source_root": str(source_root),
+            "skipped": skipped,
+        }
+        print(json.dumps(summary, sort_keys=True))
+        return 1
+
     summary = await migrate_legacy_training_videos(videos, apply=args.apply)
     summary["source_root"] = str(source_root)
     summary["skipped"] = skipped

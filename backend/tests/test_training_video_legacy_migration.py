@@ -59,6 +59,27 @@ def test_dry_run_plans_without_creating_a_database_adapter(tmp_path, monkeypatch
     assert summary == {"discovered": 1, "migrated": 0, "planned": 1, "failed": []}
 
 
+def test_apply_refuses_to_run_when_discovery_skips_a_source(tmp_path, monkeypatch):
+    missing_source = tmp_path / "missing"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "migrate_training_videos_to_supabase.py",
+            "--source-root",
+            str(missing_source),
+            "--apply",
+        ],
+    )
+
+    async def fail_if_called(*_args, **_kwargs):
+        raise AssertionError("apply must not run after a discovery skip")
+
+    monkeypatch.setattr(legacy_migration, "migrate_legacy_training_videos", fail_if_called)
+
+    assert asyncio.run(legacy_migration.main()) == 1
+
+
 def test_apply_uploads_before_persisting_localized_storage_metadata(tmp_path, monkeypatch):
     video_path = tmp_path / "course" / "mod" / "sec_a" / "it.m4v"
     video_path.parent.mkdir(parents=True)
