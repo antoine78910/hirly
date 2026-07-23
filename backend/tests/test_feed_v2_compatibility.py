@@ -91,6 +91,14 @@ def _default_filters():
     }
 
 
+def _assert_degraded(result):
+    assert result["contractVersion"] == "hirly.feed.v2"
+    assert result["jobs"] == []
+    assert result["nextCursor"] is None
+    assert result["inventoryState"] == "degraded"
+    assert result["emptyReason"] is None
+
+
 def _enable(monkeypatch):
     monkeypatch.setenv("FEED_V2_INTERNAL_URL", "http://feed-v2.internal/internal/feed/v2")
     monkeypatch.setenv("FEED_V2_ASSERTION_SECRET", "feed-v2-test-secret-that-is-at-least-32-bytes")
@@ -307,7 +315,7 @@ def test_feed_v2_delegation_signs_candidate_identity_with_runtime_convention(mon
     assert result == _v2_response()
 
 
-def test_feed_v2_timeout_rolls_back_to_legacy_selection(monkeypatch):
+def test_feed_v2_timeout_returns_typed_degraded_state(monkeypatch):
     _enable(monkeypatch)
     calls = 0
 
@@ -328,12 +336,11 @@ def test_feed_v2_timeout_rolls_back_to_legacy_selection(monkeypatch):
 
     monkeypatch.setattr(server.httpx, "AsyncClient", Client)
 
-    assert asyncio.run(server._try_feed_v2(user_id="user-1", analytics_user_id=ANALYTICS_USER_ID, rollout_context=_rollout_context(), limit=5, filters=_default_filters())) is None
+    _assert_degraded(asyncio.run(server._try_feed_v2(user_id="user-1", analytics_user_id=ANALYTICS_USER_ID, rollout_context=_rollout_context(), limit=5, filters=_default_filters())))
     assert calls == 1
 
 
-def test_feed_v2_timeout_preserves_the_legacy_jsearch_emergency_path(monkeypatch):
-    """The legacy path remains the rollback until G009 authorizes retirement."""
+def test_feed_v2_timeout_never_invokes_legacy_jsearch(monkeypatch):
     _enable(monkeypatch)
     monkeypatch.setenv("JOBS_FEED_LEGACY_JSEARCH_ONLY", "true")
     monkeypatch.setenv("JSEARCH_API_KEY", "test-key")
@@ -365,31 +372,13 @@ def test_feed_v2_timeout_preserves_the_legacy_jsearch_emergency_path(monkeypatch
         async def get(self, *_args, **_kwargs):
             raise httpx.ReadTimeout("bounded timeout")
 
-    class Provider:
-        async def search(self, _query):
-            return type("Result", (), {"jobs": [{
-                "job_id": "legacy-job-1",
-                "provider": "jsearch",
-                "external_id": "legacy-1",
-                "title": "Engineer",
-                "company": "Hirly",
-                "location": "Paris, France",
-                "external_url": "https://example.test/jobs/legacy-1",
-            }]})()
-
-    async def upsert(_db, jobs, **_kwargs):
-        return {"total_imported": len(jobs), "auto_apply_supported_imported": 0}
-
     monkeypatch.setattr(server, "db", LegacyFallbackDB())
     monkeypatch.setattr(server.httpx, "AsyncClient", Client)
-    monkeypatch.setattr(server, "get_job_provider", lambda *_args: Provider())
-    monkeypatch.setattr(server.jobs_service_module, "upsert_imported_jobs", upsert)
+    monkeypatch.setattr(server, "get_job_provider", lambda *_args: (_ for _ in ()).throw(AssertionError("legacy provider called")))
 
     result = asyncio.run(server.get_feed(**_feed_args()))
 
-    assert result["feed_mode"] == "legacy_jsearch_only"
-    assert result["fallback_reason"] == "legacy_jsearch_only"
-    assert [job["job_id"] for job in result["jobs"]] == ["legacy-job-1"]
+    _assert_degraded(result)
 
 
 def test_successful_feed_v2_response_is_the_only_customer_visible_path(monkeypatch):
@@ -537,10 +526,10 @@ def test_provider_and_background_controls_remain_non_delegable(monkeypatch):
     for control in ("forceProviderRefresh", "prefetch", "score", "auditMode"):
         filters = _default_filters()
         filters[control] = True
-        assert asyncio.run(server._try_feed_v2(user_id="user-1", analytics_user_id=ANALYTICS_USER_ID, rollout_context=_rollout_context(), limit=5, filters=filters)) is None
+        _assert_degraded(asyncio.run(server._try_feed_v2(user_id="user-1", analytics_user_id=ANALYTICS_USER_ID, rollout_context=_rollout_context(), limit=5, filters=filters)))
 
 
-def test_invalid_or_oversized_locations_json_falls_back_before_any_v2_http(monkeypatch):
+def test_invalid_or_oversized_locations_json_degrades_before_any_v2_http(monkeypatch):
     _enable(monkeypatch)
     attempts = 0
 
@@ -565,10 +554,10 @@ def test_invalid_or_oversized_locations_json_falls_back_before_any_v2_http(monke
     for locations_json in ("{not-json", json.dumps(too_many_locations), oversized_locations):
         filters = _default_filters()
         filters.update({"searchRole": "Fullstack Engineer", "searchRadius": "103km", "locationsJson": locations_json})
-        assert asyncio.run(server._try_feed_v2(user_id="user-1", analytics_user_id=ANALYTICS_USER_ID, rollout_context=_rollout_context(), limit=5, filters=filters)) is None
+        _assert_degraded(asyncio.run(server._try_feed_v2(user_id="user-1", analytics_user_id=ANALYTICS_USER_ID, rollout_context=_rollout_context(), limit=5, filters=filters)))
     assert attempts == 0
 
-    assert asyncio.run(server._try_feed_v2(user_id="user-1", analytics_user_id=ANALYTICS_USER_ID, rollout_context=_rollout_context(), limit=5, filters=filters)) is None
+    _assert_degraded(asyncio.run(server._try_feed_v2(user_id="user-1", analytics_user_id=ANALYTICS_USER_ID, rollout_context=_rollout_context(), limit=5, filters=filters)))
 
 
 def test_first_navigation_returns_seeded_v2_once_with_zero_side_effects(monkeypatch):
@@ -658,7 +647,7 @@ def test_explicit_paris_52km_fullstack_falls_back_truthfully_when_v2_disabled(mo
     }
 
 
-def test_first_navigation_falls_back_after_one_unavailable_v2_attempt(monkeypatch):
+def test_first_navigation_degrades_after_one_unavailable_v2_attempt(monkeypatch):
     _enable(monkeypatch)
     monkeypatch.setenv("JOBS_FEED_LEGACY_JSEARCH_ONLY", "true")
     monkeypatch.setattr(server, "db", _ProfilesOnlyDB())
@@ -684,5 +673,4 @@ def test_first_navigation_falls_back_after_one_unavailable_v2_attempt(monkeypatc
     result = asyncio.run(server.get_feed(**_feed_args()))
 
     assert calls["http"] == 1
-    assert result["fallback_reason"] == "missing_job_provider_credentials"
-    assert result["jobs"] == []
+    _assert_degraded(result)

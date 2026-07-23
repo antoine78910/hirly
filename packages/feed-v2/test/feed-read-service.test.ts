@@ -170,6 +170,21 @@ describe("Feed v2 indexed read service", () => {
     expect(response.emptyReason).toBe(expected);
   });
 
+  test("does not signal a terminal empty state while a continuation cursor remains", async () => {
+    const service = new FeedV2ReadService(
+      repository(async () =>
+        snapshot([candidate("filtered", 1, { actionExcluded: true })], { hasMore: true }),
+      ),
+      { now: () => new Date("2026-07-21T12:00:00Z") },
+    );
+
+    const response = await service.read({ assertion });
+
+    expect(response.jobs).toEqual([]);
+    expect(response.nextCursor).not.toBeNull();
+    expect(response.emptyReason).toBeNull();
+  });
+
   test("fails authorization before the only read-only repository method can run", async () => {
     let reads = 0;
     const service = new FeedV2ReadService(

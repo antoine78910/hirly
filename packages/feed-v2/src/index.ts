@@ -280,7 +280,9 @@ export class FeedV2ReadService {
       jobs,
       nextCursor,
       inventoryState: snapshot.inventoryState,
-      emptyReason: jobs.length === 0 ? emptyReason(snapshot, summary) : null,
+      // An empty page may still have a continuation after filtered candidates.
+      // Only a cursorless empty response is terminal inventory state.
+      emptyReason: jobs.length === 0 && nextCursor === null ? emptyReason(snapshot, summary) : null,
       matchContext: {
         snapshotVersion: snapshot.snapshotVersion,
         profileVersion: snapshot.profileVersion,

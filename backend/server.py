@@ -7712,6 +7712,31 @@ def _feed_v2_effective_query(filters: Dict[str, Any]) -> Optional[Dict[str, Any]
     return {**payload, "fingerprint": fingerprint}
 
 
+def _feed_v2_degraded_response(*, query_fingerprint: str = "unavailable") -> Dict[str, Any]:
+    """Return the established V2 retryable state without falling back to legacy."""
+    return {
+        "contractVersion": "hirly.feed.v2",
+        "jobs": [],
+        "nextCursor": None,
+        "inventoryState": "degraded",
+        "emptyReason": None,
+        "matchContext": {
+            "snapshotVersion": "unavailable",
+            "profileVersion": "unavailable",
+            "actionWatermark": "unavailable",
+            "queryFingerprint": query_fingerprint,
+        },
+        "summary": {
+            "evaluated": 0,
+            "eligible": 0,
+            "hiddenActioned": 0,
+            "hiddenPolicy": 0,
+            "hiddenBlocked": 0,
+            "visibleByRoute": {"auto": 0, "assisted": 0, "manual": 0, "blocked": 0},
+        },
+    }
+
+
 async def _try_feed_v2(
     *,
     user_id: str,
@@ -7727,13 +7752,15 @@ async def _try_feed_v2(
     try:
         effective_query = _feed_v2_effective_query(filters)
     except (KeyError, TypeError, ValueError) as exc:
-        logger.warning("jobs/feed v2_fallback reason=unsupported_explicit_query detail=%s", exc)
-        return None
+        logger.warning("jobs/feed v2_degraded reason=unsupported_explicit_query detail=%s", exc)
+        return _feed_v2_degraded_response()
     endpoint = os.environ.get("FEED_V2_INTERNAL_URL", "").strip()
     secret = os.environ.get("FEED_V2_ASSERTION_SECRET", "").strip()
     if not endpoint or len(secret) < 32 or limit < 1 or limit > 100:
-        logger.warning("jobs/feed v2_fallback reason=invalid_configuration_or_limit")
-        return None
+        logger.warning("jobs/feed v2_degraded reason=invalid_configuration_or_limit")
+        return _feed_v2_degraded_response(
+            query_fingerprint=(effective_query or {}).get("fingerprint", "candidate-profile"),
+        )
 
     now = datetime.now(timezone.utc)
     request_id = str(uuid.uuid4())
@@ -7768,12 +7795,16 @@ async def _try_feed_v2(
         async with httpx.AsyncClient(timeout=timeout, follow_redirects=False) as client:
             response = await client.get(endpoint, params={"limit": limit}, headers=headers)
         if response.status_code != 200:
-            logger.warning("jobs/feed v2_fallback reason=upstream_status status=%s", response.status_code)
-            return None
+            logger.warning("jobs/feed v2_degraded reason=upstream_status status=%s", response.status_code)
+            return _feed_v2_degraded_response(
+                query_fingerprint=(effective_query or {}).get("fingerprint", "candidate-profile"),
+            )
         validated = _FeedV2Response.model_validate(response.json())
     except (httpx.HTTPError, ValueError, TypeError) as exc:
-        logger.warning("jobs/feed v2_fallback reason=%s", type(exc).__name__)
-        return None
+        logger.warning("jobs/feed v2_degraded reason=%s", type(exc).__name__)
+        return _feed_v2_degraded_response(
+            query_fingerprint=(effective_query or {}).get("fingerprint", "candidate-profile"),
+        )
     payload = validated.model_dump(by_alias=True, mode="json")
     # The swipe UI consumes full, canonical job cards.  Feed V2 deliberately
     # returns ranked references, so hydrate those references here at the
