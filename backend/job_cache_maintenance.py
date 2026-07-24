@@ -12,6 +12,7 @@ import os
 import re
 import hashlib
 import json
+import asyncio
 from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional
 
@@ -1076,6 +1077,22 @@ async def _fetch_import_activity_rows(db, cutoff_iso: str, *, limit: int = 15000
     return await cursor.to_list(limit)
 
 
+async def _inventory_count(
+    collection,
+    filter_query: Dict[str, Any],
+    *,
+    label: str,
+    warnings: List[str],
+) -> int:
+    """Return a dashboard count without making the whole admin page unavailable."""
+    try:
+        return await collection.count_documents(filter_query)
+    except Exception:
+        logger.exception("admin_jobs_inventory_count_failed metric=%s", label)
+        warnings.append(f"{label} is temporarily unavailable")
+        return 0
+
+
 async def job_inventory_analytics(db, *, days: int = 30) -> Dict[str, Any]:
     """Admin inventory snapshot: totals by ingestion source and daily import activity."""
     period_days = max(7, min(int(days), 90))
@@ -1083,15 +1100,29 @@ async def job_inventory_analytics(db, *, days: int = 30) -> Dict[str, Any]:
     cutoff = now - timedelta(days=period_days)
     cutoff_iso = cutoff.isoformat()
 
-    total_jobs = await db.jobs.count_documents({})
-    valid_ab_jobs = await db.jobs.count_documents(
-        {"validation_status": "valid", "applyability_tier": {"$in": ["A", "B"]}},
+    warnings: List[str] = []
+    total_jobs, valid_ab_jobs, *provider_counts = await asyncio.gather(
+        _inventory_count(db.jobs, {}, label="Total jobs", warnings=warnings),
+        _inventory_count(
+            db.jobs,
+            {"validation_status": "valid", "applyability_tier": {"$in": ["A", "B"]}},
+            label="Auto-apply ready jobs",
+            warnings=warnings,
+        ),
+        *[
+            _inventory_count(
+                db.jobs,
+                {"provider": provider},
+                label=f"{_source_display_name(provider)} jobs",
+                warnings=warnings,
+            )
+            for provider in KNOWN_JOB_PROVIDERS
+        ],
     )
 
     by_source: Dict[str, int] = {}
     counted = 0
-    for provider in KNOWN_JOB_PROVIDERS:
-        count = await db.jobs.count_documents({"provider": provider})
+    for provider, count in zip(KNOWN_JOB_PROVIDERS, provider_counts):
         if count:
             by_source[provider] = count
             counted += count
@@ -1099,7 +1130,12 @@ async def job_inventory_analytics(db, *, days: int = 30) -> Dict[str, Any]:
     if other_total:
         by_source["other"] = other_total
 
-    rows = await _fetch_import_activity_rows(db, cutoff_iso)
+    try:
+        rows = await _fetch_import_activity_rows(db, cutoff_iso)
+    except Exception:
+        logger.exception("admin_jobs_inventory_activity_read_failed")
+        warnings.append("Recent import activity is temporarily unavailable")
+        rows = []
     daily_counts: Dict[str, Dict[str, int]] = {}
     for row in rows:
         imported_at = _parse_dt(row.get("imported_at"))
@@ -1227,6 +1263,7 @@ async def job_inventory_analytics(db, *, days: int = 30) -> Dict[str, Any]:
         "activity_rows": len(rows),
         "activity_capped": len(rows) >= 15000,
         "funnel_goals": funnel_goals,
+        "warnings": warnings,
     }
 
 
