@@ -86,25 +86,22 @@ export function resolveOnboardingResumeStep({
   profile = null,
   user = null,
 }) {
+  const inferredStep = inferOnboardingStepFromProgress({ onboarding, profile, user });
   const lastStep = onboarding?.last_step;
-  const lastIndex = lastStep ? ONBOARDING_STEP_ORDER.indexOf(lastStep) : -1;
-  const paramIndex =
-    stepParam && ONBOARDING_STEP_ORDER.includes(stepParam)
-      ? ONBOARDING_STEP_ORDER.indexOf(stepParam)
-      : -1;
+  const candidates = [lastStep, stepParam, inferredStep]
+    .filter(Boolean)
+    .map((step) => normalizeResumeStep(step, { user, profile, onboarding }))
+    .filter((step) => ONBOARDING_STEP_ORDER.includes(step));
 
-  let targetStep = null;
-  if (lastIndex >= 0 && lastIndex >= paramIndex) {
-    targetStep = lastStep;
-  } else if (paramIndex >= 0) {
-    targetStep = stepParam;
-  } else if (lastIndex >= 0) {
-    targetStep = lastStep;
-  } else {
-    targetStep = inferOnboardingStepFromProgress({ onboarding, profile, user });
+  if (!candidates.length) {
+    return normalizeResumeStep(inferredStep, { user, profile, onboarding });
   }
 
-  return normalizeResumeStep(targetStep, { user, profile, onboarding });
+  return candidates.reduce((furthest, candidate) =>
+    ONBOARDING_STEP_ORDER.indexOf(candidate) > ONBOARDING_STEP_ORDER.indexOf(furthest)
+      ? candidate
+      : furthest,
+  );
 }
 
 export function buildOnboardingExtrasPayload(state) {

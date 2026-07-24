@@ -93,6 +93,51 @@ describe("onboardingResume", () => {
     expect(step).toBe("showcasePricing");
   });
 
+  it("ignores stale intro progress when inferred progress is further ahead", () => {
+    const step = resolveOnboardingResumeStep({
+      onboarding: {
+        last_step: "intro",
+        job_search_status: "kindof",
+        job_goal: "asap",
+        contract_type: "permanent",
+        tried_other_apps: "no",
+        categories: ["software"],
+        experience: "mid",
+        onboarding_location: "Paris, Île-de-France, France",
+        acquisition_source: "other",
+        selected_roles: ["Backend Engineer"],
+      },
+      profile: {
+        target_role: "Backend Engineer",
+        target_roles: ["Backend Engineer"],
+        contract_type: "permanent",
+        target_location: "Paris, Île-de-France, France",
+        contact: {},
+      },
+      user: { user_id: "u1" },
+    });
+    expect(step).toBe("contactPhone");
+  });
+
+  it("prefers inferred paywall progress over an earlier saved step", () => {
+    const step = resolveOnboardingResumeStep({
+      onboarding: {
+        last_step: "jobSearch",
+        job_search_status: "active",
+        job_goal: "asap",
+        contract_type: "permanent",
+        tried_other_apps: "no",
+        categories: ["tech"],
+        experience: "mid",
+        onboarding_location: "Paris",
+        acquisition_source: "google",
+      },
+      profile: { cv_text: "cv", target_role: "Engineer" },
+      user: { user_id: "u1" },
+    });
+    expect(step).toBe("showcasePricing");
+  });
+
   it("infers paywall when cv is uploaded even without a saved phone", () => {
     const step = inferOnboardingStepFromProgress({
       onboarding: {
