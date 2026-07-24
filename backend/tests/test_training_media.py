@@ -173,6 +173,16 @@ def test_create_signed_url_requires_server_storage_configuration(monkeypatch):
     assert exc.value.status_code == 503
 
 
+def test_storage_configuration_normalizes_a_rest_api_url(monkeypatch):
+    monkeypatch.setenv("SUPABASE_URL", "https://example.supabase.co/rest/v1/")
+    monkeypatch.setenv("SUPABASE_SECRET_KEY", "server-only-key")
+
+    storage_url, secret = media._supabase_storage_config()
+
+    assert storage_url == "https://example.supabase.co"
+    assert secret == "server-only-key"
+
+
 def test_validate_video_upload_rejects_empty():
     upload = UploadFile(filename="lesson.mp4", file=io.BytesIO(b""))
     with pytest.raises(HTTPException) as exc:

@@ -194,6 +194,9 @@ def validate_video_upload(file: UploadFile, content: bytes) -> str:
 
 def _supabase_storage_config() -> Tuple[str, str]:
     url = (os.environ.get("SUPABASE_URL") or "").strip().rstrip("/")
+    for api_suffix in ("/rest/v1", "/auth/v1"):
+        if url.endswith(api_suffix):
+            url = url[: -len(api_suffix)]
     secret = (os.environ.get("SUPABASE_SECRET_KEY") or "").strip()
     if not url or not secret:
         raise HTTPException(status_code=503, detail="Training video storage is not configured")
