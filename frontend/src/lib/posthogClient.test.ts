@@ -25,6 +25,7 @@ import {
   resetPostHog,
   sanitizeAnalyticsProperties,
   sanitizePostHogEvent,
+  syncPostHogReplay,
 } from "./posthogClient";
 
 const mockInit = posthog.init as jest.Mock;
@@ -65,7 +66,7 @@ describe("posthog client", () => {
     expect(mockStopSessionRecording).toHaveBeenCalled();
   });
 
-  it("keeps automatic capture suppressed while enabling remote feature flags", () => {
+  it("keeps automatic capture and session recording suppressed while enabling remote feature flags", () => {
     const profileA = buildPostHogConfig();
     expect(profileA).toMatchObject({
       autocapture: false,
@@ -84,7 +85,7 @@ describe("posthog client", () => {
     process.env.REACT_APP_POSTHOG_REPLAY_HOSTILE_QA_APPROVED = "true";
     const profileB = buildPostHogConfig();
     expect(profileB).toMatchObject({
-      disable_session_recording: false,
+      disable_session_recording: true,
       advanced_disable_flags: false,
       advanced_disable_feature_flags: false,
       session_recording: {
@@ -97,6 +98,13 @@ describe("posthog client", () => {
       },
     });
     expect(profileB).not.toHaveProperty("enable_heatmaps");
+
+    process.env.REACT_APP_POSTHOG_TOKEN = "phc_test";
+    process.env.REACT_APP_POSTHOG_HOST = "https://us.i.posthog.com";
+    initializePostHog();
+    syncPostHogReplay();
+    expect(mockStartSessionRecording).not.toHaveBeenCalled();
+    expect(mockStopSessionRecording).toHaveBeenCalledTimes(2);
   });
 
   it("removes nested sensitive keys, unsafe values, cycles, and URL secrets", () => {
@@ -140,13 +148,12 @@ describe("posthog client", () => {
     });
   });
 
-  it("allows replay snapshots only in the replay build profile", () => {
+  it("rejects replay snapshots even when the former replay environment gates are set", () => {
     const snapshot = { event: "$snapshot", properties: { $snapshot_data: "opaque" } } as never;
     expect(sanitizePostHogEvent(snapshot)).toBeNull();
     process.env.REACT_APP_POSTHOG_REPLAY_ENABLED = "true";
-    expect(sanitizePostHogEvent(snapshot)).toBeNull();
     process.env.REACT_APP_POSTHOG_REPLAY_HOSTILE_QA_APPROVED = "true";
-    expect(sanitizePostHogEvent(snapshot)).toBe(snapshot);
+    expect(sanitizePostHogEvent(snapshot)).toBeNull();
     expect(
       sanitizePostHogEvent({ event: "$feature_flag_called", properties: {} } as never),
     ).toBeNull();
