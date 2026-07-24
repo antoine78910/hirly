@@ -801,6 +801,24 @@ def test_job_inventory_analytics_builds_source_breakdown_and_daily_series():
     assert any(goal["id"] == "weekly_imports" for goal in result["funnel_goals"]["goals"])
 
 
+def test_job_inventory_analytics_returns_partial_snapshot_when_a_count_fails():
+    db = _FakeDB([_job(1, provider="jsearch", imported_at=datetime.now(timezone.utc).isoformat())])
+    original_count = db.jobs.count_documents
+
+    async def flaky_count(filter_query):
+        if filter_query == {"provider": "jsearch"}:
+            raise RuntimeError("Supabase count timed out")
+        return await original_count(filter_query)
+
+    db.jobs.count_documents = flaky_count
+
+    result = asyncio.run(maintenance.job_inventory_analytics(db, days=7))
+
+    assert result["total_jobs"] == 1
+    assert result["daily"]
+    assert result["warnings"] == ["JSearch jobs is temporarily unavailable"]
+
+
 def test_build_inventory_funnel_goals_marks_stale_and_volume():
     result = maintenance.build_inventory_funnel_goals(
         total_jobs=520_000,

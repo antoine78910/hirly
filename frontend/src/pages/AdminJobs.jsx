@@ -338,6 +338,11 @@ export default function AdminJobs() {
         </div>
       ) : (
         <div className="space-y-6">
+          {data?.warnings?.length ? (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              Some inventory metrics are temporarily unavailable: {data.warnings.join("; ")}.
+            </div>
+          ) : null}
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-2 text-sm text-zinc-500">
               <Briefcase className="h-4 w-4" />

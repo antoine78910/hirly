@@ -122,4 +122,13 @@ describe("AdminApplications server pagination state", () => {
       params: { cursor: "signed-next", limit: 100, filter: "prepared" },
     });
   });
+
+  it("places the wide applications table inside a horizontal scroll container", async () => {
+    api.get.mockResolvedValueOnce({ data: page() });
+
+    await act(async () => root.render(<AdminApplications />));
+
+    const table = container.querySelector("table");
+    expect(table.parentElement.className).toContain("overflow-x-auto");
+  });
 });
