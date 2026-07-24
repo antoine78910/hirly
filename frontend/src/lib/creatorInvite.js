@@ -1,6 +1,8 @@
-import { queueDemoWelcome } from "./demoWelcome";
-import { queueTrainingWelcome } from "./trainingWelcome";
 import { resolvePostAuthDestination } from "./appDomains";
+import { queueDemoWelcome } from "./demoWelcome";
+import { normalizeInviteLocale } from "./inviteLocalization";
+import { hasTrainingContent, trainingHubPath } from "./trainingRoutes";
+import { queueTrainingWelcome } from "./trainingWelcome";
 
 const PENDING_INVITE_KEY = "hirly.creator_invite.pending";
 
@@ -16,12 +18,17 @@ export const INVITE_BASE_URL = normalizeInviteBaseUrl(
   process.env.REACT_APP_INVITE_BASE_URL || "https://tryhirly.com",
 );
 
-export function buildInviteUrl(code) {
+export function inviteLandingPath(code, locale) {
   const normalized = String(code || "").trim();
+  const params = new URLSearchParams({ lang: normalizeInviteLocale(locale) });
+  return `/invite/${encodeURIComponent(normalized)}?${params.toString()}`;
+}
+
+export function buildInviteUrl(code, locale) {
   const base =
     INVITE_BASE_URL ||
     (typeof window !== "undefined" ? window.location.origin : "https://tryhirly.com");
-  return `${base}/invite/${normalized}`;
+  return `${base}${inviteLandingPath(code, locale)}`;
 }
 
 export function storePendingInviteCode(code) {
@@ -49,10 +56,22 @@ export function shouldAutoRedeemPendingInvite(...paths) {
   return paths.some((path) => String(path || "").includes("/invite/"));
 }
 
-export function inviteDestination(redeemData, inviteMeta) {
+export function inviteLocaleFromPath(path) {
+  try {
+    const url = new URL(String(path || ""), "https://tryhirly.com");
+    return normalizeInviteLocale(url.searchParams.get("lang"));
+  } catch {
+    return "fr";
+  }
+}
+
+export function inviteDestination(redeemData, inviteMeta, locale) {
   const type = redeemData?.invite_type || inviteMeta?.invite_type;
   if (type === "demo") return "/swipe";
-  if (type === "training" || redeemData?.training_access) return "/training";
+  if (type === "training" || redeemData?.training_access) {
+    const trainingLocale = normalizeInviteLocale(locale);
+    return trainingHubPath(hasTrainingContent(trainingLocale) ? trainingLocale : "fr");
+  }
   return "/swipe";
 }
 
@@ -76,8 +95,8 @@ export function applyRedeemToAuth(redeemData, user, handlers) {
 }
 
 /** Navigate after invite activation — handles marketing ↔ app subdomain split. */
-export function goToInviteDestination(redeemData, inviteMeta) {
-  const dest = inviteDestination(redeemData, inviteMeta);
+export function goToInviteDestination(redeemData, inviteMeta, locale) {
+  const dest = inviteDestination(redeemData, inviteMeta, locale);
   const resolved = resolvePostAuthDestination(dest);
   if (resolved.type === "external") {
     window.location.replace(resolved.url);

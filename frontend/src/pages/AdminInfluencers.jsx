@@ -1,18 +1,19 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Copy, Link2, Loader2, MonitorPlay, Plus, RefreshCw, Sparkles } from "lucide-react";
 import { createColumnHelper } from "@tanstack/react-table";
+import { Copy, Link2, Loader2, MonitorPlay, Plus, RefreshCw, Sparkles } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { api } from "../lib/api";
+import AdminDataTable from "../components/admin/AdminDataTable";
+import AdminShell, { AdminAccessDenied } from "../components/admin/AdminShell";
+import { Button } from "../components/ui/button";
 import { adminApiErrorMessage } from "../lib/adminApi";
-import { buildInviteUrl } from "../lib/creatorInvite";
 import {
   formatInviteClicked,
   formatInviteConnectedAccount,
   formatInviteStatus,
 } from "../lib/adminInviteTracking";
-import { Button } from "../components/ui/button";
-import AdminShell, { AdminAccessDenied } from "../components/admin/AdminShell";
-import AdminDataTable from "../components/admin/AdminDataTable";
+import { api } from "../lib/api";
+import { buildInviteUrl } from "../lib/creatorInvite";
+import { INVITE_LANGUAGE_OPTIONS } from "../lib/inviteLocalization";
 
 const PLATFORMS = ["instagram", "tiktok", "youtube", "linkedin", "twitter", "other"];
 
@@ -52,6 +53,8 @@ function InviteModal({
   onClose,
   influencer,
   invite,
+  inviteLocale,
+  onInviteLocaleChange,
   creating,
   onCreate,
   variant = "training",
@@ -59,7 +62,7 @@ function InviteModal({
   if (!open || !influencer) return null;
 
   const code = invite?.code || "";
-  const inviteUrl = code ? buildInviteUrl(code) : "";
+  const inviteUrl = code ? buildInviteUrl(code, inviteLocale) : "";
   const isDemo = variant === "demo";
   const title = isDemo ? "Demo account link" : "Training invitation";
   const description = isDemo
@@ -90,6 +93,26 @@ function InviteModal({
                   Copy
                 </Button>
               </div>
+            </div>
+            <div>
+              <label
+                htmlFor="creator-invite-language"
+                className="text-xs font-semibold uppercase tracking-wide text-zinc-500"
+              >
+                Recipient language
+              </label>
+              <select
+                id="creator-invite-language"
+                value={inviteLocale}
+                onChange={(event) => onInviteLocaleChange(event.target.value)}
+                className="mt-1 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+              >
+                {INVITE_LANGUAGE_OPTIONS.map(({ code: locale, label }) => (
+                  <option key={locale} value={locale}>
+                    {label}
+                  </option>
+                ))}
+              </select>
             </div>
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
@@ -139,6 +162,7 @@ export default function AdminInfluencers() {
   const [inviteTarget, setInviteTarget] = useState(null);
   const [inviteVariant, setInviteVariant] = useState("training");
   const [inviteData, setInviteData] = useState(null);
+  const [inviteLocale, setInviteLocale] = useState("fr");
   const [inviteCreating, setInviteCreating] = useState(false);
   const [demoInvites, setDemoInvites] = useState([]);
   const [demoInviteLoading, setDemoInviteLoading] = useState(true);
@@ -146,6 +170,7 @@ export default function AdminInfluencers() {
   const [latestDemoInvite, setLatestDemoInvite] = useState(null);
   const [demoLabel, setDemoLabel] = useState("");
   const [demoEmailHint, setDemoEmailHint] = useState("");
+  const [demoInviteLocale, setDemoInviteLocale] = useState("fr");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -226,6 +251,7 @@ export default function AdminInfluencers() {
   const openInviteModal = useCallback((row, variant = "training") => {
     setInviteTarget(row);
     setInviteVariant(variant);
+    setInviteLocale("fr");
     const code = variant === "demo" ? row.latest_demo_invite_code : row.latest_invite_code;
     setInviteData(code ? { code } : null);
   }, []);
@@ -270,7 +296,7 @@ export default function AdminInfluencers() {
   };
 
   const demoCode = latestDemoInvite?.code || "";
-  const demoInviteUrl = demoCode ? buildInviteUrl(demoCode) : "";
+  const demoInviteUrl = demoCode ? buildInviteUrl(demoCode, demoInviteLocale) : "";
 
   const demoInviteColumns = useMemo(
     () => [
@@ -488,7 +514,7 @@ export default function AdminInfluencers() {
                 </p>
               </div>
             </div>
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <div className="mt-4 grid gap-3 sm:grid-cols-3">
               <input
                 value={demoLabel}
                 onChange={(e) => setDemoLabel(e.target.value)}
@@ -502,6 +528,20 @@ export default function AdminInfluencers() {
                 placeholder="Email hint (optional)"
                 className="rounded-lg border border-zinc-200 px-3 py-2 text-sm"
               />
+              <label className="grid gap-1 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                Recipient language
+                <select
+                  value={demoInviteLocale}
+                  onChange={(event) => setDemoInviteLocale(event.target.value)}
+                  className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-normal normal-case text-zinc-900"
+                >
+                  {INVITE_LANGUAGE_OPTIONS.map(({ code: locale, label }) => (
+                    <option key={locale} value={locale}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </label>
             </div>
             <Button
               className="mt-3"
@@ -564,6 +604,8 @@ export default function AdminInfluencers() {
         }}
         influencer={inviteTarget}
         invite={inviteData}
+        inviteLocale={inviteLocale}
+        onInviteLocaleChange={setInviteLocale}
         creating={inviteCreating}
         onCreate={createInvite}
         variant={inviteVariant}

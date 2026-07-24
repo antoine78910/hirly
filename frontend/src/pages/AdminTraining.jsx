@@ -13,6 +13,7 @@ import {
 } from "../lib/adminInviteTracking";
 import { api, getDirectApiBase } from "../lib/api";
 import { buildInviteUrl } from "../lib/creatorInvite";
+import { INVITE_LANGUAGE_OPTIONS } from "../lib/inviteLocalization";
 
 const COURSE_ID = "course_job_search_mastery";
 const TRAINING_VIDEO_LANGUAGES = [
@@ -288,6 +289,7 @@ function TrainingInvitesPanel() {
   const [label, setLabel] = useState("");
   const [emailHint, setEmailHint] = useState("");
   const [latestInvite, setLatestInvite] = useState(null);
+  const [inviteLocale, setInviteLocale] = useState("fr");
 
   const loadInvites = useCallback(async () => {
     setLoading(true);
@@ -331,7 +333,7 @@ function TrainingInvitesPanel() {
   };
 
   const code = latestInvite?.code || "";
-  const inviteUrl = code ? buildInviteUrl(code) : "";
+  const inviteUrl = code ? buildInviteUrl(code, inviteLocale) : "";
 
   const inviteColumns = useMemo(
     () => [
@@ -382,7 +384,7 @@ function TrainingInvitesPanel() {
         </div>
       </div>
       <div className="space-y-4 px-5 py-4">
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-3 sm:grid-cols-3">
           <div>
             <label
               htmlFor="training-invite-label"
@@ -397,6 +399,26 @@ function TrainingInvitesPanel() {
               placeholder="e.g. March cohort — Lisa"
               className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm"
             />
+          </div>
+          <div>
+            <label
+              htmlFor="training-invite-language"
+              className="text-xs font-semibold uppercase tracking-wide text-zinc-500"
+            >
+              Recipient language
+            </label>
+            <select
+              id="training-invite-language"
+              value={inviteLocale}
+              onChange={(event) => setInviteLocale(event.target.value)}
+              className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+            >
+              {INVITE_LANGUAGE_OPTIONS.map(({ code: locale, label: localeLabel }) => (
+                <option key={locale} value={locale}>
+                  {localeLabel}
+                </option>
+              ))}
+            </select>
           </div>
           <div>
             <label

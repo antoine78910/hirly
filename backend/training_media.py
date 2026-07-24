@@ -16,7 +16,7 @@ import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
-from urllib.parse import quote, urljoin
+from urllib.parse import quote
 
 import httpx
 from fastapi import HTTPException, UploadFile
@@ -257,7 +257,12 @@ async def create_training_video_signed_url(storage_path: str) -> str:
     if signed_path.startswith(("https://", "http://")):
         return signed_path
     base_url, _ = _supabase_storage_config()
-    return urljoin(f"{base_url}/", signed_path.lstrip("/"))
+    # The Storage API returns `/object/sign/...`, relative to `/storage/v1`.
+    # Keep accepting already-prefixed paths for proxies that include it.
+    relative_path = signed_path.lstrip("/")
+    if not relative_path.startswith("storage/v1/"):
+        relative_path = f"storage/v1/{relative_path}"
+    return f"{base_url}/{relative_path}"
 
 
 async def store_training_video_object(
