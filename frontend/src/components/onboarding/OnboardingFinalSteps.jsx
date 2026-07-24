@@ -177,7 +177,7 @@ function PainTagTrack({ tags, hidden = false }) {
   return (
     <div className="flex shrink-0 items-center gap-2 pr-2" aria-hidden={hidden || undefined}>
       {tags.map((point, _index) => (
-        <PainTagPill key={JSON.stringify(point)} point={point} />
+        <PainTagPill key={`${point.id}-${_index}`} point={point} />
       ))}
     </div>
   );
@@ -199,9 +199,8 @@ function ScrollingPainTagRow({ tags, reverse = false, duration = 30, delayOffset
       >
         {Array.from({ length: PAIN_MARQUEE_COPIES }, (_, copy) => (
           <PainTagTrack
-            key={JSON.stringify(point)}
+            key={`copy-${copy}`}
             tags={tags}
-            suffix={`c${copy}`}
             hidden={copy > 0}
           />
         ))}
