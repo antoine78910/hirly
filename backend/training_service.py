@@ -8,8 +8,11 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from training_module_content import (
+    CREATING_CONTENT_SECTIONS_DE,
     CREATING_CONTENT_SECTIONS_EN,
+    CREATING_CONTENT_SECTIONS_ES,
     CREATING_CONTENT_SECTIONS_FR,
+    CREATING_CONTENT_SECTIONS_IT,
     WARM_UP_PLAYBOOK_EN,
     WARM_UP_PLAYBOOK_FR,
 )
@@ -29,7 +32,7 @@ logger = logging.getLogger(__name__)
 
 SEED_CREATOR_ID = "creator_swiipr_official"
 SEED_COURSE_ID = "course_job_search_mastery"
-SEED_MODULES_VERSION = 12
+SEED_MODULES_VERSION = 13
 
 SUBMIT_DRAFTS_VIDEO_URL = (
     "https://player.mediadelivery.net/play/689678/9cdda64d-b68e-4e87-b5c9-d076bb620aec"
@@ -109,6 +112,15 @@ MODULE_I18N = {
             "category": "application",
             "sections": CREATING_CONTENT_SECTIONS_FR,
         },
+        "de": {
+            "sections": CREATING_CONTENT_SECTIONS_DE,
+        },
+        "es": {
+            "sections": CREATING_CONTENT_SECTIONS_ES,
+        },
+        "it": {
+            "sections": CREATING_CONTENT_SECTIONS_IT,
+        },
     },
     "mod_content_bank": {
         "en": {
@@ -175,9 +187,9 @@ MODULE_I18N = {
 }
 
 for _module_id, _packs in MODULE_I18N.items():
-    for _lang in ("en", "fr"):
-        _packs[_lang].setdefault("video_url", "")
-        _packs[_lang].setdefault("sections", [])
+    for _pack in _packs.values():
+        _pack.setdefault("video_url", "")
+        _pack.setdefault("sections", [])
 
 
 MODULE_SEED = [

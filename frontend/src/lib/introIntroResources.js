@@ -16,7 +16,7 @@ const EN_TAGS = {
   history: tag("History tab", "purple"),
 };
 
-import { HIRLY_EXAMPLE_VIDEOS_FR } from "./hirlyExampleVideosFr";
+import { HIRLY_EXAMPLE_VIDEOS_EN, HIRLY_EXAMPLE_VIDEOS_FR } from "./hirlyExampleVideosFr";
 
 export const INTRODUCE_HIRLY_RESOURCES_FR = [
   { type: "heading", level: 4, text: "Fonctionnalités principales + script" },
@@ -80,7 +80,7 @@ export const INTRODUCE_HIRLY_RESOURCES_EN = [
   { type: "heading", level: 4, text: "Main features + script" },
   {
     type: "table",
-    columns: ["Fonctionnalités", "Script"],
+    columns: ["Features", "Script"],
     rows: [
       [EN_TAGS.upload, ["All you gotta do is upload your resume", "Just upload your resume"]],
       [
@@ -128,5 +128,5 @@ export const INTRODUCE_HIRLY_RESOURCES_EN = [
       ],
     ],
   },
-  ...HIRLY_EXAMPLE_VIDEOS_FR,
+  ...HIRLY_EXAMPLE_VIDEOS_EN,
 ];

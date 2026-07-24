@@ -439,6 +439,242 @@ _EN_TAGS = {
     "history": _tag("History tab", "purple"),
 }
 
+HIRLY_VIDEO_EXAMPLE_COPY = {
+    "en": {
+        "heading": "Video examples",
+        "intro": "Open each topic to see the examples. Where a short and long version exist, both are listed.",
+        "swipe_title": "Swipe",
+        "swipe_description": "Show the right swipe — it is the core feature to highlight early in the video.",
+        "history_title": "Application history",
+        "history_description": "Show the volume of applications and how they are tracked — ideal for a hook or the end of the video.",
+        "short_heading": "Short version",
+        "short_label": "Short",
+        "long_heading": "Long version",
+        "long_label": "Long",
+        "resume_title": "Resume & AI cover letter",
+        "resume_description": "Show that Hirly tailors the resume and generates a cover letter for every job.",
+        "resume_short_heading": "Resume — short version",
+        "resume_short_label": "Resume — short",
+        "resume_long_heading": "Resume — long version",
+        "resume_long_label": "Resume — long",
+        "cover_letter_heading": "AI cover letter",
+        "cover_letter_label": "AI cover letter",
+        "filming_title": "Filming formats",
+        "filming_description": "Examples based on how you film the on-screen demo.",
+        "green_screen_heading": "Green screen — without a phone or computer",
+        "green_screen_label": "Green screen",
+        "green_screen_tutorial": "Green-screen tutorial (TikTok)",
+        "laptop_heading": "With a laptop",
+        "laptop_label": "Laptop",
+        "laptop_silent_heading": "Laptop — without speaking",
+        "laptop_silent_label": "Laptop without speaking",
+        "tablet_heading": "With a phone or tablet",
+        "tablet_label": "Phone or tablet",
+    },
+    "fr": {
+        "heading": "Exemples vidéo",
+        "intro": "Ouvre chaque thème pour voir les exemples. Quand il existe une version courte et une version longue, les deux sont listées.",
+        "swipe_title": "Swipe",
+        "swipe_description": "Montre le swipe à droite — c'est la fonctionnalité centrale à mettre en avant tôt dans la vidéo.",
+        "history_title": "Historique",
+        "history_description": "Prouve le volume et le suivi des candidatures — idéal en hook ou en fin de vidéo.",
+        "short_heading": "Version courte",
+        "short_label": "court",
+        "long_heading": "Version longue",
+        "long_label": "long",
+        "resume_title": "CV & lettre IA",
+        "resume_description": "Montre que Hirly adapte le CV et génère la lettre pour chaque offre.",
+        "resume_short_heading": "CV — version courte",
+        "resume_short_label": "CV — court",
+        "resume_long_heading": "CV — version longue",
+        "resume_long_label": "CV — long",
+        "cover_letter_heading": "Lettre de motivation IA",
+        "cover_letter_label": "Lettre IA",
+        "filming_title": "Formats de tournage",
+        "filming_description": "Exemples selon comment tu filmes la démo à l'écran.",
+        "green_screen_heading": "Green screen — sans téléphone ni ordinateur",
+        "green_screen_label": "Green screen",
+        "green_screen_tutorial": "Tuto green screen (TikTok)",
+        "laptop_heading": "Avec ordinateur portable",
+        "laptop_label": "Ordinateur portable",
+        "laptop_silent_heading": "Ordinateur portable — sans parole",
+        "laptop_silent_label": "Laptop sans parole",
+        "tablet_heading": "Avec téléphone ou tablette",
+        "tablet_label": "Téléphone ou tablette",
+    },
+    "de": {
+        "heading": "Videobeispiele",
+        "intro": "Öffne jedes Thema, um die Beispiele anzusehen. Wenn es eine kurze und eine lange Version gibt, sind beide aufgeführt.",
+        "swipe_title": "Wischen",
+        "swipe_description": "Zeige das Wischen nach rechts — das ist die zentrale Funktion, die früh im Video hervorgehoben werden sollte.",
+        "history_title": "Bewerbungsverlauf",
+        "history_description": "Zeige die Anzahl der Bewerbungen und ihre Nachverfolgung — ideal für den Hook oder das Ende des Videos.",
+        "short_heading": "Kurze Version",
+        "short_label": "kurz",
+        "long_heading": "Lange Version",
+        "long_label": "lang",
+        "resume_title": "Lebenslauf & KI-Anschreiben",
+        "resume_description": "Zeige, dass Hirly den Lebenslauf anpasst und für jede Stelle ein Anschreiben erstellt.",
+        "resume_short_heading": "Lebenslauf — kurze Version",
+        "resume_short_label": "Lebenslauf — kurz",
+        "resume_long_heading": "Lebenslauf — lange Version",
+        "resume_long_label": "Lebenslauf — lang",
+        "cover_letter_heading": "KI-Anschreiben",
+        "cover_letter_label": "KI-Anschreiben",
+        "filming_title": "Aufnahmeformate",
+        "filming_description": "Beispiele je nachdem, wie du die Bildschirmdemo filmst.",
+        "green_screen_heading": "Greenscreen — ohne Handy oder Computer",
+        "green_screen_label": "Greenscreen",
+        "green_screen_tutorial": "Greenscreen-Tutorial (TikTok)",
+        "laptop_heading": "Mit Laptop",
+        "laptop_label": "Laptop",
+        "laptop_silent_heading": "Laptop — ohne zu sprechen",
+        "laptop_silent_label": "Laptop ohne Sprache",
+        "tablet_heading": "Mit Handy oder Tablet",
+        "tablet_label": "Handy oder Tablet",
+    },
+    "es": {
+        "heading": "Ejemplos de vídeo",
+        "intro": "Abre cada tema para ver los ejemplos. Cuando hay una versión corta y otra larga, se incluyen ambas.",
+        "swipe_title": "Deslizar",
+        "swipe_description": "Muestra el deslizamiento a la derecha; es la función principal que debes destacar al principio del vídeo.",
+        "history_title": "Historial de candidaturas",
+        "history_description": "Muestra el volumen de candidaturas y su seguimiento; es ideal para el gancho o el final del vídeo.",
+        "short_heading": "Versión corta",
+        "short_label": "corta",
+        "long_heading": "Versión larga",
+        "long_label": "larga",
+        "resume_title": "CV y carta de presentación con IA",
+        "resume_description": "Muestra que Hirly adapta el CV y genera una carta de presentación para cada oferta.",
+        "resume_short_heading": "CV — versión corta",
+        "resume_short_label": "CV — corto",
+        "resume_long_heading": "CV — versión larga",
+        "resume_long_label": "CV — largo",
+        "cover_letter_heading": "Carta de presentación con IA",
+        "cover_letter_label": "Carta con IA",
+        "filming_title": "Formatos de grabación",
+        "filming_description": "Ejemplos según cómo grabes la demostración en pantalla.",
+        "green_screen_heading": "Pantalla verde — sin teléfono ni ordenador",
+        "green_screen_label": "Pantalla verde",
+        "green_screen_tutorial": "Tutorial de pantalla verde (TikTok)",
+        "laptop_heading": "Con portátil",
+        "laptop_label": "Portátil",
+        "laptop_silent_heading": "Portátil — sin hablar",
+        "laptop_silent_label": "Portátil sin hablar",
+        "tablet_heading": "Con teléfono o tableta",
+        "tablet_label": "Teléfono o tableta",
+    },
+    "it": {
+        "heading": "Esempi video",
+        "intro": "Apri ogni tema per vedere gli esempi. Quando esistono una versione breve e una lunga, sono elencate entrambe.",
+        "swipe_title": "Scorri",
+        "swipe_description": "Mostra lo swipe verso destra: è la funzione principale da mettere in evidenza all'inizio del video.",
+        "history_title": "Cronologia delle candidature",
+        "history_description": "Mostra il volume delle candidature e il loro monitoraggio: è ideale per l'hook o la fine del video.",
+        "short_heading": "Versione breve",
+        "short_label": "breve",
+        "long_heading": "Versione lunga",
+        "long_label": "lunga",
+        "resume_title": "CV e lettera di presentazione con IA",
+        "resume_description": "Mostra che Hirly adatta il CV e genera una lettera di presentazione per ogni offerta.",
+        "resume_short_heading": "CV — versione breve",
+        "resume_short_label": "CV — breve",
+        "resume_long_heading": "CV — versione lunga",
+        "resume_long_label": "CV — lungo",
+        "cover_letter_heading": "Lettera di presentazione con IA",
+        "cover_letter_label": "Lettera con IA",
+        "filming_title": "Formati di ripresa",
+        "filming_description": "Esempi in base a come filmi la demo sullo schermo.",
+        "green_screen_heading": "Green screen — senza telefono né computer",
+        "green_screen_label": "Green screen",
+        "green_screen_tutorial": "Tutorial green screen (TikTok)",
+        "laptop_heading": "Con laptop",
+        "laptop_label": "Laptop",
+        "laptop_silent_heading": "Laptop — senza parlare",
+        "laptop_silent_label": "Laptop senza parlare",
+        "tablet_heading": "Con telefono o tablet",
+        "tablet_label": "Telefono o tablet",
+    },
+}
+
+
+def _hirly_example_video(section_id: str, upload_label: str) -> dict:
+    return {
+        "type": "short_video",
+        "video_url": f"/training-videos/course_job_search_mastery/mod_content_bank/{section_id}/fr.mp4",
+        "upload_label": upload_label,
+        "aspect": "9:16",
+        "upload_slot": section_id,
+    }
+
+
+def _hirly_video_examples(locale: str) -> list:
+    copy = HIRLY_VIDEO_EXAMPLE_COPY[locale]
+    video = _hirly_example_video
+    return [
+        {"type": "heading", "level": 4, "text": copy["heading"]},
+        {"type": "callout", "variant": "info", "text": copy["intro"]},
+        {
+            "type": "accordion",
+            "items": [
+                {
+                    "title": copy["swipe_title"],
+                    "content": [
+                        {"type": "paragraph", "text": copy["swipe_description"]},
+                        video("sec_cb_swiping", copy["swipe_title"]),
+                    ],
+                },
+                {
+                    "title": copy["history_title"],
+                    "content": [
+                        {"type": "paragraph", "text": copy["history_description"]},
+                        {"type": "heading", "level": 4, "text": copy["short_heading"]},
+                        video("sec_cb_history_short", f'{copy["history_title"]} — {copy["short_label"]}'),
+                        {"type": "heading", "level": 4, "text": copy["long_heading"]},
+                        video("sec_cb_history_long", f'{copy["history_title"]} — {copy["long_label"]}'),
+                    ],
+                },
+                {
+                    "title": copy["resume_title"],
+                    "content": [
+                        {"type": "paragraph", "text": copy["resume_description"]},
+                        {"type": "heading", "level": 4, "text": copy["resume_short_heading"]},
+                        video("sec_cb_cv_short", copy["resume_short_label"]),
+                        {"type": "heading", "level": 4, "text": copy["resume_long_heading"]},
+                        video("sec_cb_cv_long", copy["resume_long_label"]),
+                        {"type": "heading", "level": 4, "text": copy["cover_letter_heading"]},
+                        video("sec_cb_cover_letter_ai", copy["cover_letter_label"]),
+                    ],
+                },
+                {
+                    "title": copy["filming_title"],
+                    "content": [
+                        {"type": "paragraph", "text": copy["filming_description"]},
+                        {"type": "heading", "level": 4, "text": copy["green_screen_heading"]},
+                        video("sec_cb_green_screen", copy["green_screen_label"]),
+                        {
+                            "type": "link",
+                            "text": copy["green_screen_tutorial"],
+                            "href": f"https://www.tiktok.com/@thesocialcreativesclub/video/7338507673932942625?lang={locale}",
+                        },
+                        {"type": "heading", "level": 4, "text": copy["laptop_heading"]},
+                        video("sec_cb_laptop_example", copy["laptop_label"]),
+                        {"type": "heading", "level": 4, "text": copy["laptop_silent_heading"]},
+                        video("sec_cb_laptop_without_talking", copy["laptop_silent_label"]),
+                        {"type": "heading", "level": 4, "text": copy["tablet_heading"]},
+                        video("sec_cb_tablet_example", copy["tablet_label"]),
+                    ],
+                },
+            ],
+        },
+    ]
+
+
+HIRLY_VIDEO_EXAMPLES_BY_LOCALE = {
+    locale: _hirly_video_examples(locale)
+    for locale in HIRLY_VIDEO_EXAMPLE_COPY
+}
+
 INTRODUCE_HIRLY_RESOURCES_FR = [
     {"type": "heading", "level": 4, "text": "Fonctionnalités principales + script"},
     {
@@ -491,84 +727,17 @@ INTRODUCE_HIRLY_RESOURCES_FR = [
             ],
         ],
     },
-    {"type": "heading", "level": 4, "text": "Exemples vidéo"},
-    {
-        "type": "callout",
-        "variant": "info",
-        "text": "Ouvre chaque thème pour voir les exemples. Quand il existe une version courte et une version longue, les deux sont listées.",
-    },
-    {
-        "type": "accordion",
-        "items": [
-            {
-                "title": "Swipe",
-                "content": [
-                    {
-                        "type": "paragraph",
-                        "text": "Montre le swipe à droite — c'est la fonctionnalité centrale à mettre en avant tôt dans la vidéo.",
-                    },
-                    {"type": "short_video", "video_url": "/training-videos/course_job_search_mastery/mod_content_bank/sec_cb_swiping/fr.mp4", "upload_label": "Swipe", "aspect": "9:16", "upload_slot": "sec_cb_swiping"},
-                ],
-            },
-            {
-                "title": "Historique",
-                "content": [
-                    {
-                        "type": "paragraph",
-                        "text": "Prouve le volume et le suivi des candidatures — idéal en hook ou en fin de vidéo.",
-                    },
-                    {"type": "heading", "level": 4, "text": "Version courte"},
-                    {"type": "short_video", "video_url": "/training-videos/course_job_search_mastery/mod_content_bank/sec_cb_history_short/fr.mp4", "upload_label": "Historique — court", "aspect": "9:16", "upload_slot": "sec_cb_history_short"},
-                    {"type": "heading", "level": 4, "text": "Version longue"},
-                    {"type": "short_video", "video_url": "/training-videos/course_job_search_mastery/mod_content_bank/sec_cb_history_long/fr.mp4", "upload_label": "Historique — long", "aspect": "9:16", "upload_slot": "sec_cb_history_long"},
-                ],
-            },
-            {
-                "title": "CV & lettre IA",
-                "content": [
-                    {
-                        "type": "paragraph",
-                        "text": "Montre que Hirly adapte le CV et génère la lettre pour chaque offre.",
-                    },
-                    {"type": "heading", "level": 4, "text": "CV — version courte"},
-                    {"type": "short_video", "video_url": "/training-videos/course_job_search_mastery/mod_content_bank/sec_cb_cv_short/fr.mp4", "upload_label": "CV — court", "aspect": "9:16", "upload_slot": "sec_cb_cv_short"},
-                    {"type": "heading", "level": 4, "text": "CV — version longue"},
-                    {"type": "short_video", "video_url": "/training-videos/course_job_search_mastery/mod_content_bank/sec_cb_cv_long/fr.mp4", "upload_label": "CV — long", "aspect": "9:16", "upload_slot": "sec_cb_cv_long"},
-                    {"type": "heading", "level": 4, "text": "Lettre de motivation IA"},
-                    {"type": "short_video", "video_url": "/training-videos/course_job_search_mastery/mod_content_bank/sec_cb_cover_letter_ai/fr.mp4", "upload_label": "Lettre IA", "aspect": "9:16", "upload_slot": "sec_cb_cover_letter_ai"},
-                ],
-            },
-            {
-                "title": "Formats de tournage",
-                "content": [
-                    {
-                        "type": "paragraph",
-                        "text": "Exemples selon comment tu filmes la démo à l'écran.",
-                    },
-                    {"type": "heading", "level": 4, "text": "Green screen — sans téléphone ni ordinateur"},
-                    {"type": "short_video", "video_url": "/training-videos/course_job_search_mastery/mod_content_bank/sec_cb_green_screen/fr.mp4", "upload_label": "Green screen", "aspect": "9:16", "upload_slot": "sec_cb_green_screen"},
-                    {"type": "link", "text": "Tuto green screen (TikTok)", "href": "https://www.tiktok.com/@thesocialcreativesclub/video/7338507673932942625?lang=fr"},
-                    {"type": "heading", "level": 4, "text": "Avec ordinateur portable"},
-                    {"type": "short_video", "video_url": "/training-videos/course_job_search_mastery/mod_content_bank/sec_cb_laptop_example/fr.mp4", "upload_label": "Ordinateur portable", "aspect": "9:16", "upload_slot": "sec_cb_laptop_example"},
-                    {"type": "heading", "level": 4, "text": "Ordinateur portable — sans parole"},
-                    {"type": "short_video", "video_url": "/training-videos/course_job_search_mastery/mod_content_bank/sec_cb_laptop_without_talking/fr.mp4", "upload_label": "Laptop sans parole", "aspect": "9:16", "upload_slot": "sec_cb_laptop_without_talking"},
-                    {"type": "heading", "level": 4, "text": "Avec téléphone ou tablette"},
-                    {"type": "short_video", "video_url": "/training-videos/course_job_search_mastery/mod_content_bank/sec_cb_tablet_example/fr.mp4", "upload_label": "Téléphone ou tablette", "aspect": "9:16", "upload_slot": "sec_cb_tablet_example"},
-                ],
-            },
-        ],
-    },
+    *deepcopy(HIRLY_VIDEO_EXAMPLES_BY_LOCALE["fr"]),
 ]
 
-# The example videos currently have French source narration, so they are shared
-# across training languages to keep the lesson structure identical.
-INTRODUCE_HIRLY_VIDEO_EXAMPLES = INTRODUCE_HIRLY_RESOURCES_FR[-3:]
+# Legacy example assets use French narration until a locale-specific upload replaces them.
+INTRODUCE_HIRLY_VIDEO_EXAMPLES = HIRLY_VIDEO_EXAMPLES_BY_LOCALE["fr"]
 
 INTRODUCE_HIRLY_RESOURCES_EN = [
     {"type": "heading", "level": 4, "text": "Main features + script"},
     {
         "type": "table",
-        "columns": ["Fonctionnalités", "Script"],
+        "columns": ["Features", "Script"],
         "rows": [
             [_EN_TAGS["upload"], ["All you gotta do is upload your resume", "Just upload your resume"]],
             [
@@ -616,7 +785,7 @@ INTRODUCE_HIRLY_RESOURCES_EN = [
             ],
         ],
     },
-    *deepcopy(INTRODUCE_HIRLY_VIDEO_EXAMPLES),
+    *deepcopy(HIRLY_VIDEO_EXAMPLES_BY_LOCALE["en"]),
 ]
 
 CREATING_CONTENT_FILMING_VIDEO_URL = (
@@ -670,3 +839,26 @@ CREATING_CONTENT_SECTIONS_FR = [
         "content": EDITING_PLAYBOOK_FR,
     },
 ]
+
+
+def _creating_content_sections_with_localized_examples(locale: str, title: str) -> list:
+    """Use the English lesson as a temporary base while localizing its video examples."""
+    sections = deepcopy(CREATING_CONTENT_SECTIONS_EN)
+    hirly_section = next(section for section in sections if section["section_id"] == "sec_cc_hirly")
+    hirly_section["title"] = title
+    hirly_section["resources"] = [
+        *deepcopy(INTRODUCE_HIRLY_RESOURCES_EN[:-3]),
+        *deepcopy(HIRLY_VIDEO_EXAMPLES_BY_LOCALE[locale]),
+    ]
+    return sections
+
+
+CREATING_CONTENT_SECTIONS_DE = _creating_content_sections_with_localized_examples(
+    "de", "Hirly in Videos vorstellen"
+)
+CREATING_CONTENT_SECTIONS_ES = _creating_content_sections_with_localized_examples(
+    "es", "Presentar Hirly en vídeos"
+)
+CREATING_CONTENT_SECTIONS_IT = _creating_content_sections_with_localized_examples(
+    "it", "Presentare Hirly nei video"
+)

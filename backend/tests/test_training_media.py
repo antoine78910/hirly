@@ -19,9 +19,12 @@ from training_media import (
     validate_video_upload,
 )
 from training_module_content import (
+    CREATING_CONTENT_SECTIONS_DE,
     CREATING_CONTENT_SECTIONS_EN,
+    CREATING_CONTENT_SECTIONS_ES,
     CREATING_CONTENT_SECTIONS_FR,
-    INTRODUCE_HIRLY_VIDEO_EXAMPLES,
+    CREATING_CONTENT_SECTIONS_IT,
+    HIRLY_VIDEO_EXAMPLES_BY_LOCALE,
 )
 from training_service import (
     SEED_COURSE_ID,
@@ -110,20 +113,41 @@ def test_seeded_training_content_has_complete_english_and_french_packs():
         ]
 
 
-def test_hirly_video_examples_are_identical_in_english_and_french_content():
-    english = next(section for section in CREATING_CONTENT_SECTIONS_EN if section["section_id"] == "sec_cc_hirly")
-    french = next(section for section in CREATING_CONTENT_SECTIONS_FR if section["section_id"] == "sec_cc_hirly")
+def test_hirly_video_examples_are_localized_without_changing_video_slots():
+    sections_by_locale = {
+        "en": CREATING_CONTENT_SECTIONS_EN,
+        "fr": CREATING_CONTENT_SECTIONS_FR,
+        "de": CREATING_CONTENT_SECTIONS_DE,
+        "es": CREATING_CONTENT_SECTIONS_ES,
+        "it": CREATING_CONTENT_SECTIONS_IT,
+    }
+    expected_titles = {
+        "en": ["Swipe", "Application history", "Resume & AI cover letter", "Filming formats"],
+        "fr": ["Swipe", "Historique", "CV & lettre IA", "Formats de tournage"],
+        "de": ["Wischen", "Bewerbungsverlauf", "Lebenslauf & KI-Anschreiben", "Aufnahmeformate"],
+        "es": ["Deslizar", "Historial de candidaturas", "CV y carta de presentación con IA", "Formatos de grabación"],
+        "it": ["Scorri", "Cronologia delle candidature", "CV e lettera di presentazione con IA", "Formati di ripresa"],
+    }
 
-    assert english["resources"][-3:] == INTRODUCE_HIRLY_VIDEO_EXAMPLES
-    assert french["resources"][-3:] == INTRODUCE_HIRLY_VIDEO_EXAMPLES
-    accordion = INTRODUCE_HIRLY_VIDEO_EXAMPLES[-1]
-    assert accordion["type"] == "accordion"
-    assert [item["title"] for item in accordion["items"]] == [
-        "Swipe",
-        "Historique",
-        "CV & lettre IA",
-        "Formats de tournage",
-    ]
+    slots_by_locale = {}
+    for locale, sections in sections_by_locale.items():
+        hirly = next(section for section in sections if section["section_id"] == "sec_cc_hirly")
+        examples = hirly["resources"][-3:]
+        assert examples == HIRLY_VIDEO_EXAMPLES_BY_LOCALE[locale]
+        accordion = examples[-1]
+        assert accordion["type"] == "accordion"
+        assert [item["title"] for item in accordion["items"]] == expected_titles[locale]
+        slots_by_locale[locale] = [
+            block["upload_slot"]
+            for item in accordion["items"]
+            for block in item["content"]
+            if block["type"] == "short_video"
+        ]
+
+    assert len({tuple(slots) for slots in slots_by_locale.values()}) == 1
+    assert HIRLY_VIDEO_EXAMPLES_BY_LOCALE["en"][0]["text"] == "Video examples"
+    assert HIRLY_VIDEO_EXAMPLES_BY_LOCALE["en"] != HIRLY_VIDEO_EXAMPLES_BY_LOCALE["fr"]
+    assert set(MODULE_I18N["mod_creating_content"]) >= set(sections_by_locale)
 
 
 def test_validate_video_upload_accepts_mp4():
