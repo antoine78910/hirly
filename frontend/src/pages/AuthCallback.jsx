@@ -1,24 +1,31 @@
 // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
+
+import { Loader2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { api, setSessionToken } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
-import { Loader2 } from "lucide-react";
-import { supabase, supabaseConfigured } from "../lib/supabase";
-import { resolveSupabaseAuthSession, supabaseSessionPayload } from "../lib/auth";
 import { trackEvent } from "../lib/analytics";
-import { trackOnboardingSignup } from "../lib/datafast";
+import { api, setSessionToken } from "../lib/api";
+import { resolvePostAuthDestination } from "../lib/appDomains";
+import {
+  clearOnboardingReturnPath,
+  readOnboardingReturnPath,
+  resolveSupabaseAuthSession,
+  splitAppPath,
+  supabaseSessionPayload,
+} from "../lib/auth";
 import {
   applyRedeemToAuth,
   clearPendingInviteCode,
   inviteDestination,
+  inviteLocaleFromPath,
   shouldAutoRedeemPendingInvite,
   tryRedeemPendingInvite,
 } from "../lib/creatorInvite";
+import { trackOnboardingSignup } from "../lib/datafast";
 import { setDemoAccountFromUser } from "../lib/demoAccount";
-import { resolvePostAuthDestination } from "../lib/appDomains";
-import { clearOnboardingReturnPath, readOnboardingReturnPath, splitAppPath } from "../lib/auth";
 import { hasJobSeekerOnboardingComplete } from "../lib/jobSeekerEntry";
+import { supabase, supabaseConfigured } from "../lib/supabase";
 
 export default function AuthCallback() {
   const navigate = useNavigate();
@@ -78,7 +85,7 @@ export default function AuthCallback() {
                 setHasProfile,
                 setHasPreferences,
               });
-              inviteRedirect = inviteDestination(redeemed);
+              inviteRedirect = inviteDestination(redeemed, null, inviteLocaleFromPath(nextPath));
             }
           } catch (inviteErr) {
             console.warn(

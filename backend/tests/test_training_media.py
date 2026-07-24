@@ -162,7 +162,7 @@ def test_save_training_video_uploads_private_object_and_returns_signed_url(monke
     async def fake_storage_request(method, endpoint, **kwargs):
         calls.append((method, endpoint, kwargs))
         if endpoint.startswith("/storage/v1/object/sign/"):
-            return httpx.Response(200, json={"signedURL": "/storage/v1/object/sign/training-videos/course/mod/sec_a/de?token=signed"})
+            return httpx.Response(200, json={"signedURL": "/object/sign/training-videos/course/mod/sec_a/de?token=signed"})
         return httpx.Response(200, json={"Key": "course/mod/sec_a/de"})
 
     monkeypatch.setattr(media, "_storage_api_request", fake_storage_request)
@@ -187,6 +187,24 @@ def test_save_training_video_uploads_private_object_and_returns_signed_url(monke
         "cache-control": "3600",
     }
     assert calls[1][1].startswith("/storage/v1/object/sign/training-videos/course/mod/sec_a/de")
+
+
+def test_create_signed_url_keeps_an_already_prefixed_storage_path(monkeypatch):
+    async def fake_storage_request(*_args, **_kwargs):
+        return httpx.Response(
+            200,
+            json={"signedURL": "/storage/v1/object/sign/training-videos/course/mod/_module/en?token=signed"},
+        )
+
+    monkeypatch.setattr(media, "_storage_api_request", fake_storage_request)
+    monkeypatch.setenv("SUPABASE_URL", "https://example.supabase.co")
+    monkeypatch.setenv("SUPABASE_SECRET_KEY", "server-only-key")
+
+    signed_url = asyncio.run(create_training_video_signed_url("course/mod/_module/en"))
+
+    assert signed_url == (
+        "https://example.supabase.co/storage/v1/object/sign/training-videos/course/mod/_module/en?token=signed"
+    )
 
 
 def test_create_signed_url_requires_server_storage_configuration(monkeypatch):
