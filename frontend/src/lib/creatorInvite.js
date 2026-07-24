@@ -1,6 +1,7 @@
 import { queueDemoWelcome } from "./demoWelcome";
 import { queueTrainingWelcome } from "./trainingWelcome";
 import { resolvePostAuthDestination } from "./appDomains";
+import { normalizeInviteLocale } from "./inviteLocalization";
 
 const PENDING_INVITE_KEY = "hirly.creator_invite.pending";
 
@@ -16,12 +17,17 @@ export const INVITE_BASE_URL = normalizeInviteBaseUrl(
   process.env.REACT_APP_INVITE_BASE_URL || "https://tryhirly.com",
 );
 
-export function buildInviteUrl(code) {
+export function inviteLandingPath(code, locale) {
   const normalized = String(code || "").trim();
+  const params = new URLSearchParams({ lang: normalizeInviteLocale(locale) });
+  return `/invite/${encodeURIComponent(normalized)}?${params.toString()}`;
+}
+
+export function buildInviteUrl(code, locale) {
   const base =
     INVITE_BASE_URL ||
     (typeof window !== "undefined" ? window.location.origin : "https://tryhirly.com");
-  return `${base}/invite/${normalized}`;
+  return `${base}${inviteLandingPath(code, locale)}`;
 }
 
 export function storePendingInviteCode(code) {

@@ -1,20 +1,23 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { GraduationCap, Loader2, MonitorPlay, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import Logo from "../components/Logo";
 import { BRAND } from "../lib/brand";
 import { api, setSessionToken } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
+import { useAppLocale } from "../context/AppLocaleContext";
 import { setDemoAccountFromUser } from "../lib/demoAccount";
 import {
   applyRedeemToAuth,
   clearPendingInviteCode,
   goToInviteDestination,
+  inviteLandingPath,
   redeemCreatorInvite,
   storePendingInviteCode,
 } from "../lib/creatorInvite";
 import { getLocalDevInviteMeta } from "../lib/inviteDevMocks";
+import { inviteLanguageOptions, inviteT, normalizeInviteLocale } from "../lib/inviteLocalization";
 import { startGoogleLogin } from "../lib/auth";
 import { TrainingAuthForm, TrainingAuthPopup } from "../components/training/TrainingAuthPopup";
 
@@ -28,8 +31,39 @@ function isDemoInvite(meta) {
   return type === "demo" || type === "creator";
 }
 
+function InviteLanguageSelect({ locale, onChange, label, dark = false }) {
+  return (
+    <label
+      className={`flex items-center gap-2 text-xs font-semibold ${
+        dark ? "text-violet-50" : "text-zinc-600"
+      }`}
+    >
+      <span>{label}</span>
+      <select
+        value={locale}
+        onChange={(event) => onChange(event.target.value)}
+        data-testid="invite-language-selector"
+        className={`rounded-lg border px-2 py-1 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-violet-300 ${
+          dark
+            ? "border-white/30 bg-white/10 text-white"
+            : "border-zinc-200 bg-white text-zinc-700"
+        }`}
+      >
+        {inviteLanguageOptions().map((option) => (
+          <option key={option.value} value={option.value} className="text-zinc-900">
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
 export default function InviteLanding() {
   const { code } = useParams();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { lang, setLang } = useAppLocale();
   const {
     user,
     loading: authLoading,
@@ -53,10 +87,29 @@ export default function InviteLanding() {
   const [autoRedeemSettled, setAutoRedeemSettled] = useState(false);
 
   const normalized = String(code || "").trim();
+  const requestedLocale = normalizeInviteLocale(
+    new URLSearchParams(location.search).get("lang"),
+    "",
+  );
+  const inviteLocale = requestedLocale || lang;
+  const t = useCallback((key, variables) => inviteT(inviteLocale, key, variables), [inviteLocale]);
   const invalid = !/^\d{6}$/.test(normalized);
   const trainingInvite = isTrainingInvite(inviteMeta);
   const demoInvite = isDemoInvite(inviteMeta);
   const isValid = !invalid && inviteMeta?.valid === true;
+
+  useEffect(() => {
+    if (requestedLocale && requestedLocale !== lang) setLang(requestedLocale);
+  }, [lang, requestedLocale, setLang]);
+
+  const changeInviteLocale = useCallback(
+    (nextLocale) => {
+      const locale = normalizeInviteLocale(nextLocale);
+      setLang(locale);
+      navigate(inviteLandingPath(normalized, locale), { replace: true });
+    },
+    [navigate, normalized, setLang],
+  );
 
   useEffect(() => {
     setAutoRedeemSettled(false);
@@ -103,7 +156,6 @@ export default function InviteLanding() {
     [checkAuth, inviteMeta, setHasPreferences, setHasProfile, setHasTrainingAccess, setUser],
   );
 
-  // Demo invite + existing demo account → go straight to the app (skip onboarding resume).
   useEffect(() => {
     if (authLoading || checking || invalid || !isValid || !demoInvite) return;
     if (!user?.demo_account) return;
@@ -129,10 +181,10 @@ export default function InviteLanding() {
           if (user?.demo_account) {
             goToInviteDestination(null, inviteMeta);
           } else {
-            toast.error("This invitation was already used by another account.");
+            toast.error(t("inviteAlreadyUsed"));
           }
         } else {
-          toast.error(err?.response?.data?.detail || "Could not activate this invitation");
+          toast.error(t("activationFailed"));
         }
       } finally {
         setRedeeming(false);
@@ -149,6 +201,7 @@ export default function InviteLanding() {
     redeemFailed,
     inviteMeta,
     finishRedeemAndNavigate,
+    t,
   ]);
 
   const onEmailSubmit = async (event) => {
@@ -157,7 +210,7 @@ export default function InviteLanding() {
     setAuthNotice("");
 
     if (!email.trim() || password.length < 6) {
-      setAuthError("Saisissez un e-mail et un mot de passe d'au moins 6 caractères.");
+      setAuthError(t("credentialsRequired"));
       return;
     }
 
@@ -189,10 +242,10 @@ export default function InviteLanding() {
         authMode === "signup" &&
         /already been registered|already registered/i.test(message || "")
       ) {
-        setAuthNotice("Un compte existe déjà avec cet e-mail. Passez en mode connexion.");
+        setAuthNotice(t("accountExists"));
         setAuthMode("login");
       } else {
-        setAuthError(message || "Échec de l'authentification. Réessayez.");
+        setAuthError(t("authenticationFailed"));
       }
     } finally {
       setSubmitting(false);
@@ -202,7 +255,7 @@ export default function InviteLanding() {
   const onGoogleClick = () => {
     storePendingInviteCode(normalized);
     startGoogleLogin(
-      `/invite/${normalized}`,
+      inviteLandingPath(normalized, inviteLocale),
       email.trim() ? { login_hint: email.trim() } : undefined,
     );
   };
@@ -218,7 +271,7 @@ export default function InviteLanding() {
       <div className="min-h-dvh flex items-center justify-center bg-white">
         <div className="flex flex-col items-center gap-3 text-zinc-500">
           <Loader2 className="h-6 w-6 animate-spin text-linkedin" />
-          <p className="text-sm">Activating your access…</p>
+          <p className="text-sm">{t("activating")}</p>
         </div>
       </div>
     );
@@ -229,6 +282,13 @@ export default function InviteLanding() {
   if (!isValid) {
     return (
       <div className="fixed inset-0 z-50 gradient-linkedin-soft showcase-landing-ambient">
+        <div className="absolute right-4 top-4 z-10 sm:right-6 sm:top-6">
+          <InviteLanguageSelect
+            locale={inviteLocale}
+            onChange={changeInviteLocale}
+            label={t("language")}
+          />
+        </div>
         <Link
           to="/"
           className="absolute left-4 top-4 z-10 flex items-center gap-2 rounded-full bg-white/80 px-3 py-2 font-display text-sm font-semibold tracking-tight shadow-sm backdrop-blur-sm sm:left-6 sm:top-6"
@@ -241,17 +301,13 @@ export default function InviteLanding() {
             <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-violet-100">
               <Sparkles className="h-6 w-6 text-violet-500" />
             </div>
-            <h1 className="font-display text-2xl font-bold tracking-tight">
-              Invalid invitation link
-            </h1>
-            <p className="mt-3 text-sm leading-relaxed text-zinc-500">
-              This link is not recognized. Contact the Hirly team to get a new invitation.
-            </p>
+            <h1 className="font-display text-2xl font-bold tracking-tight">{t("invalidTitle")}</h1>
+            <p className="mt-3 text-sm leading-relaxed text-zinc-500">{t("invalidBody")}</p>
             <Link
               to="/"
               className="mt-6 inline-block text-sm font-semibold text-linkedin hover:text-linkedin-dark"
             >
-              Back to Hirly
+              {t("backToHirly")}
             </Link>
           </div>
         </div>
@@ -264,51 +320,52 @@ export default function InviteLanding() {
       testId="welcome-creator-page"
       aside={
         <>
+          <div className="mb-6">
+            <InviteLanguageSelect
+              locale={inviteLocale}
+              onChange={changeInviteLocale}
+              label={t("language")}
+              dark
+            />
+          </div>
           <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-white/15 px-3 py-1.5 text-xs font-semibold">
             <Sparkles className="h-3.5 w-3.5" />
-            Invitation créateur
+            {t("badge")}
           </div>
           <h1 className="font-display text-2xl font-black tracking-tight sm:text-3xl">
-            {influencerName ? `Bonjour ${influencerName}` : "Bienvenue"}
+            {influencerName ? t("greeting", { name: influencerName }) : t("welcome")}
           </h1>
           <p className="mt-3 text-sm leading-relaxed text-violet-100/95 sm:text-base">
-            {demoInvite
-              ? `Créez votre compte pour accéder à l'environnement démo ${BRAND.NAME} et enregistrer vos vidéos.`
-              : `Créez votre compte pour rejoindre le programme de formation créateur ${BRAND.NAME}.`}
+            {demoInvite ? t("demoDescription") : t("trainingDescription")}
           </p>
 
           <ul className="mt-6 space-y-3 text-sm text-violet-50">
             {trainingInvite ? (
               <li className="flex items-start gap-3">
                 <GraduationCap className="mt-0.5 h-5 w-5 shrink-0" />
-                <span>Accès complet au cours Job Search Mastery</span>
+                <span>{t("trainingAccess")}</span>
               </li>
             ) : null}
             {demoInvite ? (
               <li className="flex items-start gap-3">
                 <MonitorPlay className="mt-0.5 h-5 w-5 shrink-0" />
-                <span>Compte démo pour vos enregistrements d&apos;écran</span>
+                <span>{t("demoAccess")}</span>
               </li>
             ) : null}
           </ul>
 
           {inviteMeta?.invite_type !== "demo" ? (
             <p className="mt-6 rounded-2xl border border-white/20 bg-white/10 px-4 py-3 text-xs leading-relaxed text-violet-50">
-              <span className="font-semibold text-white">Accès confidentiel.</span> Ne partagez pas
-              votre accès ni le contenu de la formation. Tout partage détecté entraîne une exclusion
-              immédiate du programme.
+              <span className="font-semibold text-white">{t("confidentialTitle")}</span>{" "}
+              {t("confidentialBody")}
             </p>
           ) : null}
         </>
       }
     >
       <TrainingAuthForm
-        title={authMode === "login" ? "Connexion" : "Créer un compte"}
-        subtitle={
-          authMode === "login"
-            ? "Connectez-vous pour activer votre invitation."
-            : "Inscrivez-vous pour activer votre invitation."
-        }
+        title={authMode === "login" ? t("signInTitle") : t("signUpTitle")}
+        subtitle={authMode === "login" ? t("signInSubtitle") : t("signUpSubtitle")}
         authMode={authMode}
         email={email}
         setEmail={setEmail}
@@ -321,6 +378,18 @@ export default function InviteLanding() {
         onGoogleClick={onGoogleClick}
         onToggleMode={onToggleMode}
         showModeToggle
+        labels={{
+          signIn: t("auth.signIn"),
+          signUp: t("auth.signUp"),
+          google: t("auth.google"),
+          or: t("auth.or"),
+          email: t("auth.email"),
+          emailPlaceholder: t("auth.emailPlaceholder"),
+          password: t("auth.password"),
+          loading: t("auth.loading"),
+          noAccount: t("auth.noAccount"),
+          alreadyHaveAccount: t("auth.alreadyHaveAccount"),
+        }}
         googleTestId="invite-google-btn"
         emailTestId="invite-email-input"
         passwordTestId="invite-password-input"
@@ -332,7 +401,7 @@ export default function InviteLanding() {
         className="mx-auto mt-4 block text-xs text-zinc-400 transition-colors hover:text-zinc-600"
         onClick={() => clearPendingInviteCode()}
       >
-        Effacer l&apos;invitation enregistrée
+        {t("clearSavedInvite")}
       </button>
     </TrainingAuthPopup>
   );
