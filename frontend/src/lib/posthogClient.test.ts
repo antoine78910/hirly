@@ -70,7 +70,7 @@ describe("posthog client", () => {
     expect(mockStopSessionRecording).toHaveBeenCalled();
   });
 
-  it("keeps automatic capture suppressed while enabling remote feature flags", () => {
+  it("keeps automatic capture and session recording suppressed while enabling remote feature flags", () => {
     const profileA = buildPostHogConfig();
     expect(profileA).toMatchObject({
       autocapture: false,
@@ -103,9 +103,15 @@ describe("posthog client", () => {
       },
     });
     expect(profileB).not.toHaveProperty("enable_heatmaps");
+
+    process.env.REACT_APP_POSTHOG_TOKEN = "phc_test";
+    initializePostHog();
+    syncPostHogReplay("/onboarding");
+    expect(mockStartSessionRecording).not.toHaveBeenCalled();
+    expect(mockStopSessionRecording).toHaveBeenCalledTimes(2);
   });
 
-  it("records onboarding in full, samples only candidate app routes, and ignores landing or admin", () => {
+  it("keeps session recording stopped on every route when former replay flags are enabled", () => {
     expect(resolvePostHogReplayMode("/")).toBe("none");
     expect(resolvePostHogReplayMode("/signup")).toBe("none");
     expect(resolvePostHogReplayMode("/onboarding")).toBe("onboarding");
@@ -121,18 +127,11 @@ describe("posthog client", () => {
     mockStartSessionRecording.mockClear();
     mockStopSessionRecording.mockClear();
 
-    syncPostHogReplay("/");
-    expect(mockStopSessionRecording).toHaveBeenCalledTimes(1);
+    for (const pathname of ["/", "/onboarding", "/swipe", "/admin/overview"]) {
+      syncPostHogReplay(pathname);
+    }
     expect(mockStartSessionRecording).not.toHaveBeenCalled();
-
-    syncPostHogReplay("/onboarding");
-    expect(mockStartSessionRecording).toHaveBeenCalledWith({ sampling: true });
-
-    syncPostHogReplay("/swipe");
-    expect(mockStartSessionRecording).toHaveBeenLastCalledWith();
-
-    syncPostHogReplay("/admin/overview");
-    expect(mockStopSessionRecording).toHaveBeenCalledTimes(2);
+    expect(mockStopSessionRecording).toHaveBeenCalledTimes(4);
   });
 
   it("removes nested sensitive keys, unsafe values, cycles, and URL secrets", () => {
@@ -176,13 +175,12 @@ describe("posthog client", () => {
     });
   });
 
-  it("allows replay snapshots only in the replay build profile", () => {
+  it("rejects replay snapshots even when the former replay environment gates are set", () => {
     const snapshot = { event: "$snapshot", properties: { $snapshot_data: "opaque" } } as never;
     expect(sanitizePostHogEvent(snapshot)).toBeNull();
     process.env.REACT_APP_POSTHOG_REPLAY_ENABLED = "true";
-    expect(sanitizePostHogEvent(snapshot)).toBeNull();
     process.env.REACT_APP_POSTHOG_REPLAY_HOSTILE_QA_APPROVED = "true";
-    expect(sanitizePostHogEvent(snapshot)).toBe(snapshot);
+    expect(sanitizePostHogEvent(snapshot)).toBeNull();
     expect(
       sanitizePostHogEvent({ event: "$feature_flag_called", properties: {} } as never),
     ).toBeNull();

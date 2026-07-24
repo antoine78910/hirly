@@ -32,8 +32,9 @@ describe("PostHog Profile A real SDK network seam", () => {
       }),
     });
 
-    process.env.REACT_APP_POSTHOG_REPLAY_ENABLED = "false";
-    process.env.REACT_APP_POSTHOG_REPLAY_HOSTILE_QA_APPROVED = "false";
+    // Legacy deployment flags must not bypass the temporary replay shutdown.
+    process.env.REACT_APP_POSTHOG_REPLAY_ENABLED = "true";
+    process.env.REACT_APP_POSTHOG_REPLAY_HOSTILE_QA_APPROVED = "true";
 
     let posthog;
     let posthogVersion;

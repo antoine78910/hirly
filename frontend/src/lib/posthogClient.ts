@@ -177,9 +177,10 @@ export const sanitizePostHogEvent = (event: CaptureResult | null): CaptureResult
   return { ...event, properties };
 };
 
-export const isReplayEnabled = (): boolean =>
-  process.env.REACT_APP_POSTHOG_REPLAY_ENABLED === "true" &&
-  process.env.REACT_APP_POSTHOG_REPLAY_HOSTILE_QA_APPROVED === "true";
+// Session replay is explicitly paused to prevent further recording charges.
+// Re-enabling it requires a reviewed code change, rather than only a deployment
+// environment change.
+export const isReplayEnabled = (): boolean => false;
 
 export const buildPostHogConfig = (): Partial<PostHogConfig> => {
   return {
